@@ -1,5 +1,6 @@
 // Export / Import tab — pick library items, export a pack; import a pack from another PC.
 import { h, svg, formatBytes, progressBar } from "../util.js";
+import { pageHeader } from "../components/index.js";
 
 export function createTransferTab(ctx) {
   let items = [];            // wallpaper ExportItems
@@ -29,9 +30,7 @@ export function createTransferTab(ctx) {
   });
 
   const el = h("section",
-    h("header.page-head",
-      h("div", h("h1", "Export / Import"), h("p.page-sub", "Move your library and settings to another PC as a single pack file.")),
-      h("div.page-actions", importBtn)),
+    pageHeader("Export / Import", "Move your library and settings to another PC as a single pack file.", importBtn),
     importProgress,
     h("div.card.pad",
       h("div.card-head", h("h2", "Export"), h("div.select-links", selAll, h("span.sep", "·"), selNone)),

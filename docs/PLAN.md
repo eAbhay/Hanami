@@ -137,19 +137,19 @@ Notes:
 All in `web/settings/` (+ `mock-bridge.js`). Keep the visual language (soft sakura/twilight
 accents, light + dark).
 
-- [ ] 3.1 Shared components in `web/settings/components/`: `pageHeader(title, subtitle, action?)`,
+- [x] 3.1 Shared components in `web/settings/components/`: `pageHeader(title, subtitle, action?)`,
       `card(title, meta?)`, `row(icon, label, hint, control)`, `segmented(options, value, onChange)`,
       `wallpaperPicker({selectedId, allowSameAsDesktop})`, `effectPicker({selectedPreset,
       allowSameAsDesktop, onTune})`, `tuningDrawer(preset)`, `statusPill()`. Refactor existing tabs
       to use them; delete duplicated markup/CSS.
-- [ ] 3.2 Navigation: Wallpaper · Screensaver · Power · General · Export / Import. Remove the
+- [x] 3.2 Navigation: Wallpaper · Screensaver · Power · General · Export / Import. Remove the
       Effects tab (keep its slider code for the drawer).
-- [ ] 3.3 **Wallpaper** tab: header (action: Import video / image) · monitor scope (All monitors /
+- [x] 3.3 **Wallpaper** tab: header (action: Import video / image) · monitor scope (All monitors /
       each monitor) · card "Background" (wallpaperPicker) · card "Effect" (effectPicker).
-- [ ] 3.4 **Screensaver** tab: header (action: Preview) · status line · card "Background"
+- [x] 3.4 **Screensaver** tab: header (action: Preview) · status line · card "Background"
       (wallpaperPicker with *Same as desktop* first) · card "Effect" (effectPicker with *Same as
       desktop* first) · small link row "Timing and power settings → Power".
-- [ ] 3.5 **Effect tiles + gear:** every effect tile (both pickers) gets a small round gear button
+- [x] 3.5 **Effect tiles + gear:** every effect tile (both pickers) gets a small round gear button
       at its top-right (always visible on the selected tile, on hover/focus otherwise; keyboard
       reachable; `aria-label="<Effect> settings"`). It opens `tuningDrawer(preset)`: a right-side
       drawer (bottom sheet under 900 px) titled "<Effect> settings", with the live preview canvas
@@ -157,19 +157,28 @@ accents, light + dark).
       segmented control + strength/radius, click burst toggle, "Reset to defaults", and the note
       "Used wherever <Effect> is selected." Changes → `setEffectTuning` debounced 150 ms; slider
       defaults come from `PRESET_DEFAULTS`.
-- [ ] 3.6 **Power** tab: card "Desktop wallpaper" (the six condition rows with Full / Reduced /
+- [x] 3.6 **Power** tab: card "Desktop wallpaper" (the six condition rows with Full / Reduced /
       Paused; Reduced described as "Video holds its frame; effects keep moving at up to 30 FPS") ·
       card "Screensaver" (on/off, Start after presets + custom, Stop after, Require sign-in, Windows
       timers info/warning, battery + lid footnote — moved from the Screensaver tab) · card "Frame
       rate".
-- [ ] 3.7 Sidebar status pill shows both: e.g. "Running · screensaver in 1 min", "Paused —
+- [x] 3.7 Sidebar status pill shows both: e.g. "Running · screensaver in 1 min", "Paused —
       maximized window", "Off on battery".
-- [ ] 3.8 `mock-bridge.js`: new shapes and `setEffectTuning`; embers in presets.
-- [ ] 3.9 Check every tab at 1000×680 and 820×560, light and dark, no console errors (mock in the
+- [x] 3.8 `mock-bridge.js`: new shapes and `setEffectTuning`; embers in presets.
+- [x] 3.9 Check every tab at 1000×680 and 820×560, light and dark, no console errors (mock in the
       browser), then in the real app (`capture-window.ps1` screenshots, spot-check bridge calls with
       `cdp.mjs`). Commit.
 
 Notes:
+- Components live in `web/settings/components/` (`layout.js`: pageHeader, card, row, statusPill; `wallpaperPicker.js`
+  with a `manage` shape for the Wallpaper tab and a compact `pick` shape for the Screensaver tab; `effectPicker.js`;
+  `tuningDrawer.js`; `index.js` re-exports them and util's segmented/toggle/slider). One shared drawer is created
+  in `app.js` and opened with `ctx.openTuning(preset, {wallpaperId})`; `ctx.showTab(id)` switches tabs.
+- `.rule` is now a modifier of `.row` (one markup for both); the old Effects tab and its CSS are gone.
+- The gear is hidden until hover/focus on unselected tiles and always visible on the selected one (and on touch).
+- Checked in the browser (mock bridge) at 1000x680 and 820x560, light and dark, no console errors; and in the real
+  app (settings window screenshot with the drawer open, `setEffectTuning` reached the host). The drawer's slide-in
+  looked slow in the embedded browser pane (its animation timing is throttled there); in the real app it was fine.
 
 ## Phase 4 — Screensaver clock: position and font
 

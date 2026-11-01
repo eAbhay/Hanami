@@ -1,14 +1,15 @@
-// Power tab — per-condition Full / Reduced / Paused, battery threshold, FPS caps, live status.
+// Power tab — when things run: the desktop wallpaper per condition, the screensaver's timing, frame rates.
 import { h, svg, segmented, slider, toggle } from "../util.js";
+import { pageHeader, card, row } from "../components/index.js";
 
 const MODES = [
   { value: "full", label: "Full", title: "Video plays, effects run at your FPS cap" },
-  { value: "reduced", label: "Reduced", title: "Video holds its current frame, effects at up to 30 FPS" },
+  { value: "reduced", label: "Reduced", title: "Video holds its frame, effects keep moving at up to 30 FPS" },
   { value: "paused", label: "Paused", title: "Everything frozen — no animation work at all" },
 ];
 const MODE_TEXT = {
   full: "Video plays and effects run at your FPS cap.",
-  reduced: "Video holds its current frame; effects keep moving at up to 30 FPS.",
+  reduced: "Video holds its frame; effects keep moving at up to 30 FPS.",
   paused: "Everything freezes — no animation work at all.",
 };
 const MODE_LABEL = { full: "Full", reduced: "Reduced", paused: "Paused" };
@@ -23,8 +24,16 @@ const CONDITIONS = [
 ];
 const FPS = [15, 24, 30, 60, 120];
 
+const IDLE_PRESETS = [1, 2, 5, 10, 15, 30];
+const STOP_OPTIONS = [
+  { value: 0, label: "Never" }, { value: 1, label: "1 h" }, { value: 2, label: "2 h" }, { value: 4, label: "4 h" }, { value: 8, label: "8 h" },
+];
+const TIMER_SETTINGS_PATH = "Windows Settings → System → Power & battery → Screen, sleep & hibernate timeouts";
+const minutes = (n) => (n == null ? "never" : `${n} min`);
+
 export function createPowerTab(ctx) {
   const setPower = (patch) => ctx.mutate("updateSettings", { power: patch }).catch(() => {});
+  const saveSaver = (patch) => ctx.mutate("updateSettings", { screensaver: patch }).catch(() => {});
 
   // ---------------------------------------------------------------- live status
   const statusIcon = h("div.status-icon");
@@ -44,41 +53,88 @@ export function createPowerTab(ctx) {
       h("div.callout-sub", "By default Hanami pauses when you unplug to save battery. Turn this on to keep wallpapers playing at full quality on battery.")),
     keepSwitch);
 
-  // ---------------------------------------------------------------- rules
+  // ---------------------------------------------------------------- desktop wallpaper rules
   const rows = {};
   const rulesList = h("div.rules");
   for (const c of CONDITIONS) {
     const explain = h("div.rule-explain");
+    const active = h("span.rule-active", { hidden: true }, "Now");
     const seg = segmented(MODES, "full", (v) => setPower({ [c.key]: v }), { ariaLabel: c.title, cls: "modes" });
     const extra = c.threshold
       ? slider({ label: "Low-battery threshold", min: 5, max: 50, step: 1, value: 20, format: (v) => `${v}%`,
           onInput: debounced((v) => setPower({ lowBatteryThreshold: v }), 200) })
       : null;
-    const row = h("div.rule", { "data-key": c.key },
-      h("div.rule-icon", svg(c.icon)),
-      h("div.rule-text", h("div.rule-title", c.title, h("span.rule-active", { hidden: true }, "Now")), h("div.rule-sub", c.sub), explain),
-      seg,
-      extra ? h("div.rule-extra", extra) : null);
-    rows[c.key] = { row, seg, explain, extra };
-    rulesList.append(row);
+    const r = row(c.icon, [c.title, active], c.sub, seg, { rule: true });
+    r.dataset.key = c.key;
+    r.text.append(explain);
+    if (extra) r.append(h("div.rule-extra", extra));
+    rows[c.key] = { row: r, seg, explain, active, extra };
+    rulesList.append(r);
   }
 
-  // ---------------------------------------------------------------- fps
+  // ---------------------------------------------------------------- screensaver
+  const saverEnabled = toggle(true, (v) => saveSaver({ enabled: v }), "Live screensaver");
+  const saverStatus = h("span.card-meta");
+  const idleSeg = segmented(IDLE_PRESETS.map((v) => ({ value: v, label: `${v}` })), 2, (v) => saveSaver({ idleMinutes: v }), { ariaLabel: "Start after (minutes)" });
+  const idleInput = h("input.num-input", { type: "number", min: 1, max: 120, step: 1, "aria-label": "Custom idle minutes", title: "Custom: 1–120 minutes" });
+  const commitIdle = () => {
+    const cur = ctx.state.settings.screensaver.idleMinutes;
+    let v = Math.round(Number(idleInput.value));
+    if (!Number.isFinite(v) || idleInput.value === "") { idleInput.value = cur; return; }
+    v = Math.min(120, Math.max(1, v));
+    idleInput.value = v;
+    if (v !== cur) saveSaver({ idleMinutes: v });
+  };
+  idleInput.addEventListener("change", commitIdle);
+  idleInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { commitIdle(); idleInput.blur(); } });
+  const stopSeg = segmented(STOP_OPTIONS, 0, (v) => saveSaver({ stopAfterHours: v }), { ariaLabel: "Stop after" });
+  const signIn = toggle(false, (v) => saveSaver({ requireSignIn: v }), "Require sign-in when it ends");
+  const timers = h("div.ss-timers");
+
+  const saverCard = card("Screensaver", saverStatus,
+    h("div.rules",
+      row("screensaver", "Live screensaver", "When plugged in and idle, shows your live wallpaper fullscreen with a clock and keeps the screen on. A key press or click ends it — moving the mouse doesn't.", saverEnabled, { rule: true }),
+      row("clock", "Start after", "Minutes without mouse or keyboard input, while plugged in.",
+        h("div.ss-idle", idleSeg, h("label.num-wrap", idleInput, h("span", "min"))), { rule: true }),
+      row("power", "Stop after", "After this, Hanami hides it and lets Windows turn the screen off and sleep as usual.", stopSeg, { rule: true }),
+      row("lock", "Require sign-in when it ends", "Locks Windows when the screensaver ends. Leave off if your desk is private.", signIn, { rule: true })),
+    timers,
+    h("p.footnote", svg("info"),
+      h("span", "On battery Hanami never shows the screensaver, so Windows' own timers apply. Closing the lid always follows your Windows lid setting.")));
+
+  function renderTimers(s) {
+    const { windowsDisplayOffMinutes: off, windowsSleepMinutes: sleep } = s.screensaver;
+    const idle = s.settings.screensaver.idleMinutes;
+    const warnings = [];
+    if (off != null && off <= idle) warnings.push(`Windows turns the screen off after ${off} min when plugged in — before the screensaver would start.`);
+    if (sleep != null && sleep <= idle) warnings.push(`Windows puts your PC to sleep after ${sleep} min when plugged in — before the screensaver would start.`);
+    if (warnings.length) {
+      timers.className = "ss-timers ss-warn";
+      timers.replaceChildren(
+        h("div.ss-warn-icon", svg("alert")),
+        h("div.ss-warn-text",
+          ...warnings.map((w) => h("div.ss-warn-title", w)),
+          h("div.ss-warn-sub", `Raise it in ${TIMER_SETTINGS_PATH}.`)));
+    } else {
+      timers.className = "ss-timers ss-info";
+      timers.replaceChildren(svg("info"),
+        h("span", `Windows (plugged in): screen off after ${minutes(off)} · sleep after ${minutes(sleep)} — Hanami keeps the screen on only while the screensaver is showing.`));
+    }
+  }
+
+  // ---------------------------------------------------------------- frame rate
   const fpsAC = segmented(FPS.map((v) => ({ value: v, label: String(v) })), 60, (v) => ctx.mutate("updateSettings", { performance: { fpsCap: v } }).catch(() => {}), { ariaLabel: "FPS cap when plugged in" });
   const fpsBat = segmented(FPS.map((v) => ({ value: v, label: String(v) })), 30, (v) => ctx.mutate("updateSettings", { performance: { batteryFpsCap: v } }).catch(() => {}), { ariaLabel: "FPS cap on battery" });
-  const row = (icon, title, sub, control) => h("div.row", h("div.row-icon", svg(icon)), h("div.row-text", h("div.row-title", title), h("div.row-sub", sub)), control);
 
   const el = h("section",
-    h("header.page-head",
-      h("div", h("h1", "Power"), h("p.page-sub", "Choose how hard Hanami works in each situation."))),
+    pageHeader("Power", "Choose when Hanami runs, and how hard it works."),
     statusCard,
     keepCard,
-    h("div.card.pad",
-      h("div.card-head", h("h2", "When…"), h("span.card-meta", "If several apply, the most restrictive wins")),
+    card("Desktop wallpaper", "If several apply, the most restrictive wins",
       h("div.legend", ...MODES.map((m) => h(`div.legend-item.mode-${m.value}`, h("span.mode-dot"), h("b", m.label), h("span", MODE_TEXT[m.value])))),
       rulesList),
-    h("div.card.pad",
-      h("div.card-head", h("h2", "Frame rate"), h("span.card-meta", "Reduced mode is always capped at 30")),
+    saverCard,
+    card("Frame rate", "Reduced mode is always capped at 30",
       row("plug", "FPS cap when plugged in", "Higher is smoother; 60 suits most screens.", fpsAC),
       h("div.divider"),
       row("battery", "FPS cap on battery", "Used whenever you're unplugged and running Full.", fpsBat)));
@@ -96,6 +152,18 @@ export function createPowerTab(ctx) {
     keepCard.classList.toggle("on", p.onBattery === "full");
     fpsAC.set(s.settings.performance.fpsCap);
     fpsBat.set(s.settings.performance.batteryFpsCap);
+
+    const cfg = s.settings.screensaver;
+    if (cfg && s.screensaver) {
+      saverEnabled.set(cfg.enabled);
+      saverStatus.textContent = s.screensaver.status || (cfg.enabled ? "Ready" : "Off");
+      idleSeg.set(cfg.idleMinutes);
+      if (document.activeElement !== idleInput) idleInput.value = cfg.idleMinutes;
+      idleInput.classList.toggle("custom", !IDLE_PRESETS.includes(cfg.idleMinutes));
+      stopSeg.set(cfg.stopAfterHours);
+      signIn.set(cfg.requireSignIn);
+      renderTimers(s);
+    }
 
     // live status
     const pw = s.power;
@@ -120,7 +188,7 @@ export function createPowerTab(ctx) {
     for (const c of CONDITIONS) {
       const on = activeKeys.has(c.key);
       rows[c.key].row.classList.toggle("active", on);
-      rows[c.key].row.querySelector(".rule-active").hidden = !on;
+      rows[c.key].active.hidden = !on;
     }
   }
 

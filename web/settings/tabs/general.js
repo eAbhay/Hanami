@@ -1,6 +1,7 @@
 // General tab — startup, folders, version, quit.
 import { h, svg, toggle, dialog } from "../util.js";
 import { LOGO } from "../icons.js";
+import { pageHeader, card, row } from "../components/index.js";
 
 export function createGeneralTab(ctx) {
   const startup = toggle(true, (v) => ctx.mutate("updateSettings", { startWithWindows: v }).catch(() => startup.set(!v)), "Start with Windows");
@@ -27,17 +28,15 @@ export function createGeneralTab(ctx) {
     } catch (err) { ctx.toastError(err); }
   } }, svg("power"), h("span", "Quit Hanami"));
 
-  const row = (icon, title, sub, control) => h("div.row", h("div.row-icon", svg(icon)), h("div.row-text", h("div.row-title", title), sub ? h("div.row-sub", sub) : null), control);
   const pathRow = (icon, title, codeEl, extra) => h("div.row.path-row", h("div.row-icon", svg(icon)),
     h("div.row-text", h("div.row-title", title), codeEl),
     h("div.row-actions", copyBtn(() => codeEl.textContent), extra));
 
   const el = h("section",
-    h("header.page-head", h("div", h("h1", "General"), h("p.page-sub", "Startup, storage and app info."))),
-    h("div.card.pad",
+    pageHeader("General", "Startup, storage and app info."),
+    card(null, null,
       row("rocket", "Start with Windows", "Launch Hanami quietly in the tray when you sign in.", startup)),
-    h("div.card.pad",
-      h("div.card-head", h("h2", "Storage")),
+    card("Storage", null,
       pathRow("box", "Install folder", installPath),
       h("div.divider"),
       pathRow("folder", "Library folder", libraryPath, openLib)),

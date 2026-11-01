@@ -3,20 +3,19 @@ import { call, on, isMock } from "./bridge.js";
 import { h, svg, toast, toastError } from "./util.js";
 import { LOGO } from "./icons.js";
 import { createWallpapersTab } from "./tabs/wallpapers.js";
-import { createEffectsTab } from "./tabs/effects.js";
 import { createPowerTab } from "./tabs/power.js";
 import { createScreensaverTab } from "./tabs/screensaver.js";
 import { createGeneralTab } from "./tabs/general.js";
 import { createTransferTab } from "./tabs/transfer.js";
 import { FALLBACK_EFFECT } from "./defaults.js";
+import { statusPill, createTuningDrawer } from "./components/index.js";
 import { loadEffects } from "./effects-module.js";
 
 
 const TABS = [
-  { id: "wallpapers", label: "Wallpapers", icon: "image", create: createWallpapersTab },
-  { id: "effects", label: "Effects", icon: "sparkles", create: createEffectsTab },
-  { id: "power", label: "Power", icon: "gauge", create: createPowerTab },
+  { id: "wallpapers", label: "Wallpaper", icon: "image", create: createWallpapersTab },
   { id: "screensaver", label: "Screensaver", icon: "screensaver", create: createScreensaverTab },
+  { id: "power", label: "Power", icon: "gauge", create: createPowerTab },
   { id: "general", label: "General", icon: "gear", create: createGeneralTab },
   { id: "transfer", label: "Export / Import", icon: "transfer", create: createTransferTab },
 ];
@@ -138,18 +137,27 @@ function summarizeModes(s) {
     // "paused manually" → "Paused manually" rather than "Paused — paused manually"
     text = r.toLowerCase().startsWith(label.toLowerCase()) ? r[0].toUpperCase() + r.slice(1) : `${label} — ${r}`;
   }
-  let sub = "";
+  const parts = [screensaverClause(s)];
   if (!allSame && entries.length > 1) {
     const affected = entries.filter((e) => e.mode === worst.mode).map((e) => e.m.name);
-    sub = `on ${affected.join(", ")}`;
+    parts.push(`on ${affected.join(", ")}`);
   }
-  return { mode: worst.mode, text, sub };
+  return { mode: worst.mode, text, sub: parts.filter(Boolean).join(" · ") };
+}
+
+/** The screensaver's part of the sidebar status: when it starts, or why it won't. */
+function screensaverClause(s) {
+  const st = s.screensaver, cfg = s.settings.screensaver;
+  if (!st || !cfg) return "";
+  if (st.active) return "Screensaver showing";
+  if (!cfg.enabled) return "";
+  if (s.power.onBattery) return "Screensaver off on battery";
+  const m = /^Starts after (\d+) min idle/.exec(st.status ?? "");
+  if (m) return `Screensaver in ${m[1]} min`;
+  return st.status?.startsWith("Waiting") ? "Screensaver waiting" : "";
 }
 
 function buildSidebar(nav) {
-  const dot = h("span.status-dot");
-  const text = h("span.status-text");
-  const sub = h("span.status-sub");
   const battery = h("span.status-battery");
   const pauseLabel = h("span");
   const pauseIcon = h("span.ico-wrap");
@@ -159,7 +167,7 @@ function buildSidebar(nav) {
       try { await ctx.mutate("setPaused", { paused: !state.settings.paused }); } catch {}
       pauseBtn.disabled = false;
     } }, pauseIcon, pauseLabel);
-  const status = h("div.status-card", h("div.status-pill", dot, h("div.status-lines", text, sub)), battery, pauseBtn);
+  const status = statusPill(battery, pauseBtn);
 
   const side = h("aside.sidebar",
     h("div.brand", h("span", { html: LOGO }), h("div", h("div.brand-name", "Hanami"), h("div.brand-sub", "Live wallpaper"))),
@@ -168,11 +176,7 @@ function buildSidebar(nav) {
     status);
 
   ctx.onState((s) => {
-    const sum = summarizeModes(s);
-    status.dataset.mode = sum.mode;
-    text.textContent = sum.text;
-    sub.textContent = sum.sub;
-    sub.hidden = !sum.sub;
+    status.set(summarizeModes(s));
     const p = s.power;
     battery.hidden = !p.onBattery;
     battery.innerHTML = "";
@@ -223,6 +227,12 @@ async function boot() {
   }
 
   app.append(buildSidebar(nav), main);
+
+  // One shared "<Effect> settings" drawer; tabs open it from an effect tile's gear.
+  const drawer = createTuningDrawer(ctx);
+  ctx.openTuning = drawer.open;
+  ctx.showTab = (id) => show(id);
+  ctx.onState((s) => drawer.update(s));
 
   try {
     applyState(await call("getState"));
