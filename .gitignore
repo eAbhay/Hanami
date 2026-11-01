@@ -1,0 +1,9 @@
+bin/
+obj/
+dist/
+devroot/
+*.user
+.vs/
+.vscode/
+*.partial
+__pycache__/

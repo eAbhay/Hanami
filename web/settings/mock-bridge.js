@@ -1,0 +1,356 @@
+// In-memory fake Hanami host, used when the settings page runs in a normal browser.
+// Implements every settings-bridge method from docs/CONTRACTS.md with realistic state.
+//
+// Dev helpers (browser console):
+//   hanamiMock.setPower({ onBattery: true, batteryPercent: 64, energySaver: false })
+//   hanamiMock.setWindowState("\\\\.\\DISPLAY2", "fullscreen" | "maximized" | null)
+//   hanamiMock.failNext("setAssignment", "Something went wrong")
+//   hanamiMock.state   (live state object)
+
+const DEFAULT_EFFECT = {
+  preset: "sakura", density: 1, speed: 1, size: 1, opacity: 1, wind: 0,
+  interaction: "repel", interactionStrength: 1, interactionRadius: 160, clickBurst: true,
+};
+
+const MON1 = "\\\\.\\DISPLAY1";
+const MON2 = "\\\\.\\DISPLAY2";
+const LIB = "D:\\Apps\\Hanami\\Library";
+
+const clone = (o) => (o === undefined ? o : JSON.parse(JSON.stringify(o)));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+function deepMerge(target, patch) {
+  for (const [k, v] of Object.entries(patch ?? {})) {
+    if (isObj(v) && isObj(target[k])) deepMerge(target[k], v);
+    else target[k] = clone(v);
+  }
+  return target;
+}
+
+const randomId = () => Math.random().toString(36).slice(2, 8);
+
+// ---------------------------------------------------------------------------------------------
+// Procedural sample media (so thumbnails and the client-side thumbnail generator can be tested
+// offline). Each "scene" is a small painter function.
+const PALETTES = {
+  river:   { sky: ["#f7c8d8", "#f1a3bf", "#b68fd6"], ground: "#5b4a7d", water: "#9fb6e8", accent: "#ffe3ec" },
+  alley:   { sky: ["#141a3a", "#2a2560", "#5a3a7a"], ground: "#0d1024", water: "#2c3a6e", accent: "#ff7eb6" },
+  temple:  { sky: ["#ffd9a8", "#f7a68a", "#9a6fb0"], ground: "#3f3354", water: "#e7b6a0", accent: "#fff2d6" },
+  lantern: { sky: ["#2b1d4a", "#6a2f5f", "#e0786a"], ground: "#1a1230", water: "#41305e", accent: "#ffc36b" },
+  koi:     { sky: ["#bfe6e0", "#86c6c9", "#6a8fb8"], ground: "#2f4f5f", water: "#5b9fb0", accent: "#ff9f7a" },
+  shrine:  { sky: ["#0c1330", "#1d2556", "#3b3a7a"], ground: "#0a0f22", water: "#1c2b55", accent: "#cfd8ff" },
+  fields:  { sky: ["#fff1c9", "#ffd1a1", "#f5a3b5"], ground: "#6f8a5a", water: "#b9d48e", accent: "#ffffff" },
+};
+
+function paintScene(ctx, w, h, p, t = 0) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, p.sky[0]); g.addColorStop(0.55, p.sky[1]); g.addColorStop(1, p.sky[2]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // sun / moon
+  ctx.fillStyle = p.accent; ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.arc(w * 0.72, h * 0.32, h * 0.09, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  // hills
+  ctx.fillStyle = p.ground;
+  ctx.beginPath(); ctx.moveTo(0, h * 0.72);
+  for (let x = 0; x <= w; x += w / 24) ctx.lineTo(x, h * (0.66 + 0.06 * Math.sin(x / w * 7 + 1.3)));
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fill();
+  // water band with moving shimmer
+  ctx.fillStyle = p.water; ctx.globalAlpha = 0.75;
+  ctx.fillRect(0, h * 0.82, w, h * 0.18);
+  ctx.globalAlpha = 0.5; ctx.fillStyle = p.accent;
+  for (let i = 0; i < 14; i++) {
+    const x = ((i * 97 + t * 60) % (w + 80)) - 40;
+    ctx.fillRect(x, h * (0.86 + (i % 3) * 0.04), 36, 2);
+  }
+  // drifting petals / stars
+  ctx.globalAlpha = 0.8;
+  for (let i = 0; i < 26; i++) {
+    const x = (i * 131 + t * 40 * (1 + (i % 3))) % w;
+    const y = (i * 71 + t * 25) % (h * 0.8);
+    ctx.beginPath(); ctx.ellipse(x, y, 3, 2, i, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function sceneImage(palette, w = 480, h = 270) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  paintScene(c.getContext("2d"), w, h, PALETTES[palette]);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+
+/** Records a short animated clip of a scene; resolves to a blob: URL (or null if unsupported). */
+async function sceneVideo(palette, seconds = 1.6) {
+  try {
+    if (typeof MediaRecorder === "undefined") return null;
+    const c = document.createElement("canvas");
+    c.width = 640; c.height = 360;
+    const ctx = c.getContext("2d");
+    const stream = c.captureStream(30);
+    const mime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m));
+    if (!mime) return null;
+    const rec = new MediaRecorder(stream, { mimeType: mime });
+    const chunks = [];
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    const done = new Promise((r) => (rec.onstop = r));
+    const t0 = performance.now();
+    paintScene(ctx, 640, 360, PALETTES[palette], 0);
+    rec.start(200);
+    const timer = setInterval(() => paintScene(ctx, 640, 360, PALETTES[palette], (performance.now() - t0) / 1000), 33);
+    await sleep(seconds * 1000);
+    clearInterval(timer);
+    rec.stop();
+    await done;
+    return URL.createObjectURL(new Blob(chunks, { type: "video/webm" }));
+  } catch (err) {
+    console.warn("[mock] could not record sample video", err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+function initialState() {
+  const builtins = [
+    { id: "builtin:twilight", name: "Twilight", type: "builtin", builtin: true, sizeBytes: 0 },
+    { id: "builtin:dawn",     name: "Dawn",     type: "builtin", builtin: true, sizeBytes: 0 },
+    { id: "builtin:night",    name: "Night",    type: "builtin", builtin: true, sizeBytes: 0 },
+  ];
+  const lib = [
+    { id: "k3j2h1", name: "Sakura river", type: "video", palette: "river",
+      sizeBytes: 48_213_402, width: 1920, height: 1080, durationSec: 12.5, createdAt: "2026-10-12T09:21:00Z" },
+    { id: "p9x7aa", name: "Rainy alley at night", type: "video", palette: "alley",
+      sizeBytes: 131_877_120, width: 3840, height: 2160, durationSec: 30, createdAt: "2026-10-20T19:02:00Z" },
+    { id: "t4mpl3", name: "Mountain temple", type: "image", palette: "temple",
+      sizeBytes: 3_412_990, width: 3840, height: 2160, createdAt: "2026-10-28T14:45:00Z", noThumb: true },
+  ].map((w) => {
+    const ext = w.type === "video" ? "mp4" : "jpg";
+    const media = sceneImage(w.palette, w.type === "image" ? 1280 : 480, w.type === "image" ? 720 : 270);
+    return {
+      id: w.id, name: w.name, type: w.type, builtin: false,
+      // In the real host these are library.hanami URLs. The mock uses data URLs so they load offline.
+      src: w.type === "image" ? media : `https://library.hanami/wallpapers/${w.id}/media.${ext}`,
+      thumbnail: w.noThumb ? null : media,
+      sizeBytes: w.sizeBytes, width: w.width, height: w.height,
+      ...(w.durationSec ? { durationSec: w.durationSec } : {}),
+      createdAt: w.createdAt,
+    };
+  });
+
+  return {
+    version: "0.1.0",
+    installDir: "D:\\Apps\\Hanami",
+    libraryDir: LIB,
+    settings: {
+      sameOnAllMonitors: true,
+      assignments: { "*": { wallpaperId: "builtin:twilight", effect: clone(DEFAULT_EFFECT) } },
+      power: {
+        onAC: "full", onBattery: "paused", lowBattery: "paused", lowBatteryThreshold: 20,
+        energySaver: "reduced", whenMaximized: "paused", whenFullscreen: "paused",
+      },
+      performance: { fpsCap: 60, batteryFpsCap: 30 },
+      startWithWindows: true,
+      paused: false,
+    },
+    monitors: [
+      { key: MON1, name: "Built-in display", isPrimary: true,  width: 2560, height: 1600, scale: 1.5 },
+      { key: MON2, name: "DELL U2723QE",     isPrimary: false, width: 3840, height: 2160, scale: 1.5 },
+    ],
+    modes: {},
+    power: { onBattery: false, batteryPercent: 82, energySaver: false },
+    wallpapers: [...builtins, ...lib],
+  };
+}
+
+const RANK = { paused: 0, reduced: 1, full: 2 };
+
+export function createMockHost(post) {
+  const state = initialState();
+  const windowState = { [MON1]: null, [MON2]: null };   // null | "maximized" | "fullscreen"
+  const failures = new Map();
+  const importNames = [
+    ["Lantern festival", "lantern"], ["Koi pond", "koi"], ["Starlit shrine", "shrine"], ["Summer fields", "fields"],
+  ];
+  let importCounter = 0;
+
+  function computeModes() {
+    const s = state.settings, p = state.power;
+    for (const m of state.monitors) {
+      const c = [];
+      if (s.paused) c.push({ mode: "paused", reason: "paused manually" });
+      if (windowState[m.key] === "fullscreen") c.push({ mode: s.power.whenFullscreen, reason: "fullscreen app" });
+      if (windowState[m.key] === "maximized") c.push({ mode: s.power.whenMaximized, reason: "maximized window" });
+      if (p.onBattery) {
+        const low = p.batteryPercent != null && p.batteryPercent <= s.power.lowBatteryThreshold;
+        c.push(low ? { mode: s.power.lowBattery, reason: "low battery" } : { mode: s.power.onBattery, reason: "on battery" });
+      } else {
+        c.push({ mode: s.power.onAC, reason: "plugged in" });
+      }
+      if (p.energySaver) c.push({ mode: s.power.energySaver, reason: "Energy Saver" });
+      let best = { mode: "full", reason: p.onBattery ? "on battery" : "plugged in" };
+      for (const x of c) if (RANK[x.mode] < RANK[best.mode]) best = x;
+      state.modes[m.key] = best;
+    }
+  }
+  computeModes();
+
+  const snapshot = () => { computeModes(); return clone(state); };
+  const emit = (event, data) => setTimeout(() => post({ event, data: clone(data) }), 0);
+  const emitState = () => emit("stateChanged", snapshot());
+  const findWp = (id) => state.wallpapers.find((w) => w.id === id);
+
+  async function progress(task, steps, labelFor) {
+    for (let i = 0; i <= steps; i++) {
+      emit("progress", { task, done: i, total: steps, label: labelFor(i) });
+      if (i < steps) await sleep(90 + Math.random() * 70);
+    }
+  }
+
+  async function addFakeWallpaper(name, palette) {
+    const id = randomId();
+    const src = await sceneVideo(palette);
+    const isVideo = !!src;
+    const w = {
+      id, name, type: isVideo ? "video" : "image", builtin: false,
+      src: src ?? sceneImage(palette, 1280, 720),
+      thumbnail: null,      // the settings UI generates it via saveThumbnail
+      sizeBytes: Math.round((isVideo ? 20 + Math.random() * 90 : 2 + Math.random() * 4) * 1_000_000),
+      width: isVideo ? 1920 : 3840, height: isVideo ? 1080 : 2160,
+      createdAt: new Date().toISOString(),
+    };
+    state.wallpapers.push(w);
+    return w;
+  }
+
+  const methods = {
+    getState: () => snapshot(),
+
+    updateSettings: (patch) => {
+      if (!isObj(patch)) throw new Error("updateSettings expects an object");
+      deepMerge(state.settings, patch);
+      emitState();
+      return snapshot();
+    },
+
+    setAssignment: ({ monitorKey, wallpaperId, effect } = {}) => {
+      if (monitorKey !== "*" && !state.monitors.some((m) => m.key === monitorKey)) throw new Error(`Unknown monitor ${monitorKey}`);
+      if (wallpaperId !== undefined && wallpaperId !== null && !findWp(wallpaperId)) throw new Error("That wallpaper no longer exists");
+      const a = state.settings.assignments;
+      const cur = a[monitorKey] ?? clone(a["*"]) ?? { wallpaperId: null, effect: clone(DEFAULT_EFFECT) };
+      if (wallpaperId !== undefined) cur.wallpaperId = wallpaperId;
+      if (effect) cur.effect = { ...cur.effect, ...effect };
+      a[monitorKey] = cur;
+      emitState();
+      return snapshot();
+    },
+
+    importMedia: async () => {
+      await sleep(500);   // "file dialog"
+      const picks = [importNames[importCounter++ % importNames.length], importNames[importCounter++ % importNames.length]];
+      const steps = 16;
+      const created = Promise.all(picks.map(([n, p]) => addFakeWallpaper(n, p)));
+      await progress("import", steps, (i) => {
+        const f = picks[Math.min(picks.length - 1, Math.floor((i / steps) * picks.length))];
+        return i === steps ? "Done" : `Copying ${f[0].toLowerCase().replace(/ /g, "-")}.mp4`;
+      });
+      const imported = await created;
+      emitState();
+      return { imported: clone(imported) };
+    },
+
+    renameWallpaper: ({ id, name }) => {
+      const w = findWp(id);
+      if (!w) throw new Error("Wallpaper not found");
+      if (w.builtin) throw new Error("Built-in wallpapers can't be renamed");
+      if (!String(name ?? "").trim()) throw new Error("Name can't be empty");
+      w.name = String(name).trim();
+      emitState();
+      return snapshot();
+    },
+
+    deleteWallpaper: ({ id }) => {
+      const w = findWp(id);
+      if (!w) throw new Error("Wallpaper not found");
+      if (w.builtin) throw new Error("Built-in wallpapers can't be deleted");
+      state.wallpapers = state.wallpapers.filter((x) => x.id !== id);
+      for (const a of Object.values(state.settings.assignments)) if (a.wallpaperId === id) a.wallpaperId = null;
+      emitState();
+      return snapshot();
+    },
+
+    saveThumbnail: ({ id, dataUrl, width, height, durationSec }) => {
+      const w = findWp(id);
+      if (!w) throw new Error("Wallpaper not found");
+      if (!String(dataUrl).startsWith("data:image/jpeg")) throw new Error("Expected a JPEG data URL");
+      w.thumbnail = dataUrl;
+      if (width) w.width = width;
+      if (height) w.height = height;
+      if (durationSec && Number.isFinite(durationSec)) w.durationSec = durationSec;
+      emitState();
+      return { ok: true };
+    },
+
+    setPaused: ({ paused }) => {
+      state.settings.paused = !!paused;
+      emitState();
+      return snapshot();
+    },
+
+    openLibraryFolder: () => { console.info(`[mock] would open ${LIB}`); return { ok: true }; },
+
+    getExportItems: () => [
+      { id: "settings", kind: "settings", name: "Settings", sizeBytes: 3_284 },
+      ...state.wallpapers.filter((w) => !w.builtin).map((w) => ({
+        id: w.id, kind: "wallpaper", name: w.name, sizeBytes: w.sizeBytes, thumbnail: w.thumbnail ?? null,
+      })),
+    ],
+
+    exportPack: async ({ ids, includeSettings }) => {
+      if (!Array.isArray(ids)) throw new Error("ids must be an array");
+      await sleep(400);   // "save dialog"
+      const names = ids.map((id) => findWp(id)?.name ?? id);
+      if (includeSettings) names.push("settings.json");
+      const steps = Math.max(8, names.length * 6);
+      await progress("export", steps, (i) => (i === steps ? "Done" : `Packing ${names[Math.min(names.length - 1, Math.floor((i / steps) * names.length))] ?? ""}`));
+      return { path: "C:\\Users\\you\\Desktop\\Hanami-pack-2026-11-01.hanamipack" };
+    },
+
+    importPack: async () => {
+      await sleep(400);   // "open dialog"
+      const picks = [importNames[importCounter++ % importNames.length]];
+      const steps = 12;
+      const created = Promise.all(picks.map(([n, p]) => addFakeWallpaper(n, p)));
+      await progress("importPack", steps, (i) => (i === steps ? "Done" : "Unpacking Hanami-pack.hanamipack"));
+      await created;
+      emitState();
+      return { imported: picks.length };
+    },
+
+    quit: () => { setTimeout(() => console.info("[mock] host would quit now"), 0); return undefined; },
+  };
+
+  async function receive(msg) {
+    const { id, method, params } = msg ?? {};
+    await sleep(25 + Math.random() * 60);
+    try {
+      if (failures.has(method)) { const m = failures.get(method); failures.delete(method); throw new Error(m); }
+      const fn = methods[method];
+      if (!fn) throw new Error(`Unknown method ${method}`);
+      const result = await fn(params ?? {});
+      post({ id, result: clone(result) });
+    } catch (err) {
+      post({ id, error: err?.message ?? String(err) });
+    }
+  }
+
+  window.hanamiMock = {
+    state,
+    setPower(p) { Object.assign(state.power, p); emitState(); },
+    setWindowState(key, s) { windowState[key] = s; emitState(); },
+    failNext(method, message = "Simulated host error") { failures.set(method, message); },
+  };
+  console.info("[Hanami] running with the mock bridge (no WebView2 host). See window.hanamiMock.");
+
+  return { receive };
+}

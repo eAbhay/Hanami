@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>Hanami</AssemblyName>
+    <RootNamespace>Hanami</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>Hanami</Product>
+    <Description>Live wallpapers, interactive effects and desktop companions</Description>
+    <ApplicationIcon>Assets\hanami.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Single self-contained exe: `dotnet publish -c Release` (see tools/build.ps1). Publish-only,
+       so the test project can still reference this one as a normal assembly. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(_IsPublishing)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WPF and WinForms both define Application, MessageBox, Color, … — keep them explicit. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\hanami.ico" />
+    <EmbeddedResource Include="Assets\hanami.ico" LogicalName="hanami.ico" />
+    <!-- The whole web/ tree ships inside the exe and is extracted to <installDir>/app/web. -->
+    <EmbeddedResource Include="..\..\web\**\*" Exclude="..\..\web\**\README.md;..\..\web\**\_stub*"
+                      LogicalName="web/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Hanami.Tests" />
+  </ItemGroup>
+
+</Project>
