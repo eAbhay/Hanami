@@ -1,4 +1,4 @@
-# Implementation plan — round 3
+# Implementation plan — round 4
 
 How to use this file (for a fresh chat, e.g. Sonnet):
 1. Read `CLAUDE.md`, then this file, then `docs/CONTRACTS.md`. Read `docs/TESTING.md` before testing.
@@ -7,217 +7,159 @@ How to use this file (for a fresh chat, e.g. Sonnet):
 3. Don't redesign beyond what a phase says; if something in the plan turns out wrong, note it under
    the phase's "Notes" and pick the smallest fix that keeps the intent.
 
+Round 3 (idle freeze, per-effect settings, embers, settings restructure, Tilt Warp clock) is done;
+see git history (`git show c2918b8:docs/PLAN.md`). Still open from it: the user's own Win+D
+no-flash check.
+
 Decisions already made with the user (don't re-ask):
-- Each effect has **its own settings** (density, speed, size, opacity, wind, mouse interaction,
-  strength, radius, click burst). Desktop and screensaver each just **pick an effect**; the effect
-  brings its settings. A gear button on every effect tile opens that effect's settings.
-- New effect: **flame embers**.
-- Settings navigation: **Wallpaper · Screensaver · Power · General · Export / Import**. The Effects
-  tab goes away (its controls live in the per-effect settings drawer). Wallpaper and Screensaver
-  tabs choose *what shows*; Power holds *when things run*, including all screensaver timing.
-- Screensaver clock: higher (about a third of the way down), abstract display font **Tilt Warp**
-  (SIL OFL, bundled), no new settings. Date stays in the clean system font.
-- Screensaver ends only on key press or click (already done). Sign-in off by default (done).
+- **Click burst is off by default** for every effect. Users who already switched it on keep it —
+  but stored overrides currently hold *every* key (the old drawer/migration wrote whole objects), so
+  a one-time migration drops `clickBurst` from stored overrides (see 1.2).
+- Effects look too faint at 100% opacity. Cause (measured from the code, see Phase 2): the
+  per-particle alphas and the flicker/pulse/life envelopes multiply the opacity slider down to an
+  average visible alpha of roughly 0.2–0.4 for fireflies, sparkles and embers.
+- Screensaver clock: the user sets its **position** and **font** (an installed Windows font, the
+  bundled Tilt Warp, or a font file they import). Applies to the screensaver clock (the only clock).
+- Fingerprint to end the screensaver: **nice to have**. Spike first; if Windows won't let us see a
+  touch, drop it with a note — the user said that's fine.
+- Taskbar transparency: not an app feature (user sets it up in Windows / a third-party tool).
 
 ---
 
-## Phase 1 — Bug: a playing video wallpaper keeps the screen on
+## Phase 1 — Click burst off by default
 
-**Symptom (user):** on the desktop, plugged in, screensaver set to 1 min never starts.
-**Root cause (confirmed):** Chromium/WebView2 takes a Windows "display required" request while a
-`<video>` plays, even muted. `tools\dev\power-state.ps1` shows `0x2` while the desktop video plays.
-So `ScreensaverPolicy` sees "another app is keeping the screen on" and waits forever — and Windows
-itself never turns the screen off on the desktop (on battery too, if On battery = Full).
+- [ ] 1.1 `web/shared/effects.js`: `DEFAULT_EFFECT.clickBurst = false` (all presets inherit it).
+      `web/settings/defaults.js` `FALLBACK_EFFECT.clickBurst = false`; the drawer's
+      `toggle(true, …)` initial value → `false`; dev panel follows `PRESET_DEFAULTS` already.
+      `mock-bridge.js` if it seeds `clickBurst: true` anywhere.
+- [ ] 1.2 Migration in `SettingsStore.Normalize`: add `AppSettings.SettingsVersion` (int, missing =
+      1). When < 2: remove the `clickBurst` key from every `effects[preset]` override, then set 2.
+      Write it back on the next save as usual. Unit tests: v1 file with `clickBurst:true` → key gone,
+      version 2; v2 file with `clickBurst:true` → kept; pack import of an old settings file migrates too.
+- [ ] 1.3 `docs/CONTRACTS.md` (`clickBurst` default false; `settingsVersion`), README line, drawer
+      hint text unchanged. `tools/dev/perf.ps1` sends an explicit config — leave it.
+- [ ] 1.4 Check: dev page click → no burst on a fresh preset; settings drawer toggle starts off and
+      turning it on works on the real desktop. Commit.
 
-**Fix: freeze the desktop video shortly before any idle deadline**, so our own request disappears
-and the remaining requests (if any) really are other apps'.
+## Phase 2 — Effect visibility
 
-- [x] 1.1 `Native/Win32.Power.cs`: add `OnBatteryTimeouts()` (same as `PluggedInTimeouts()` but
-      `PowerReadDCValueIndex`), or generalise to `DisplayTimeouts(bool onBattery)` returning
-      `(displayOff, sleep)` minutes.
-- [x] 1.2 `Core/IdleFreezePolicy.cs` (pure): `TimeSpan? FreezeAfter(ScreensaverSettings s, bool onBattery,
-      double? displayOffMinutes)` = the earliest of (screensaver start, if enabled and plugged in) and
-      (Windows display-off timeout for the current power source), minus a 5 s lead; null = never.
-      Unit tests: AC with screensaver 1 min → 55 s; battery → Windows DC timeout − 5 s; disabled
-      screensaver + no Windows timeout → null; never negative.
-- [x] 1.3 `ScreensaverManager`: it already tracks idle every second. Expose `bool IdleFrozen`
-      (true once idle ≥ FreezeAfter, false on the next real input) and raise `Changed` when it
-      flips. Before starting the screensaver, require the freeze to have been in effect ≥ 2 s, then
-      check `AnyDisplayRequest()` (measure how long Chromium takes to drop its request after pause;
-      adjust the 2 s if needed and note it).
-- [x] 1.4 `ModeResolver.Resolve(..., bool idleFrozen)`: when frozen, cap at `Mode.Reduced` with
-      reason "Idle" (video and scenes freeze, particles keep moving — canvas animation takes no
-      power request). Not hidden. Wire it through `WallpaperManager` like `ScreensaverShowing`.
-      Unit test.
-- [x] 1.4b **Pause, never hide, behind windows** (user request): Win+D briefly shows the stock
-      wallpaper because a maximized/fullscreen-covered wallpaper is hidden + `TrySuspend`ed, and
-      resuming takes a moment. Fix: in `ModeResolver.Resolve` drop the `covered` hiding, so
-      `Hidden` is true only for the screensaver case (and the "Paused" comment above it goes);
-      in `WallpaperView.SetModeAsync` the hidden branch then only serves the screensaver. A paused
-      wallpaper stays visible and frozen (video holds its frame, no display request), so showing
-      the desktop is instant. Update the `ModeResolverTests` that expect `Hidden` when covered,
-      the "Hidden" text in CONTRACTS/README if any. Cost: the page stays resident (more RAM than
-      suspended) — acceptable. Verify with the user: Win+D with a maximized window → no flash.
-- [x] 1.5 After the screensaver ends for a non-input reason (stop-after, unplug) the freeze must
-      stay until input, so Windows' own timers can turn the screen off.
-- [x] 1.6 Verify (see TESTING.md §5): `devroot` settings `power.whenMaximized="full"`, a video
-      wallpaper, `screensaver.idleMinutes=1`. **Ask the user to keep hands off for ~90 s.** Expect:
-      `power-state.ps1` `0x2` while playing → log "Reduced (Idle)" at ~55 s → `0x0` → "Screensaver
-      shown" at ~60 s → `input.ps1 -Key` ends it → back to Full on the next input. Restore settings.
-- [x] 1.7 README (screensaver/power text if needed), CONTRACTS (mode reasons), commit.
+**Why they look faint (from the code):** `_render` draws `p.alpha × p.fade × opacity`, and then:
+- fireflies: pulse `0.12 + 0.88·s³` → mean ≈ 0.40, × alpha 0.6–1 → **≈ 0.32**;
+- sparkles: the same twinkle curve, and size shrinks to 45% at the trough → **≈ 0.3**, smaller too;
+- embers: flicker `0.72 ± 0.28` × life envelope `min(1,7t)·(1−t)^1.15` (mean ≈ 0.45) × alpha
+  (0.39–1) → **≈ 0.2**;
+- snow: small (1.6–5.5 px) with alphas 0.45–0.95; rain alphas 0.22–0.55 (by design, but faint);
+- sakura/leaves are mostly fine (alpha 0.85–1 for most), they only fade on bright scenes.
+So "100% opacity" never means opaque. Fix in three parts, keeping the perf budget:
 
-Notes:
-- 1.1 became `DisplayTimeouts(bool onBattery)`; the only other caller (settings state) passes `false`.
-- Verified live (video wallpaper, `whenMaximized=full`, idle 1 min): `0x2` while playing → log
-  "Reduced (Idle)" → `0x0` → "Screensaver shown" about 5 s later (the freeze lead, which also covers
-  the 2 s settle) → `0x3` during the screensaver → a key tap ended it → back to Full/`0x2`.
-  The 2 s settle was enough; Chromium dropped its request well within it.
-- 1.4b is implemented and unit-tested but the Win+D no-flash check is the user's to do (CLAUDE.md
-  forbids Win+D for Claude).
+- [ ] 2.0 Measure first. Add a dev-only diagnostic to the engine (not in the contract, like
+      `stats`): `stats.meanAlpha` = mean of the final `globalAlpha` actually drawn per particle,
+      averaged over ~2 s. Record a before table for every preset at defaults in Notes.
+- [ ] 2.1 New tuning key **`flicker`** (0–1, 1 = today's depth). Scales the depth of the fireflies
+      pulse, the sparkles twinkle (alpha *and* size) and the embers flicker:
+      `value = 1 − flicker·(1 − today's factor)`. Per-preset defaults in `PRESET_DEFAULTS`
+      (start: fireflies 0.5, sparkles 0.5, embers 0.4; others 0 and unused). Add a capability flag
+      on `PRESETS` entries (`flicker: true` for those three) so the drawer shows the slider only
+      where it does something. Sanitize 0–1.
+- [ ] 2.2 **Opacity above 100%.** Extend `opacity` to 0–2. Up to 1 it multiplies as today; above 1
+      it lifts faint particles without clipping bright ones: `a' = 1 − (1 − a)^opacity` where
+      `a = p.alpha × fade × envelope` (apply in `_render`/each `draw` where the final alpha is
+      known — refactor so the multiplier is applied once). Slider 0–200%, hint "Above 100% makes
+      faint particles stronger".
+- [ ] 2.3 **Retune defaults** so each preset's `meanAlpha` at defaults is ≥ ~0.55 (rain ≥ 0.4):
+      raise the low alpha ranges (snow mid layer, rain, embers `0.55 + 0.45z` term), soften the
+      embers life envelope's tail (e.g. exponent 1.15 → 0.8), raise the fireflies pulse floor
+      0.12 → 0.3. Don't change motion. Record the after table in Notes.
+- [ ] 2.4 Light particles over bright video (snow, sakura, sparkles): bake a very soft dark halo
+      (~10–15% alpha, a few px) into the sprites at build time so they separate from white skies.
+      Sprite-only change, no runtime cost. Judge on the dev page with a bright image
+      (`?src=<bright jpg>`) and a dark scene; if it looks dirty on dark scenes, drop it and note why.
+- [ ] 2.5 Contract (`flicker`, opacity range, capability flag), drawer slider + mock bridge, host:
+      nothing (overrides are opaque JSON) — but check `EffectSettingsTests` still pass and add one
+      for an override containing `flicker` surviving a round-trip.
+- [ ] 2.6 Real-screen check: `capture-desktop.ps1` before/after of embers and fireflies over the
+      user's video wallpaper; show the user. Commit.
 
-## Phase 2 — Per-effect settings, flame embers, screensaver effect (data + host + engine)
+## Phase 3 — Screensaver clock: position, size, font
 
-Contract first (`docs/CONTRACTS.md`), then code:
+Contract first:
 
-- [x] 2.1 Contract changes:
-  - `type EffectTuning = Omit<EffectConfig, "preset">`.
-  - `Settings.effects: Record<PresetId, Partial<EffectTuning>>` — the user's overrides per effect;
-    missing keys fall back to that preset's defaults (`PRESET_DEFAULTS` in effects.js).
-  - `Settings.assignments[key] = { wallpaperId, effectPreset: PresetId }` (replaces the `effect` object).
-  - `Settings.screensaver.effectPreset: PresetId | null` — null = same as each monitor's desktop.
-  - Host → page `config.effect` stays a full `EffectConfig` shape but may be partial:
-    `{preset, ...settings.effects[preset]}`; the page fills gaps from `PRESET_DEFAULTS[preset]`.
-  - Bridge: `setAssignment({monitorKey, wallpaperId?, effectPreset?})`;
-    new `setEffectTuning({preset, tuning: Partial<EffectTuning> | null})` → `State` (null = reset).
-  - Presets list gains `"embers"`.
-- [x] 2.2 `web/shared/effects.js`:
-  - Export `PRESET_DEFAULTS` (per preset, sensible: fireflies → interaction attract, lower density;
-    rain → wind; sakura/snow/leaves → repel; embers → wind). Keep `DEFAULT_EFFECT` exported.
-  - `setConfig`: on a **preset change**, start from the new preset's defaults merged with the given
-    partial — never carry the previous preset's tuning over. Same preset → merge as today.
-  - New preset **embers** ("Flame embers"): glowing particles rising from the bottom third with
-    slight turbulent sway; colour cools over life white-yellow → orange → deep red while shrinking
-    and fading; per-particle flicker; occasional fast thin spark streaks; additive blending
-    (`lighter`) with pre-rendered glow sprites in 3–4 temperature tints (no per-particle
-    shadowBlur). Interaction wind = cursor gusts fan them; click burst = upward spark shower.
-    Keep the existing perf budget (see the engine's header comment).
-  - Check in the browser dev page (`?dev`, TESTING.md §7): all presets, preset switching resets
-    tuning, embers looks good over dark and bright scenes, no console errors.
-- [x] 2.3 Host (`Core/Settings.cs` etc.):
-  - `Assignment { WallpaperId, EffectPreset = "sakura" }`; `AppSettings.Effects:
-    Dictionary<string, JsonObject>`; `ScreensaverSettings.EffectPreset: string?`.
-  - Remove `Effects.Default()` from C# — defaults live only in effects.js.
-  - Migration in `SettingsStore.Normalize`: an old assignment `effect` object → `effectPreset =
-    effect.preset`, and if `effects[preset]` is unset copy its tuning keys there. (Read the legacy
-    property via a nullable `[JsonPropertyName("effect")] JsonObject? LegacyEffect` that is cleared
-    after migration so it is never written back.)
-  - `ComposeEffect(preset)` → `{preset} + clone(effects[preset])`; used by `WallpaperManager`
-    (desktop) and `ScreensaverManager` (`screensaver.effectPreset ?? desktop preset`).
-  - Bridge: update `setAssignment`, add `setEffectTuning`.
-  - Tests: migration from an old-shape JSON fixture; compose; screensaver override null/non-null;
-    tuning reset; pack round-trip keeps `effects`.
-- [x] 2.4 Keep the current settings UI working enough not to crash (minimal adapt in
-      `web/settings/` + `mock-bridge.js` to the new shape); the real UI rework is phase 3.
-- [x] 2.5 Run in dev mode: desktop shows its effect, preview screensaver shows a *different*
-      effect when set via `cdp.mjs` + `updateSettings({screensaver:{effectPreset:"embers"}})`. Commit.
-
-Notes:
-- 2.4 adapt: `ctx.assignmentFor(key)` now returns `{wallpaperId, effectPreset, effect}` with `effect` composed
-  (fallback < `PRESET_DEFAULTS` < `settings.effects[preset]`); `ctx.effectFor(preset)` does the same for one
-  preset; `ctx.assign({effect})` splits into `setAssignment` (preset) + `setEffectTuning` (other keys). The
-  Effects tab's Reset now sends `setEffectTuning(null)`. Phase 3 can build on `effectFor`/`assign`.
-- The page applies `{...PRESET_DEFAULTS[preset], ...config.effect}`, so removing an override takes effect.
-- Embers tuned by eye on the dev page (sizes 22-42 px glows, sparks 34-60 px streaks); looks right on dark
-  scenes, not yet judged over a bright video. Verified live: migrated the dev `settings.json` shape in memory,
-  and a screensaver preview with `effectPreset:"embers"` drew orange particles (canvas average 254,185,94)
-  while the desktop stayed on sakura. Dev settings restored (`effectPreset` null).
-
-## Phase 3 — Settings UI restructure and consistency pass
-
-All in `web/settings/` (+ `mock-bridge.js`). Keep the visual language (soft sakura/twilight
-accents, light + dark).
-
-- [x] 3.1 Shared components in `web/settings/components/`: `pageHeader(title, subtitle, action?)`,
-      `card(title, meta?)`, `row(icon, label, hint, control)`, `segmented(options, value, onChange)`,
-      `wallpaperPicker({selectedId, allowSameAsDesktop})`, `effectPicker({selectedPreset,
-      allowSameAsDesktop, onTune})`, `tuningDrawer(preset)`, `statusPill()`. Refactor existing tabs
-      to use them; delete duplicated markup/CSS.
-- [x] 3.2 Navigation: Wallpaper · Screensaver · Power · General · Export / Import. Remove the
-      Effects tab (keep its slider code for the drawer).
-- [x] 3.3 **Wallpaper** tab: header (action: Import video / image) · monitor scope (All monitors /
-      each monitor) · card "Background" (wallpaperPicker) · card "Effect" (effectPicker).
-- [x] 3.4 **Screensaver** tab: header (action: Preview) · status line · card "Background"
-      (wallpaperPicker with *Same as desktop* first) · card "Effect" (effectPicker with *Same as
-      desktop* first) · small link row "Timing and power settings → Power".
-- [x] 3.5 **Effect tiles + gear:** every effect tile (both pickers) gets a small round gear button
-      at its top-right (always visible on the selected tile, on hover/focus otherwise; keyboard
-      reachable; `aria-label="<Effect> settings"`). It opens `tuningDrawer(preset)`: a right-side
-      drawer (bottom sheet under 900 px) titled "<Effect> settings", with the live preview canvas
-      (real `EffectsEngine` over the current wallpaper's thumbnail), the sliders, interaction
-      segmented control + strength/radius, click burst toggle, "Reset to defaults", and the note
-      "Used wherever <Effect> is selected." Changes → `setEffectTuning` debounced 150 ms; slider
-      defaults come from `PRESET_DEFAULTS`.
-- [x] 3.6 **Power** tab: card "Desktop wallpaper" (the six condition rows with Full / Reduced /
-      Paused; Reduced described as "Video holds its frame; effects keep moving at up to 30 FPS") ·
-      card "Screensaver" (on/off, Start after presets + custom, Stop after, Require sign-in, Windows
-      timers info/warning, battery + lid footnote — moved from the Screensaver tab) · card "Frame
-      rate".
-- [x] 3.7 Sidebar status pill shows both: e.g. "Running · screensaver in 1 min", "Paused —
-      maximized window", "Off on battery".
-- [x] 3.8 `mock-bridge.js`: new shapes and `setEffectTuning`; embers in presets.
-- [x] 3.9 Check every tab at 1000×680 and 820×560, light and dark, no console errors (mock in the
-      browser), then in the real app (`capture-window.ps1` screenshots, spot-check bridge calls with
-      `cdp.mjs`). Commit.
+- [ ] 3.1 `docs/CONTRACTS.md`:
+  - `Settings.screensaver.clock: { x: number; y: number; size: number; font: string | null;
+    dateFont: "system" | "same"; showDate: boolean }`. `x, y` = the clock block's centre as a
+    fraction of the monitor (defaults 0.5, 0.31 = today's spot), `size` 0.5–1.6 (default 1),
+    `font` null = bundled Tilt Warp, `"system:<family>"` = an installed Windows font,
+    `"library:<file>"` = an imported font in `Library/fonts/`. Same clock on every monitor.
+  - Host → wallpaper page `config` gains `clock` (screensaver pages only) with `font` resolved to
+    `{family: string, src?: string}` (src = `https://library.hanami/fonts/<file>`).
+  - Bridge: `getFonts` → `{bundled: FontInfo[], system: string[], imported: FontInfo[]}`;
+    `importFont` (file dialog: .ttf .otf .woff .woff2, copies into `Library/fonts/`) →
+    `{imported: FontInfo}` | `{cancelled: true}`; `deleteFont {id}` → `State` (if it's the selected
+    font, `clock.font` resets to null).
+  - On-disk layout: `Library/fonts/<id>.<ext>`.
+- [ ] 3.2 Host: `ClockSettings` with clamping in `Normalize` (x, y 0–1, size range, unknown font
+      strings kept but resolved to Tilt Warp if missing). Font ids: sanitize file names (no path
+      separators, no `..`, fixed allowed extensions), de-duplicate. System fonts from
+      `System.Windows.Media.Fonts.SystemFontFamilies` (family names, sorted, cached). Packs: when
+      settings are exported and `clock.font` is a library font, include that file; import restores
+      it. Tests: clamping, id sanitizing (`..\x.ttf`, `a/b.otf`, `.exe`), pack round-trip with a
+      font, delete-selected resets to null.
+- [ ] 3.3 Page (`clock.js`, `style.css`): take `clock` from config. Position the block by its
+      centre at `(x·100vw, y·100vh)`, clamped so it stays fully on screen. Scale with `size`
+      (font-size and `.time-wrap` box). The `#glass-edge` filter offsets/blurs are in px tuned for
+      size 1 — scale them by `size` (update the filter attributes in `layout()`). Font: system →
+      family name; library → `new FontFace("Hanami User Clock", "url(src)")`, `document.fonts.add`,
+      await load; on failure fall back to Tilt Warp and post `{type:"fontError", font, message}`
+      (log it host-side). Keep the fade-in-after-font-load rule. `dateFont: "same"` uses the clock
+      family for the date; `showDate` hides it.
+- [ ] 3.4 Settings UI, Screensaver tab, new card **"Clock"**:
+  - a small monitor-shaped placement preview (current screensaver wallpaper thumbnail, a
+    clock-shaped handle showing the current time in the chosen font) — drag the handle to place it,
+    snaps to centre lines within ~2%; under it 9 anchor buttons (corners, edges, centre with a
+    margin) that set `x, y`; keyboard: arrow keys nudge 1%.
+  - Size slider; Font select (groups: Bundled · Imported · Installed), "Import font…" button,
+    remove (×) on imported fonts; "Use clock font for the date" toggle; "Show date" toggle.
+  - Each font option previews in its own face. Changes → `updateSettings` debounced 150 ms.
+  - mock-bridge: `getFonts` with a few fake system fonts, `importFont` fake.
+- [ ] 3.5 Check: browser (mock) at 1000×680 and 820×560, light/dark. Real app: pick an installed
+      font, import a .ttf (any OFL font from `C:\Windows\Fonts` copied to a temp folder is fine),
+      move the clock to bottom-left, size 0.7 → Preview screensaver, `input.ps1 -Crop`, show the
+      user. Glass rim must still look right at size 0.6 and 1.5. Commit.
 
 Notes:
-- Components live in `web/settings/components/` (`layout.js`: pageHeader, card, row, statusPill; `wallpaperPicker.js`
-  with a `manage` shape for the Wallpaper tab and a compact `pick` shape for the Screensaver tab; `effectPicker.js`;
-  `tuningDrawer.js`; `index.js` re-exports them and util's segmented/toggle/slider). One shared drawer is created
-  in `app.js` and opened with `ctx.openTuning(preset, {wallpaperId})`; `ctx.showTab(id)` switches tabs.
-- `.rule` is now a modifier of `.row` (one markup for both); the old Effects tab and its CSS are gone.
-- The gear is hidden until hover/focus on unselected tiles and always visible on the selected one (and on touch).
-- Checked in the browser (mock bridge) at 1000x680 and 820x560, light and dark, no console errors; and in the real
-  app (settings window screenshot with the drawer open, `setEffectTuning` reached the host). The drawer's slide-in
-  looked slow in the embedded browser pane (its animation timing is throttled there); in the real app it was fine.
 
-## Phase 4 — Screensaver clock: position and font
+## Phase 4 — Spike: end the screensaver on a fingerprint touch (drop if blocked)
 
-- [x] 4.1 Fetch the font (OFL) into `web/wallpaper/fonts/`:
-      `curl -L -o web/wallpaper/fonts/TiltWarp.ttf "https://github.com/google/fonts/raw/main/ofl/tiltwarp/TiltWarp%5BXROT,YROT%5D.ttf"`
-      and `curl -L -o web/wallpaper/fonts/OFL.txt https://github.com/google/fonts/raw/main/ofl/tiltwarp/OFL.txt`.
-      Check the TTF starts with bytes `00 01 00 00` and is > 20 KB; if the URL 404s, find the path at
-      https://github.com/google/fonts/tree/main/ofl/tiltwarp. Mention the font + licence in README.
-- [x] 4.2 `web/wallpaper/style.css`: `@font-face { font-family: "Hanami Clock"; src:
-      url("fonts/TiltWarp.ttf") format("truetype"); font-display: block; }`; use it for
-      `#clock text.glyphs` (keep Segoe UI for `.date`). Try `font-variation-settings: "XROT" …,
-      "YROT" …` for a slightly tilted dimensional look; pick values by eye.
-- [x] 4.3 `clock.js`: before the first `layout()`, `await document.fonts.load('100px "Hanami Clock"')`
-      so the clip path and glyph metrics use the real font.
-- [x] 4.4 Move it up: `#clock { padding-bottom: ~34vh }` so the time's centre sits about a third of
-      the way down; keep the date right under it.
-- [x] 4.5 Re-tune `#glass-edge` offsets if the rim/shade look off with the new glyph shapes.
-- [x] 4.6 Real-screen check: preview via `cdp.mjs`, `input.ps1 -Crop`, look at it; show the user the
-      crop. If they dislike the font, alternatives: Rubik Moonrocks, Unbounded (same procedure). Commit.
+Facts gathered: this laptop has a **Goodix MOC Fingerprint** reader (status OK), the Windows
+Biometric Service (`WbioSrvc`) is demand-start, and Enhanced Sign-in Security looks not configured
+(`…\DeviceGuard\Scenarios\SecureBiometrics` key absent). While the screensaver shows, Windows is
+unlocked, so Hello isn't listening and a touch produces no input event — we'd have to ask the
+sensor ourselves. Windows gives the system sensor pool to the **foreground** app's session, and the
+screensaver window is foreground, so this may work.
 
-Notes:
-- `font-weight` is 400 now (Tilt Warp has no weight axis; 600 would fake-bold it). XROT/YROT left at 0: the
-  face is already dimensional with the glass effect; the tilt axes are available in `style.css` if wanted.
-- The clock fades in only once the font has loaded (`clock.js`), so the glass clip never shows the fallback face.
-- Real screen: time centre at about 31% of the screen height, date right under it; `#glass-edge` offsets needed
-  no change. Pitfall hit: a `mkdir` from the wrong folder put `fonts/` in the wrong place and the font silently
-  failed (`document.fonts` status "error"); check `status` is "loaded" via `cdp.mjs`.
-
-## Phase 5 — Housekeeping and ship
-
-- [x] 5.1 Unit tests currently write a "settings.json unreadable" warning into the user's real log.
-      Let tests redirect `Log` (e.g. internal settable `Log.FilePath` set from a test module
-      initializer to a temp file).
-- [x] 5.2 README: per-effect settings, embers, new tab layout, clock font credit.
-- [x] 5.3 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
-      (`--dev --startup`, no debug port), commit, and tell the user `dist\Hanami.exe` is updated.
+- [ ] 4.1 Time-boxed probe (scratch project in the scratchpad, not the repo): a tiny WinForms/WPF
+      window that, while focused, calls `WinBioOpenSession(WINBIO_TYPE_FINGERPRINT,
+      WINBIO_POOL_SYSTEM, WINBIO_FLAG_DEFAULT, null, 0, WINBIO_DB_DEFAULT)` then
+      `WinBioIdentifyWithCallback`. Any callback (match, `WINBIO_E_UNKNOWN_ID`, bad capture) =
+      "touched". **Ask the user to touch the sensor** and report what came back. Also confirm that
+      after `WinBioCancel` + `WinBioCloseSession`, locking (Win+L by the user) and signing in with
+      the fingerprint still works.
+- [ ] 4.2 If the probe fails (access denied, no callback while focused, Hello breaks): stop, write
+      the result in Notes, tell the user. No code in the repo.
+- [ ] 4.3 If it works: `Platform/FingerprintWatch.cs` (P/Invoke in `Native/`), started by
+      `ScreensaverManager` after the screensaver is shown and focused, stopped (cancel + close
+      session) in `Hide` **before** `LockWorkStation`, and on dispose. Callback → dispatcher →
+      `Hide("fingerprint", byInput: true)` (respects the grace period and `requireSignIn` like any
+      input). No sensor / any error → log once, silently do nothing (the other laptop may have no
+      reader). README + CONTRACTS screensaver text ("a key press, click or fingerprint touch").
+- [ ] 4.4 Check with the user touching the sensor during a preview, then with `requireSignIn` on
+      (it should lock, and Hello on the lock screen must still accept the finger). Commit.
 
 Notes:
-- `Log.FilePath` has an internal setter; `src/Hanami.Tests/TestLog.cs` points it at a temp file from a module
-  initializer. Confirmed: a full test run adds nothing to the real `hanami.log`.
-- All five phases of this plan are done. `dist\Hanami.exe` (72.7 MB) was rebuilt and contains the new web files
-  and the Tilt Warp font. The dev copy is running again with `--dev --startup`.
+
+## Phase 5 — Ship
+
+- [ ] 5.1 README: click burst default, flicker/opacity, clock position/size/fonts, fingerprint (if
+      shipped).
+- [ ] 5.2 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
+      (`--dev --startup`, no debug port), commit, tell the user `dist\Hanami.exe` is updated.
