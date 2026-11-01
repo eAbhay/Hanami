@@ -182,24 +182,30 @@ Notes:
 
 ## Phase 4 — Screensaver clock: position and font
 
-- [ ] 4.1 Fetch the font (OFL) into `web/wallpaper/fonts/`:
+- [x] 4.1 Fetch the font (OFL) into `web/wallpaper/fonts/`:
       `curl -L -o web/wallpaper/fonts/TiltWarp.ttf "https://github.com/google/fonts/raw/main/ofl/tiltwarp/TiltWarp%5BXROT,YROT%5D.ttf"`
       and `curl -L -o web/wallpaper/fonts/OFL.txt https://github.com/google/fonts/raw/main/ofl/tiltwarp/OFL.txt`.
       Check the TTF starts with bytes `00 01 00 00` and is > 20 KB; if the URL 404s, find the path at
       https://github.com/google/fonts/tree/main/ofl/tiltwarp. Mention the font + licence in README.
-- [ ] 4.2 `web/wallpaper/style.css`: `@font-face { font-family: "Hanami Clock"; src:
+- [x] 4.2 `web/wallpaper/style.css`: `@font-face { font-family: "Hanami Clock"; src:
       url("fonts/TiltWarp.ttf") format("truetype"); font-display: block; }`; use it for
       `#clock text.glyphs` (keep Segoe UI for `.date`). Try `font-variation-settings: "XROT" …,
       "YROT" …` for a slightly tilted dimensional look; pick values by eye.
-- [ ] 4.3 `clock.js`: before the first `layout()`, `await document.fonts.load('100px "Hanami Clock"')`
+- [x] 4.3 `clock.js`: before the first `layout()`, `await document.fonts.load('100px "Hanami Clock"')`
       so the clip path and glyph metrics use the real font.
-- [ ] 4.4 Move it up: `#clock { padding-bottom: ~34vh }` so the time's centre sits about a third of
+- [x] 4.4 Move it up: `#clock { padding-bottom: ~34vh }` so the time's centre sits about a third of
       the way down; keep the date right under it.
-- [ ] 4.5 Re-tune `#glass-edge` offsets if the rim/shade look off with the new glyph shapes.
-- [ ] 4.6 Real-screen check: preview via `cdp.mjs`, `input.ps1 -Crop`, look at it; show the user the
+- [x] 4.5 Re-tune `#glass-edge` offsets if the rim/shade look off with the new glyph shapes.
+- [x] 4.6 Real-screen check: preview via `cdp.mjs`, `input.ps1 -Crop`, look at it; show the user the
       crop. If they dislike the font, alternatives: Rubik Moonrocks, Unbounded (same procedure). Commit.
 
 Notes:
+- `font-weight` is 400 now (Tilt Warp has no weight axis; 600 would fake-bold it). XROT/YROT left at 0: the
+  face is already dimensional with the glass effect; the tilt axes are available in `style.css` if wanted.
+- The clock fades in only once the font has loaded (`clock.js`), so the glass clip never shows the fallback face.
+- Real screen: time centre at about 31% of the screen height, date right under it; `#glass-edge` offsets needed
+  no change. Pitfall hit: a `mkdir` from the wrong folder put `fonts/` in the wrong place and the font silently
+  failed (`document.fonts` status "error"); check `status` is "loaded" via `cdp.mjs`.
 
 ## Phase 5 — Housekeeping and ship
 

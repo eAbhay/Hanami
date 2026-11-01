@@ -30,6 +30,12 @@ html, body {
 .screensaver, .screensaver body, .screensaver * { cursor: none !important; }
 
 /* ── screensaver clock (clock.js) ── */
+/* Tilt Warp (SIL OFL, fonts/OFL.txt): a rounded display face with XROT/YROT tilt axes. */
+@font-face {
+  font-family: "Hanami Clock";
+  src: url("fonts/TiltWarp.ttf") format("truetype");
+  font-display: block;
+}
 #clock {
   position: fixed;
   inset: 0;
@@ -37,7 +43,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding-bottom: 16vh;          /* sits slightly above the middle */
+  padding-bottom: 34vh;          /* the time's centre sits about a third of the way down */
   pointer-events: none;
   opacity: 0;
   transform: translateY(1.5vh);
@@ -62,9 +68,10 @@ html, body {
 }
 #clock .glass { overflow: visible; }
 #clock text.glyphs {
-  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-family: "Hanami Clock", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   font-size: 22vh;
-  font-weight: 600;
+  font-weight: 400;
+  font-variation-settings: "XROT" 0, "YROT" 0;
   letter-spacing: -0.02em;
   text-anchor: middle;
   dominant-baseline: central;

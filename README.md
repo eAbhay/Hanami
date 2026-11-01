@@ -14,7 +14,9 @@ system tray as a single self-contained `.exe`.
   Win+D never flashes your normal wallpaper. Shortly before the screensaver or Windows turns the
   screen off, a playing video freezes so it never keeps the screen on.
 - **Live screensaver** (plugged in only). After a set idle time (default 2 minutes) it covers
-  every monitor with the live wallpaper and a glass clock and date, and keeps the screen on. A
+  every monitor with the live wallpaper and a glass clock and date, and keeps the screen on. The clock uses the
+  [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) font (SIL Open Font License, bundled in
+  `web/wallpaper/fonts/`). A
   key press or mouse click ends it; moving the mouse doesn't. On battery,
   or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
   changes Windows power settings, and closing the lid always follows your Windows lid setting.

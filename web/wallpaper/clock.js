@@ -109,10 +109,12 @@ export function mountClock(parent) {
     timer = setTimeout(tick, 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
   }
 
+  // Fade in only once the font is ready, so the glass clip never shows the fallback face.
+  const fontReady = document.fonts.load('100px "Hanami Clock"').catch(() => {});
   layout();
   tick();
   addEventListener("resize", layout);
-  requestAnimationFrame(() => root.classList.add("shown"));
+  fontReady.then(() => requestAnimationFrame(() => root.classList.add("shown")));
   return () => {
     clearTimeout(timer);
     removeEventListener("resize", layout);
