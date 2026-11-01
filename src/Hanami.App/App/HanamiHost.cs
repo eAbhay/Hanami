@@ -547,12 +547,13 @@ public sealed class HanamiHost
             DefaultExt = PackService.Extension,
         };
         if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
+        var destination = PackService.NormalizeExportPath(dlg.FileName);
 
         var progress = ThrottledProgress("export");
         var settings = includeSettings ? _store.Current : null;
         var looks = _store.Current.Looks;
-        await Task.Run(() => PackService.ExportAsync(_library, settings, ids, dlg.FileName, AppPaths.Version, progress, looks));
-        return new JsonObject { ["path"] = dlg.FileName };
+        await Task.Run(() => PackService.ExportAsync(_library, settings, ids, destination, AppPaths.Version, progress, looks));
+        return new JsonObject { ["path"] = destination };
     }
 
     private async Task<JsonNode> ImportPackAsync()

@@ -92,6 +92,15 @@ public sealed class StorageTests : IDisposable
         Assert.Null(list[3].Thumbnail);
     }
 
+    [Theory]
+    [InlineData(@"C:\x\Hanami-2026-11-01.hanamipack", @"C:\x\Hanami-2026-11-01.hanamipack")]
+    [InlineData(@"C:\x\Hanami-2026-11-01.hanamipack.zip", @"C:\x\Hanami-2026-11-01.hanamipack")]
+    [InlineData(@"C:\x\Hanami.HANAMIPACK.ZIP", @"C:\x\Hanami.HANAMIPACK")]
+    [InlineData(@"C:\x\backup", @"C:\x\backup.hanamipack")]
+    [InlineData(@"C:\x\backup.zip", @"C:\x\backup.hanamipack")]
+    public void ExportPath_AlwaysEndsInExactlyHanamipack(string typed, string expected) =>
+        Assert.Equal(expected, PackService.NormalizeExportPath(typed));
+
     [Fact]
     public async Task Pack_RoundTrip_SelectedItemsOnly()
     {

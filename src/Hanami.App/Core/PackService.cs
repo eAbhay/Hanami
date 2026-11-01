@@ -26,6 +26,17 @@ public static class PackService
 
     private sealed record PackInfo(int Format, string AppVersion, DateTime CreatedAt, List<string> Wallpapers, bool Settings, List<string>? Pets = null);
 
+    /// <summary>
+    /// The file name an export is written to: always ending in exactly <see cref="Extension"/>. A name the user typed
+    /// or edited that ends in ".hanamipack.zip" (or has another or no extension) is corrected, so the pack never shows
+    /// up as ".hanamipack.zip".
+    /// </summary>
+    public static string NormalizeExportPath(string path)
+    {
+        while (path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) path = path[..^4];
+        return path.EndsWith(Extension, StringComparison.OrdinalIgnoreCase) ? path : path + Extension;
+    }
+
     public static List<ExportItem> Items(Library library)
     {
         var items = new List<ExportItem> { new("settings", "settings", "Settings (assignments, effects, power)", 0, null) };
