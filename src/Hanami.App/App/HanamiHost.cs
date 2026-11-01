@@ -24,6 +24,7 @@ public sealed class HanamiHost
     private ScreensaverManager _screensaver = null!;
     private TrayIcon _tray = null!;
     private ThemeWatch _theme = null!;
+    private PetManager _pets = null!;
     private SettingsWindow? _settingsWindow;
     private DispatcherTimer? _displayDebounce;
     private bool _quitting;
@@ -55,7 +56,7 @@ public sealed class HanamiHost
 
         _theme = new ThemeWatch();
         _theme.Changed += () => _ui.BeginInvoke(OnThemeChanged);
-        _tray = new TrayIcon(OpenSettings, () => _ = SetPausedAsync(!_store.Current.Paused), SetThemeMode, Quit);
+        _tray = new TrayIcon(OpenSettings, () => _ = SetPausedAsync(!_store.Current.Paused), TogglePets, SetThemeMode, Quit);
         _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, IsDark, _library);
         _wallpapers.StatusChanged += OnStatusChanged;
         await _wallpapers.StartAsync();
@@ -63,6 +64,9 @@ public sealed class HanamiHost
             () => _wallpapers.Power, () => _wallpapers.SessionLocked);
         _screensaver.Changed += OnScreensaverChanged;
         _screensaver.Start();
+        _pets = new PetManager(_petLibrary, () => _store.Current, () => ModeResolver.Resolve(_store.Current, _wallpapers.Power, default, _wallpapers.SessionLocked).Mode, () => OpenSettingsTab("pets"));
+        _pets.Changed += OnStatusChanged;
+        _pets.Sync();
         OnStatusChanged();
 
         SystemEvents.DisplaySettingsChanged += (_, _) => _ui.BeginInvoke(ScheduleRebuild);
@@ -82,6 +86,12 @@ public sealed class HanamiHost
         OnStatusChanged();
     }
 
+    private void TogglePets()
+    {
+        _pets.Hidden = !_pets.Hidden;
+        OnStatusChanged();
+    }
+
     private void SetThemeMode(string mode)
     {
         _store.Patch(new JsonObject { ["theme"] = new JsonObject { ["mode"] = mode } });
@@ -90,15 +100,18 @@ public sealed class HanamiHost
 
     // ---- lifecycle -------------------------------------------------------------------------
 
-    public void OpenSettings()
+    public void OpenSettings() => OpenSettingsTab(null);
+
+    public void OpenSettingsTab(string? tab)
     {
         if (_settingsWindow is { } w)
         {
             if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
             w.Activate();
+            if (tab is not null) w.PostEvent("showTab", tab);
             return;
         }
-        _settingsWindow = new SettingsWindow(_env, _paths, DispatchAsync);
+        _settingsWindow = new SettingsWindow(_env, _paths, DispatchAsync, tab);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
         _settingsWindow.Activate();
@@ -110,6 +123,7 @@ public sealed class HanamiHost
         _quitting = true;
         Log.Info("Quitting");
         _settingsWindow?.Close();
+        _pets?.Dispose();
         _theme?.Dispose();
         _screensaver?.Dispose();
         _wallpapers?.Dispose();
@@ -123,6 +137,7 @@ public sealed class HanamiHost
         {
             _displayDebounce!.Stop();
             Log.Info("Display configuration changed");
+            _pets.OnDisplayChanged();
             await _wallpapers.RebuildAsync(force: true);
             BroadcastState();
         }, _ui);
@@ -140,6 +155,7 @@ public sealed class HanamiHost
         };
         if (locked == _wallpapers.SessionLocked) return;
         _wallpapers.SessionLocked = locked;
+        _pets.SessionLocked = locked;
         if (locked) _screensaver.End("Windows locked");
         await _wallpapers.ApplyModesAsync();
     }
@@ -162,6 +178,7 @@ public sealed class HanamiHost
         if (_wallpapers.ScreensaverShowing != _screensaver.Showing || _wallpapers.IdleFrozen != _screensaver.IdleFrozen)
         {
             _wallpapers.ScreensaverShowing = _screensaver.Showing;
+            _pets.ScreensaverShowing = _screensaver.Showing;
             _wallpapers.IdleFrozen = _screensaver.IdleFrozen;
             await _wallpapers.ApplyModesAsync();
         }
@@ -172,6 +189,7 @@ public sealed class HanamiHost
     {
         var (_, reason) = SummaryMode();
         _tray.Update(_store.Current.Paused, reason);
+        _tray.UpdatePets(_pets?.HasPets ?? false, _pets?.Hidden ?? false);
         _tray.UpdateTheme(_store.Current.Theme.Split, _store.Current.Theme.Mode);
         BroadcastState();
     }
@@ -367,6 +385,7 @@ public sealed class HanamiHost
 
     private async Task AfterSettingsChangedAsync()
     {
+        _pets.Sync();
         _wallpapers.PushConfigAll();
         _screensaver.PushConfigAll();
         await _wallpapers.ApplyModesAsync();

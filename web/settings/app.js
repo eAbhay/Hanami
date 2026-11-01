@@ -282,6 +282,7 @@ async function boot() {
     return;
   }
   on("stateChanged", (s) => s && applyState(s));
+  on("showTab", (id) => id && show(id));
 
   for (const t of TABS) {
     const tab = t.create(ctx);

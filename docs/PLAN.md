@@ -267,10 +267,10 @@ Notes:
 World = each monitor's **work area** only in this phase (floor = top of the taskbar, walls = work
 area sides, ceiling = work area top).
 
-- [ ] 4.1 `World.cs`: `Surface { Kind: Floor | Wall | Ceiling, From, To, At, Side, OwnerHwnd? }` in
+- [x] 4.1 `World.cs`: `Surface { Kind: Floor | Wall | Ceiling, From, To, At, Side, OwnerHwnd? }` in
       physical px, built from `Monitors.Enumerate()` work areas. Queries: floor under a point,
       first floor crossed by a movement segment (for falling), nearest wall in a direction.
-- [ ] 4.2 `PetBrain.cs`: states Stand, Walk, Run, Sit, Lie, Sleep, Fall, Land, Dragged, Thrown,
+- [x] 4.2 `PetBrain.cs`: states Stand, Walk, Run, Sit, Lie, Sleep, Fall, Land, Dragged, Thrown,
       React. Fixed step at 25 Hz (like Shimeji, so frame durations are exact); the window draws the
       latest state. Gravity + terminal velocity for Fall/Thrown; Thrown keeps the release velocity,
       bounces off walls with damping, lands on a floor. Idle choices weighted by `activity`
@@ -279,26 +279,33 @@ area sides, ceiling = work area top).
       Tests: falls and lands on the floor, stays inside the work area, thrown at a wall bounces,
       dragged follows the input exactly, a long run (10 simulated minutes, many seeds) never leaves
       the screen or produces NaN.
-- [ ] 4.3 `PetWindow.cs`: WPF window as above; frames loaded once per pack as frozen
+- [x] 4.3 `PetWindow.cs`: WPF window as above; frames loaded once per pack as frozen
       `BitmapSource`s (shared by every pet using that pack); drawn at `scale × monitor DPI scale`
       (frames are authored for 100%); flipped horizontally when facing right (Shimeji frames face
       left). Position = pet position minus the frame's anchor. One `SetWindowPos`
       (`SWP_NOACTIVATE | SWP_NOZORDER`) per change, nothing when nothing changed.
-- [ ] 4.4 Mouse: left-press on the pet → Dragged (the cursor holds the frame's anchor point, the
+- [x] 4.4 Mouse: left-press on the pet → Dragged (the cursor holds the frame's anchor point, the
       swing frame follows cursor velocity); release → Thrown with the last ~80 ms of cursor velocity.
       A click without moving (< 4 px) → React. Right-click → small menu: Sit · Sleep · Hide pets ·
       Pet settings. The pet window must never take focus (typing in the app underneath keeps
       working while you drag).
-- [ ] 4.5 `PetManager.cs`: a window per settings item; each pet spawns falling from the top at a
+- [x] 4.5 `PetManager.cs`: a window per settings item; each pet spawns falling from the top at a
       random spot on the primary monitor; one `DispatcherTimer` for all pets, stopped when no pet is
       visible. Tray menu: "Show pets / Hide pets" (this session only, not saved). Settings changes
       (add/remove/scale/enabled) apply without restarting the other pets.
-- [ ] 4.6 Check on the real screen (`capture-desktop.ps1`; synthetic drag via `input.ps1` if it can,
+- [x] 4.6 Check on the real screen (`capture-desktop.ps1`; synthetic drag via `input.ps1` if it can,
       else ask the user to try): pets fall and land on the taskbar, walk, sit; drag and throw work;
       clicks on transparent pixels next to a pet reach the app below. Perf with 3 pets: well under
       1% CPU for the pets' part, no memory growth over 10 min. Commit.
 
 Notes:
+- Done 2026-11-01. The simulation (World, PetBrain) already includes windows, climbing and ceilings, which phases 5 and 7 build
+  the host side and settings for; they are unit-tested in PetBrainTests / WorldTests.
+- 4.6: on the real screen two test pets (generated blob frames, in the dev root only) fall, land on the taskbar and walk; ~0.5 % of
+  one core for the whole Hanami process with 2 pets, 178 MB. Drag/throw/click-through still need the user's hands.
+- Pets use the power rules *without* the maximized/fullscreen rules (they live on top of windows); a fullscreen app on their
+  monitor hides them. The pet timer runs at 30 ms and catches up to 4 ticks.
+- Screen-capture tip: GDI needs CAPTUREBLT to see layered windows (the pets), see tools/dev if a script is added.
 
 ## Phase 5 — Windows as terrain: stand, climb, get carried
 

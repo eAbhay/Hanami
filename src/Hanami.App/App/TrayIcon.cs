@@ -8,10 +8,11 @@ public sealed class TrayIcon : IDisposable
     private readonly WinForms.NotifyIcon _icon;
     private readonly WinForms.ToolStripMenuItem _pause;
     private readonly WinForms.ToolStripMenuItem _status;
+    private readonly WinForms.ToolStripMenuItem _petsItem;
     private readonly WinForms.ToolStripMenuItem _theme;
     private readonly WinForms.ToolStripSeparator _themeSep = new();
 
-    public TrayIcon(Action openSettings, Action togglePause, Action<string> setThemeMode, Action quit)
+    public TrayIcon(Action openSettings, Action togglePause, Action togglePets, Action<string> setThemeMode, Action quit)
     {
         using var stream = typeof(TrayIcon).Assembly.GetManifestResourceStream("hanami.ico")!;
         _status = new WinForms.ToolStripMenuItem("Running") { Enabled = false };
@@ -21,6 +22,8 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(_status);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add(_pause);
+        _petsItem = new WinForms.ToolStripMenuItem("Hide pets", null, (_, _) => togglePets()) { Visible = false };
+        menu.Items.Add(_petsItem);
         _theme = new WinForms.ToolStripMenuItem("Theme") { Visible = false };
         foreach (var (mode, label) in new[] { ("system", "Follow Windows"), ("light", "Light"), ("dark", "Dark") })
             _theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(label, null, (_, _) => setThemeMode(mode)) { Tag = mode });
@@ -37,6 +40,13 @@ public sealed class TrayIcon : IDisposable
             Visible = true,
         };
         _icon.MouseClick += (_, e) => { if (e.Button == WinForms.MouseButtons.Left) openSettings(); };
+    }
+
+    /// <summary>"Hide pets / Show pets" (this session only) exists while any pet is set up.</summary>
+    public void UpdatePets(bool any, bool hidden)
+    {
+        _petsItem.Visible = any;
+        _petsItem.Text = hidden ? "Show pets" : "Hide pets";
     }
 
     /// <summary>The Theme submenu exists only while light/dark wallpapers are on.</summary>

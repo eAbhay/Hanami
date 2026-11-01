@@ -7,6 +7,8 @@ public sealed record MonitorInfo(string Key, string Name, bool IsPrimary, int Wi
 {
     internal IntPtr Handle { get; init; }
     internal Win32.RECT Bounds { get; init; }
+    /// <summary>The monitor without the taskbar (and other docked bars), physical pixels.</summary>
+    internal Win32.RECT WorkArea { get; init; }
 }
 
 public static class Monitors
@@ -26,6 +28,7 @@ public static class Monitors
             {
                 Handle = hMon,
                 Bounds = mi.rcMonitor,
+                WorkArea = mi.rcWork,
             });
             return true;
         }, IntPtr.Zero);

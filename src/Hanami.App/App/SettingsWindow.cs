@@ -14,7 +14,7 @@ public sealed class SettingsWindow : Window
     private readonly WebView2 _web = new();
     private readonly Func<string, JsonNode?, Task<JsonNode?>> _dispatch;
 
-    public SettingsWindow(CoreWebView2Environment env, AppPaths paths, Func<string, JsonNode?, Task<JsonNode?>> dispatch)
+    public SettingsWindow(CoreWebView2Environment env, AppPaths paths, Func<string, JsonNode?, Task<JsonNode?>> dispatch, string? tab = null)
     {
         _dispatch = dispatch;
         Title = "Hanami";
@@ -34,7 +34,7 @@ public sealed class SettingsWindow : Window
             await _web.EnsureCoreWebView2Async(env);
             WallpaperView.ConfigureCore(_web.CoreWebView2, paths);
             _web.CoreWebView2.WebMessageReceived += OnMessage;
-            _web.CoreWebView2.Navigate($"{WallpaperView.AppOrigin}/settings/index.html");
+            _web.CoreWebView2.Navigate($"{WallpaperView.AppOrigin}/settings/index.html{(tab is null ? "" : "#" + tab)}");
         };
         Closed += (_, _) => _web.Dispose();
     }

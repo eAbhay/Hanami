@@ -21,7 +21,7 @@ public static class PowerProbe
 /// </summary>
 public static class CoverageProbe
 {
-    private static readonly HashSet<string> IgnoredClasses =
+    internal static readonly HashSet<string> IgnoredClasses =
     [
         "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "NotifyIconOverflowWindow",
         "Windows.UI.Core.CoreWindow", "XamlExplorerHostIslandWindow", "TopLevelWindowForOverflowXamlIsland",
