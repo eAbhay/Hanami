@@ -25,6 +25,7 @@ export const PRESETS = Object.freeze([
   Object.freeze({ id: "fireflies", name: "Fireflies", description: "Glowing fireflies wandering through the dusk." }),
   Object.freeze({ id: "rain", name: "Rain", description: "Light rain with tiny splashes at the bottom." }),
   Object.freeze({ id: "sparkles", name: "Sparkles", description: "Twinkling four-point stars drifting slowly." }),
+  Object.freeze({ id: "embers", name: "Flame embers", description: "Glowing embers and sparks rising from a fire." }),
 ]);
 
 export const DEFAULT_EFFECT = Object.freeze({
@@ -38,6 +39,20 @@ export const DEFAULT_EFFECT = Object.freeze({
   interactionStrength: 1,
   interactionRadius: 160,
   clickBurst: true,
+});
+
+// Each preset's own starting point. The user's per-effect overrides (Settings.effects) are applied
+// on top of these, so this table is the single place that knows the defaults.
+const presetDefault = (preset, over) => Object.freeze({ ...DEFAULT_EFFECT, preset, ...over });
+export const PRESET_DEFAULTS = Object.freeze({
+  none: presetDefault("none"),
+  sakura: presetDefault("sakura"),
+  snow: presetDefault("snow"),
+  leaves: presetDefault("leaves"),
+  fireflies: presetDefault("fireflies", { density: 0.8, interaction: "attract" }),
+  rain: presetDefault("rain", { interaction: "wind" }),
+  sparkles: presetDefault("sparkles"),
+  embers: presetDefault("embers", { interaction: "wind" }),
 });
 
 const PRESET_IDS = new Set(PRESETS.map((p) => p.id));
@@ -369,6 +384,34 @@ function buildRain() {
   return { streak: { c: streak, k: 1 } };
 }
 
+// Flame embers: four glow sprites from white-yellow down to deep red (a particle crossfades along
+// them as it cools) plus one spark streak.
+function buildEmbers() {
+  const glow = (core, mid, outer, edge) => radialSprite(64, [
+    [0, `rgba(${core},1)`],
+    [0.2, `rgba(${core},0.95)`],
+    [0.4, `rgba(${mid},0.62)`],
+    [0.7, `rgba(${outer},0.2)`],
+    [1, `rgba(${edge},0)`],
+  ]);
+  const tints = [
+    glow("255,250,225", "255,205,110", "255,150,50", "255,120,30"),
+    glow("255,226,140", "255,172,62", "255,120,36", "255,100,24"),
+    glow("255,160,56", "255,106,32", "230,70,22", "200,50,14"),
+    glow("215,66,26", "170,36,14", "120,22,10", "90,14,8"),
+  ];
+  const streak = makeCanvas(8, 64);
+  const x = streak.getContext("2d");
+  const g = x.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, "rgba(255,120,30,0)");
+  g.addColorStop(0.65, "rgba(255,170,60,0.55)");
+  g.addColorStop(0.92, "rgba(255,236,170,0.95)");
+  g.addColorStop(1, "rgba(255,252,235,1)");
+  x.fillStyle = g;
+  x.fillRect(2, 0, 4, 64);
+  return { tints: tints.map((c) => ({ c, k: 1 })), spark: { c: streak, k: 1 } };
+}
+
 function buildFx() {
   return {
     ring: radialSprite(128, [[0, "rgba(255,255,255,0)"], [0.7, "rgba(255,255,255,0)"], [0.83, "rgba(255,255,255,0.9)"], [0.9, "rgba(255,255,255,0.45)"], [1, "rgba(255,255,255,0)"]]),
@@ -384,6 +427,7 @@ const SPRITE_BUILDERS = {
   fireflies: buildFireflies,
   sparkles: buildSparkles,
   rain: buildRain,
+  embers: buildEmbers,
   fx: buildFx,
 };
 
@@ -720,13 +764,117 @@ const KINDS = {
   },
 };
 
+// Embers rise from the bottom third, sway, cool white-yellow → orange → deep red while shrinking
+// and fading, and flicker. A few are fast thin spark streaks. n3 = life fraction 0..1, n4 = life
+// in seconds, n2 = 1 for a spark; sparks and burst particles slow down as they rise.
+KINDS.embers = {
+  id: "embers", base: 110, blend: "lighter", response: 1, windPx: 90,
+  init(p, e, how) {
+    const z = Math.random();
+    p.z = z;
+    const spark = how === "burst" ? Math.random() < 0.6 : Math.random() < 0.08;
+    p.n2 = spark ? 1 : 0;
+    if (spark) {
+      p.size = rand(34, 60);
+      p.n4 = rand(0.7, 1.5);
+      p.vx = rand(-30, 30); p.vy = -rand(160, 300);
+      p.alpha = rand(0.75, 1);
+    } else {
+      p.size = rand(22, 42) * (0.7 + 0.6 * z);
+      p.n4 = how === "burst" ? rand(1.2, 2.6) : rand(2.6, 6);
+      p.vx = rand(-12, 12); p.vy = -rand(45, 120) * (0.6 + 0.6 * z);
+      p.alpha = rand(0.7, 1) * (0.55 + 0.45 * z);
+    }
+    p.phase = rand(0, TAU); p.phaseV = rand(5, 12);       // flicker
+    p.phase2 = rand(0, TAU); p.n1 = rand(10, 26);          // sway
+    p.n3 = how === "screen" ? Math.random() : 0;
+    if (how !== "burst") {
+      p.x = rand(0, e.w);
+      const y = e.h * rand(0.68, 1.03);
+      p.y = how === "screen" ? Math.max(-20, y + p.vy * p.n3 * p.n4 * 0.8) : y;
+    }
+    p.ex = 0; p.ey = 0;
+  },
+  step(p, dt, e) {
+    const sp = e.mSpeed, dts = dt * sp;
+    p.n3 += dts / p.n4;
+    if (p.n3 >= 1) {
+      if (p.burst) p.dead = true; else this.init(p, e, "respawn");
+      return;
+    }
+    p.phase += p.phaseV * dts;
+    p.phase2 += (0.8 + p.n1 * 0.02) * dts;
+    let vx, vy;
+    if (p.n2 === 1 || p.burst) {
+      const k = Math.exp(-dt * 1.1);
+      p.vx *= k;
+      p.vy = p.vy * k - 30 * dt;
+      vx = (p.vx + e.mWind * this.windPx * 0.5) * sp;
+      vy = p.vy * sp;
+    } else {
+      const sway = Math.sin(p.phase2) * p.n1 + Math.sin(p.phase2 * 2.3 + p.n1) * p.n1 * 0.5;
+      vx = (p.vx + sway + e.mWind * this.windPx * (0.4 + 0.6 * p.z)) * sp;
+      vy = p.vy * (1 - 0.45 * p.n3) * sp;
+    }
+    p.x += (vx + p.ex) * dt;
+    p.y += (vy + p.ey) * dt;
+    const m = p.size + 10;
+    if (p.burst) {
+      if (p.y < -m || p.x < -m || p.x > e.w + m || p.y > e.h + m) p.dead = true;
+      return;
+    }
+    if (p.x < -m) p.x += e.w + 2 * m;
+    else if (p.x > e.w + m) p.x -= e.w + 2 * m;
+    if (p.y < -m) this.init(p, e, "respawn");
+  },
+  draw(ctx, p, e, a) {
+    const t = p.n3, S = sprites("embers"), d = e.dpr;
+    const flick = 0.72 + 0.28 * Math.sin(p.phase) * Math.sin(p.phase * 1.7 + 1);
+    a *= Math.min(1, t * 7) * Math.pow(1 - t, 1.15) * flick;
+    if (a < 0.004) return;
+    if (p.n2 === 1) {
+      const vx = p.vx + p.ex, vy = p.vy + p.ey;
+      const n = Math.sqrt(vx * vx + vy * vy) || 1;
+      const c = vy / n, s = -vx / n;
+      const W = 3 * e.mSize * d, L = p.size * e.mSize * d;
+      ctx.globalAlpha = a;
+      ctx.setTransform(c * W, s * W, -s * L, c * L, p.x * d, p.y * d);
+      ctx.drawImage(S.spark.c, -0.5, -1, 1, 1);
+      return;
+    }
+    const sz = p.size * (1 - 0.55 * t) * e.mSize * d;
+    const pos = Math.pow(t, 0.85) * (S.tints.length - 1);
+    const i = Math.min(S.tints.length - 2, pos | 0), f = pos - i;
+    ctx.setTransform(sz, 0, 0, sz, p.x * d, p.y * d);
+    ctx.globalAlpha = a * (1 - f);
+    ctx.drawImage(S.tints[i].c, -0.5, -0.5, 1, 1);
+    ctx.globalAlpha = a * f;
+    ctx.drawImage(S.tints[i + 1].c, -0.5, -0.5, 1, 1);
+  },
+  burst(e, x, y) {
+    const n = Math.round(26 * Math.min(1.6, Math.max(0.7, Math.sqrt(e.cfg.density))));
+    for (let i = 0; i < n && e.parts.length < MAX_PARTICLES; i++) {
+      const p = e._alloc(this);
+      this.init(p, e, "burst");
+      p.x = x + rand(-6, 6);
+      p.y = y + rand(-4, 4);
+      const a = -Math.PI / 2 + rand(-0.75, 0.75), v = rand(160, 460);
+      p.vx = Math.cos(a) * v;
+      p.vy = Math.sin(a) * v;
+      p.burst = true;
+      p.fade = 1;
+      e.parts.push(p);
+    }
+  },
+};
+
 // ───────────────────────────── engine ─────────────────────────────
 
 export class EffectsEngine {
   constructor(canvas, config = DEFAULT_EFFECT) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    this.cfg = sanitize(config, DEFAULT_EFFECT);
+    this.cfg = sanitize(config, PRESET_DEFAULTS[config?.preset] || DEFAULT_EFFECT);
     this.kind = KINDS[this.cfg.preset] || null;
     this.parts = [];
     this.free = [];
@@ -769,9 +917,13 @@ export class EffectsEngine {
     return { ...this.cfg };
   }
 
+  // Same preset: merge the given keys over the current config. A different preset: start from
+  // that preset's defaults plus the given keys, so one effect's tuning never leaks into another.
   setConfig(partialConfig) {
     const prev = this.cfg;
-    this.cfg = sanitize(partialConfig, prev);
+    const next = partialConfig && partialConfig.preset;
+    const switching = PRESET_IDS.has(next) && next !== prev.preset;
+    this.cfg = sanitize(partialConfig, switching ? PRESET_DEFAULTS[next] : prev);
     if (this.cfg.preset !== prev.preset) {
       this.kind = KINDS[this.cfg.preset] || null;
       for (const p of this.parts) {

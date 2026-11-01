@@ -6,6 +6,8 @@ public sealed class ScreensaverSettings
     public int IdleMinutes { get; set; } = 2;
     /// <summary>null = each monitor shows its own desktop wallpaper and effect.</summary>
     public string? WallpaperId { get; set; }
+    /// <summary>null = same effect as each monitor's desktop.</summary>
+    public string? EffectPreset { get; set; }
     public bool RequireSignIn { get; set; }
     /// <summary>0 = never stop on its own.</summary>
     public double StopAfterHours { get; set; }

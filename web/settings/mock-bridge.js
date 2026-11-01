@@ -8,11 +8,6 @@
 //   hanamiMock.setWindowsTimers(displayOffMin | null, sleepMin | null)
 //   hanamiMock.state   (live state object)
 
-const DEFAULT_EFFECT = {
-  preset: "sakura", density: 1, speed: 1, size: 1, opacity: 1, wind: 0,
-  interaction: "repel", interactionStrength: 1, interactionRadius: 160, clickBurst: true,
-};
-
 const MON1 = "\\\\.\\DISPLAY1";
 const MON2 = "\\\\.\\DISPLAY2";
 const LIB = "D:\\Apps\\Hanami\\Library";
@@ -145,13 +140,14 @@ function initialState() {
     libraryDir: LIB,
     settings: {
       sameOnAllMonitors: true,
-      assignments: { "*": { wallpaperId: "builtin:twilight", effect: clone(DEFAULT_EFFECT) } },
+      assignments: { "*": { wallpaperId: "builtin:twilight", effectPreset: "sakura" } },
+      effects: {},   // per-effect overrides, e.g. { snow: { density: 2 } }
       power: {
         onAC: "full", onBattery: "paused", lowBattery: "paused", lowBatteryThreshold: 20,
         energySaver: "reduced", whenMaximized: "paused", whenFullscreen: "paused",
       },
       performance: { fpsCap: 60, batteryFpsCap: 30 },
-      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, stopAfterHours: 0 },
+      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, effectPreset: null, requireSignIn: false, stopAfterHours: 0 },
       startWithWindows: true,
       paused: false,
     },
@@ -248,14 +244,23 @@ export function createMockHost(post) {
       return snapshot();
     },
 
-    setAssignment: ({ monitorKey, wallpaperId, effect } = {}) => {
+    setAssignment: ({ monitorKey, wallpaperId, effectPreset } = {}) => {
       if (monitorKey !== "*" && !state.monitors.some((m) => m.key === monitorKey)) throw new Error(`Unknown monitor ${monitorKey}`);
       if (wallpaperId !== undefined && wallpaperId !== null && !findWp(wallpaperId)) throw new Error("That wallpaper no longer exists");
       const a = state.settings.assignments;
-      const cur = a[monitorKey] ?? clone(a["*"]) ?? { wallpaperId: null, effect: clone(DEFAULT_EFFECT) };
+      const cur = a[monitorKey] ?? clone(a["*"]) ?? { wallpaperId: null, effectPreset: "sakura" };
       if (wallpaperId !== undefined) cur.wallpaperId = wallpaperId;
-      if (effect) cur.effect = { ...cur.effect, ...effect };
+      if (effectPreset) cur.effectPreset = effectPreset;
       a[monitorKey] = cur;
+      emitState();
+      return snapshot();
+    },
+
+    setEffectTuning: ({ preset, tuning } = {}) => {
+      if (!preset) throw new Error("Missing preset");
+      const fx = state.settings.effects;
+      if (tuning === null) delete fx[preset];
+      else fx[preset] = { ...(fx[preset] ?? {}), ...tuning };
       emitState();
       return snapshot();
     },

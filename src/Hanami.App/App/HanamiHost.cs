@@ -231,7 +231,7 @@ public sealed class HanamiHost
                 var key = (string?)p?["monitorKey"] ?? "*";
                 var entry = new JsonObject();
                 if (p?["wallpaperId"] is { } wid) entry["wallpaperId"] = wid.DeepClone();
-                if (p?["effect"] is JsonObject effect) entry["effect"] = effect.DeepClone();
+                if (p?["effectPreset"] is { } preset) entry["effectPreset"] = preset.DeepClone();
                 if (key != "*" && !_store.Current.Assignments.ContainsKey(key))
                 {
                     // First override for this monitor starts from the shared assignment.
@@ -243,6 +243,11 @@ public sealed class HanamiHost
                 await AfterSettingsChangedAsync();
                 return BuildState();
             }
+
+            case "setEffectTuning":
+                _store.SetEffectTuning(Required(p, "preset"), p?["tuning"] as JsonObject);
+                await AfterSettingsChangedAsync();
+                return BuildState();
 
             case "importMedia":
                 return await ImportMediaAsync();

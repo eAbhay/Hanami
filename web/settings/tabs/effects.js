@@ -12,6 +12,7 @@ const GLYPH = {
   leaves: '<path fill="currentColor" d="M5 19C5 11 10 5.5 19.5 4.5 19 14 13.5 19 5 19Z"/><path d="M5 19 13 11" stroke="#0003" stroke-width="1.2" stroke-linecap="round"/>',
   fireflies: '<circle cx="12" cy="12" r="6" fill="currentColor" opacity=".25"/><circle cx="12" cy="12" r="3" fill="currentColor"/>',
   rain: '<g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M9 4 6.5 11M15 6l-2.5 7M11 13l-2.5 7M17.5 14 15 21"/></g>',
+  embers: '<circle cx="12" cy="13" r="6.5" fill="currentColor" opacity=".25"/><path fill="currentColor" d="M12 4c.5 3.2 4.5 5 4.5 9a4.5 4.5 0 0 1-9 0c0-2 1-3 2-4 .2 1.2.7 1.8 1.4 2C10.5 8 11.4 6 12 4Z"/>',
   sparkles: '<path fill="currentColor" d="M12 2.5c.6 4.6 2.9 6.9 7.5 7.5v.1c-4.6.6-6.9 2.9-7.5 7.5h-.1c-.6-4.6-2.9-6.9-7.4-7.5v-.1c4.5-.6 6.8-2.9 7.4-7.5Z"/>',
 };
 const SPOTS = [[18, 26, 1, -12], [58, 18, 0.7, 20], [76, 54, 0.85, 40], [30, 66, 0.6, 70], [52, 78, 0.5, 5]];
@@ -52,10 +53,13 @@ export function createEffectsTab(ctx) {
   function change(partial, immediate = false) {
     const key = ctx.scopeKey();
     if (key !== pendingKey && Object.keys(pending).length) send.flush();
+    const switching = partial.preset && partial.preset !== current.preset;
+    if (switching) { send.flush(); pending = {}; }   // earlier tweaks belong to the old effect
     pendingKey = key;
     Object.assign(pending, partial);
-    current = { ...current, ...partial };
-    engine?.setConfig(partial);
+    // A new effect brings its own settings; the engine does the same when its preset changes.
+    current = switching ? { ...ctx.effectFor(partial.preset), ...partial } : { ...current, ...partial };
+    engine?.setConfig(switching ? { ...current } : partial);
     syncControls(current);
     send();
     if (immediate) send.flush();
@@ -76,8 +80,15 @@ export function createEffectsTab(ctx) {
     "repel", (v) => change({ interaction: v }, true), { ariaLabel: "Cursor interaction" });
   const interactionHint = h("p.field-hint");
   const burst = toggle(true, (v) => change({ clickBurst: v }, true), "Click burst");
-  const resetBtn = h("button.btn.subtle.small", { type: "button", title: "Reset sliders and interaction to the defaults (keeps the preset)",
-    onclick: () => change({ ...(mod?.DEFAULT_EFFECT ?? FALLBACK_EFFECT), preset: current.preset }, true) }, svg("reset"), h("span", "Reset"));
+  const resetBtn = h("button.btn.subtle.small", { type: "button", title: "Reset this effect's settings to its defaults",
+    onclick: () => {
+      const preset = current.preset;
+      pending = {};
+      current = { ...FALLBACK_EFFECT, ...(mod?.PRESET_DEFAULTS?.[preset] ?? {}), preset };
+      engine?.setConfig({ ...current });
+      syncControls(current);
+      ctx.mutate("setEffectTuning", { preset, tuning: null }).catch(() => {});
+    } }, svg("reset"), h("span", "Reset"));
 
   // ------------------------------------------------------------------ preview
   const canvas = h("canvas.preview-canvas");

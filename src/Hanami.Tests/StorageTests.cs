@@ -27,13 +27,12 @@ public sealed class StorageTests : IDisposable
     {
         var path = Path.Combine(_dir, "config", "settings.json");
         var store = new SettingsStore(path);
-        store.Patch(JsonNode.Parse("""{"power":{"onBattery":"full"},"assignments":{"*":{"effect":{"preset":"snow"}}}}""")!.AsObject());
+        store.Patch(JsonNode.Parse("""{"power":{"onBattery":"full"},"assignments":{"*":{"effectPreset":"snow"}}}""")!.AsObject());
 
         var reloaded = new SettingsStore(path).Current;
         Assert.Equal(Mode.Full, reloaded.Power.OnBattery);
         Assert.Equal(Mode.Paused, reloaded.Power.LowBattery);              // untouched sibling survives
-        Assert.Equal("snow", (string?)reloaded.Assignments["*"].Effect["preset"]);
-        Assert.Equal(160, (int?)reloaded.Assignments["*"].Effect["interactionRadius"]);   // defaults kept
+        Assert.Equal("snow", reloaded.Assignments["*"].EffectPreset);
         Assert.Equal("builtin:twilight", reloaded.Assignments["*"].WallpaperId);
     }
 
@@ -105,6 +104,8 @@ public sealed class StorageTests : IDisposable
         var settings = new AppSettings();
         settings.Assignments["*"].WallpaperId = keep.Id;
         settings.Power.OnBattery = Mode.Reduced;
+        settings.Effects["snow"] = new JsonObject { ["density"] = 2.0 };
+        settings.Screensaver.EffectPreset = "embers";
 
         var pack = Path.Combine(_dir, "out" + PackService.Extension);
         await PackService.ExportAsync(source, settings, [keep.Id, "settings"], pack, "test", null);
@@ -119,6 +120,8 @@ public sealed class StorageTests : IDisposable
         Assert.Equal(1920, target.List().Single(w => w.Id == keep.Id).Width);
         Assert.Equal(Mode.Reduced, imported!.Power.OnBattery);
         Assert.Equal(keep.Id, imported.Assignments["*"].WallpaperId);
+        Assert.Equal(2.0, (double?)imported.Effects["snow"]["density"]);
+        Assert.Equal("embers", imported.Screensaver.EffectPreset);
 
         // Importing again keeps what is there instead of duplicating it.
         var (again, _) = await PackService.ImportAsync(target, pack, null);

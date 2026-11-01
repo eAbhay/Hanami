@@ -64,8 +64,12 @@ type Mode = "full" | "reduced" | "paused";
 // reduced — video (and built-in scene) frozen on its current frame, effects at min(fpsCap, 30)
 // paused  — everything frozen, no animation frames requested at all
 
+type PresetId = "none" | "sakura" | "snow" | "leaves" | "fireflies" | "rain" | "sparkles" | "embers";
+
+// Defaults below are the generic ones; each preset has its own (PRESET_DEFAULTS in
+// web/shared/effects.js — the only place defaults live; the host has none).
 type EffectConfig = {
-  preset: "none" | "sakura" | "snow" | "leaves" | "fireflies" | "rain" | "sparkles";
+  preset: PresetId;
   density: number;            // 0.1 – 3, default 1   (multiplier on the preset's base count)
   speed: number;              // 0.2 – 3, default 1
   size: number;               // 0.5 – 2, default 1
@@ -76,6 +80,7 @@ type EffectConfig = {
   interactionRadius: number;   // CSS px, 40 – 400, default 160
   clickBurst: boolean;         // default true
 };
+type EffectTuning = Omit<EffectConfig, "preset">;
 
 type WallpaperRef = {           // what the host sends to a wallpaper page
   id: string;
@@ -105,7 +110,7 @@ Messages arrive via `window.chrome.webview.addEventListener("message", e => e.da
 
 | Message | Meaning |
 |---|---|
-| `{type:"config", wallpaper: WallpaperRef \| null, effect: EffectConfig, fpsCap: number, mode: Mode}` | Full (re)configuration. Sent after `ready` and whenever anything changes. `wallpaper: null` → plain dark background. |
+| `{type:"config", wallpaper: WallpaperRef \| null, effect: {preset} & Partial<EffectTuning>, fpsCap: number, mode: Mode}` | Full (re)configuration. Sent after `ready` and whenever anything changes. `wallpaper: null` → plain dark background. `effect` is the preset plus only the user's overrides for it; the page fills every missing key from `PRESET_DEFAULTS[preset]`. |
 | `{type:"mode", mode: Mode}` | Mode change only. |
 | `{type:"pointer", x, y, inside}` | Cursor in CSS px relative to this monitor's top-left. `inside:false` when the cursor is on another monitor (effects should relax back). Sent at up to 60 Hz, only on change. |
 | `{type:"click", x, y, button}` | A click that landed on the desktop surface of this monitor. `button`: `"left"` \| `"right"`. The page only bursts on left clicks (right opens the desktop menu). |
@@ -132,7 +137,8 @@ Events: host posts `{event: "<name>", data}`.
 |---|---|---|
 | `getState` | – | `State` |
 | `updateSettings` | `Partial<Settings>` (deep-merged) | `State` |
-| `setAssignment` | `{monitorKey: string \| "*", wallpaperId?: string, effect?: Partial<EffectConfig>}` | `State` |
+| `setAssignment` | `{monitorKey: string \| "*", wallpaperId?: string, effectPreset?: PresetId}` | `State` |
+| `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null}` (merged into that effect's overrides; `null` = reset it to its defaults) | `State` |
 | `importMedia` | – (host opens a file dialog, multi-select, copies files into the library) | `{imported: WallpaperInfo[]}` or `{cancelled: true}` |
 | `renameWallpaper` | `{id, name}` | `State` |
 | `deleteWallpaper` | `{id}` (never builtin) | `State` |
@@ -153,8 +159,12 @@ type ExportItem = { id: string; kind: "wallpaper" | "settings"; name: string; si
 
 type Settings = {
   sameOnAllMonitors: boolean;                       // default true
-  assignments: Record<string, { wallpaperId: string | null; effect: EffectConfig }>;
+  assignments: Record<string, { wallpaperId: string | null; effectPreset: PresetId }>;
   // key "*" = default for every monitor; other keys = monitorKey overrides (used when !sameOnAllMonitors)
+  effects: Partial<Record<PresetId, Partial<EffectTuning>>>;
+  // The user's tuning overrides per effect, shared by every place that shows that effect (any
+  // monitor, desktop and screensaver). Missing keys fall back to PRESET_DEFAULTS. Files from before
+  // this shape (assignments[key].effect = a whole EffectConfig) are migrated on load.
   power: {
     onAC: Mode;                 // default "full"
     onBattery: Mode;            // default "paused"
@@ -168,7 +178,8 @@ type Settings = {
   screensaver: {
     enabled: boolean;           // default true
     idleMinutes: number;        // 1 – 120, default 2
-    wallpaperId: string | null; // null = same wallpaper + effect as each monitor's desktop
+    wallpaperId: string | null; // null = same wallpaper as each monitor's desktop
+    effectPreset: PresetId | null; // null = same effect as each monitor's desktop; its tuning is effects[preset]
     requireSignIn: boolean;     // default false — lock Windows when the screensaver ends
     stopAfterHours: number;     // 0 = never (default); after this, hide it and let Windows' timers take over
   };
@@ -233,10 +244,12 @@ The settings UI must run standalone in a browser (`web/settings/index.html`) usi
 
 ```js
 export const PRESETS;          // [{id, name, description}] — "none" included
-export const DEFAULT_EFFECT;   // EffectConfig with the defaults above, preset "sakura"
+export const DEFAULT_EFFECT;   // EffectConfig with the generic defaults above, preset "sakura"
+export const PRESET_DEFAULTS;  // Record<PresetId, EffectConfig> — each preset's own defaults
 export class EffectsEngine {
-  constructor(canvas, config = DEFAULT_EFFECT)
-  setConfig(partialConfig)     // merge; re-seed particles only if preset/density changed
+  constructor(canvas, config = DEFAULT_EFFECT)   // gaps filled from PRESET_DEFAULTS[config.preset]
+  setConfig(partialConfig)     // same preset: merge over the current config. New preset: start from
+                               // that preset's defaults + the given keys (tuning never carries over)
   setPointer(x, y, inside = true)   // CSS px relative to the canvas
   click(x, y)                  // burst, if config.clickBurst
   setFpsCap(fps)

@@ -79,7 +79,7 @@ Notes:
 
 Contract first (`docs/CONTRACTS.md`), then code:
 
-- [ ] 2.1 Contract changes:
+- [x] 2.1 Contract changes:
   - `type EffectTuning = Omit<EffectConfig, "preset">`.
   - `Settings.effects: Record<PresetId, Partial<EffectTuning>>` — the user's overrides per effect;
     missing keys fall back to that preset's defaults (`PRESET_DEFAULTS` in effects.js).
@@ -90,7 +90,7 @@ Contract first (`docs/CONTRACTS.md`), then code:
   - Bridge: `setAssignment({monitorKey, wallpaperId?, effectPreset?})`;
     new `setEffectTuning({preset, tuning: Partial<EffectTuning> | null})` → `State` (null = reset).
   - Presets list gains `"embers"`.
-- [ ] 2.2 `web/shared/effects.js`:
+- [x] 2.2 `web/shared/effects.js`:
   - Export `PRESET_DEFAULTS` (per preset, sensible: fireflies → interaction attract, lower density;
     rain → wind; sakura/snow/leaves → repel; embers → wind). Keep `DEFAULT_EFFECT` exported.
   - `setConfig`: on a **preset change**, start from the new preset's defaults merged with the given
@@ -103,7 +103,7 @@ Contract first (`docs/CONTRACTS.md`), then code:
     Keep the existing perf budget (see the engine's header comment).
   - Check in the browser dev page (`?dev`, TESTING.md §7): all presets, preset switching resets
     tuning, embers looks good over dark and bright scenes, no console errors.
-- [ ] 2.3 Host (`Core/Settings.cs` etc.):
+- [x] 2.3 Host (`Core/Settings.cs` etc.):
   - `Assignment { WallpaperId, EffectPreset = "sakura" }`; `AppSettings.Effects:
     Dictionary<string, JsonObject>`; `ScreensaverSettings.EffectPreset: string?`.
   - Remove `Effects.Default()` from C# — defaults live only in effects.js.
@@ -116,12 +116,21 @@ Contract first (`docs/CONTRACTS.md`), then code:
   - Bridge: update `setAssignment`, add `setEffectTuning`.
   - Tests: migration from an old-shape JSON fixture; compose; screensaver override null/non-null;
     tuning reset; pack round-trip keeps `effects`.
-- [ ] 2.4 Keep the current settings UI working enough not to crash (minimal adapt in
+- [x] 2.4 Keep the current settings UI working enough not to crash (minimal adapt in
       `web/settings/` + `mock-bridge.js` to the new shape); the real UI rework is phase 3.
-- [ ] 2.5 Run in dev mode: desktop shows its effect, preview screensaver shows a *different*
+- [x] 2.5 Run in dev mode: desktop shows its effect, preview screensaver shows a *different*
       effect when set via `cdp.mjs` + `updateSettings({screensaver:{effectPreset:"embers"}})`. Commit.
 
 Notes:
+- 2.4 adapt: `ctx.assignmentFor(key)` now returns `{wallpaperId, effectPreset, effect}` with `effect` composed
+  (fallback < `PRESET_DEFAULTS` < `settings.effects[preset]`); `ctx.effectFor(preset)` does the same for one
+  preset; `ctx.assign({effect})` splits into `setAssignment` (preset) + `setEffectTuning` (other keys). The
+  Effects tab's Reset now sends `setEffectTuning(null)`. Phase 3 can build on `effectFor`/`assign`.
+- The page applies `{...PRESET_DEFAULTS[preset], ...config.effect}`, so removing an override takes effect.
+- Embers tuned by eye on the dev page (sizes 22-42 px glows, sparks 34-60 px streaks); looks right on dark
+  scenes, not yet judged over a bright video. Verified live: migrated the dev `settings.json` shape in memory,
+  and a screensaver preview with `effectPreset:"embers"` drew orange particles (canvas average 254,185,94)
+  while the desktop stayed on sakura. Dev settings restored (`effectPreset` null).
 
 ## Phase 3 — Settings UI restructure and consistency pass
 

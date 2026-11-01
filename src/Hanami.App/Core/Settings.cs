@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Hanami.Core;
 
@@ -13,6 +14,12 @@ public sealed class AppSettings
     /// <summary>"*" is the default for every monitor; other keys are per-monitor overrides.</summary>
     public Dictionary<string, Assignment> Assignments { get; set; } = new() { ["*"] = new Assignment() };
 
+    /// <summary>
+    /// The user's tuning overrides per effect preset (keys of EffectConfig minus "preset"). Missing
+    /// keys fall back to that preset's defaults, which live only in web/shared/effects.js.
+    /// </summary>
+    public Dictionary<string, JsonObject> Effects { get; set; } = new();
+
     public PowerSettings Power { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
     public ScreensaverSettings Screensaver { get; set; } = new();
@@ -21,14 +28,35 @@ public sealed class AppSettings
 
     public Assignment AssignmentFor(string monitorKey) =>
         !SameOnAllMonitors && Assignments.TryGetValue(monitorKey, out var a) ? a : Assignments["*"];
+
+    /// <summary>The EffectConfig sent to a page: the preset plus the user's overrides for it (may be partial).</summary>
+    public JsonObject ComposeEffect(string preset)
+    {
+        var effect = new JsonObject { ["preset"] = preset };
+        if (Effects.TryGetValue(preset, out var tuning))
+            foreach (var (key, value) in tuning)
+                if (key != "preset") effect[key] = value?.DeepClone();
+        return effect;
+    }
+
+    /// <summary>The effect the desktop shows on a monitor.</summary>
+    public JsonObject DesktopEffectFor(string monitorKey) => ComposeEffect(AssignmentFor(monitorKey).EffectPreset);
+
+    /// <summary>The effect the screensaver shows on a monitor: its own preset, or the desktop's when unset.</summary>
+    public JsonObject ScreensaverEffectFor(string monitorKey) =>
+        ComposeEffect(Screensaver.EffectPreset ?? AssignmentFor(monitorKey).EffectPreset);
 }
 
 public sealed class Assignment
 {
     public string? WallpaperId { get; set; } = "builtin:twilight";
 
-    /// <summary>Passed through to the web side untouched; see EffectConfig in docs/CONTRACTS.md.</summary>
-    public JsonObject Effect { get; set; } = Effects.Default();
+    /// <summary>Which effect shows here; its settings come from <see cref="AppSettings.Effects"/>.</summary>
+    public string EffectPreset { get; set; } = EffectPresets.Default;
+
+    /// <summary>Older files stored the whole effect here. Read only to migrate, then cleared (never written back).</summary>
+    [JsonPropertyName("effect")]
+    public JsonObject? LegacyEffect { get; set; }
 }
 
 public sealed class PowerSettings
@@ -48,21 +76,14 @@ public sealed class PerformanceSettings
     public int BatteryFpsCap { get; set; } = 30;
 }
 
-public static class Effects
+public static class EffectPresets
 {
-    public static JsonObject Default() => new()
-    {
-        ["preset"] = "sakura",
-        ["density"] = 1.0,
-        ["speed"] = 1.0,
-        ["size"] = 1.0,
-        ["opacity"] = 1.0,
-        ["wind"] = 0.0,
-        ["interaction"] = "repel",
-        ["interactionStrength"] = 1.0,
-        ["interactionRadius"] = 160,
-        ["clickBurst"] = true,
-    };
+    public const string Default = "sakura";
+
+    /// <summary>Must match PRESETS in web/shared/effects.js.</summary>
+    public static readonly string[] All = ["none", "sakura", "snow", "leaves", "fireflies", "rain", "sparkles", "embers"];
+
+    public static bool IsValid(string? id) => id is not null && Array.IndexOf(All, id) >= 0;
 }
 
 /// <summary>Loads, patches and persists <see cref="AppSettings"/> as config/settings.json.</summary>
@@ -108,6 +129,21 @@ public sealed class SettingsStore
         Save();
     }
 
+    /// <summary>Merges <paramref name="tuning"/> into a preset's overrides; null resets the preset to its defaults.</summary>
+    public AppSettings SetEffectTuning(string preset, JsonObject? tuning)
+    {
+        if (!EffectPresets.IsValid(preset)) throw new ArgumentException($"Unknown effect '{preset}'");
+        if (tuning is null) Current.Effects.Remove(preset);
+        else
+        {
+            if (!Current.Effects.TryGetValue(preset, out var existing)) Current.Effects[preset] = existing = new JsonObject();
+            Json.DeepMerge(existing, tuning);
+        }
+        Current = Normalize(Current);
+        Save();
+        return Current;
+    }
+
     public void Save() => Json.WriteFileAtomic(_path, JsonSerializer.Serialize(Current, Json.FileOptions));
 
     /// <summary>Fills gaps left by older or hand-edited files so the rest of the app can trust the shape.</summary>
@@ -116,15 +152,35 @@ public sealed class SettingsStore
         s ??= new AppSettings();
         s.Assignments ??= new();
         if (!s.Assignments.ContainsKey("*")) s.Assignments["*"] = new Assignment();
+        s.Effects ??= new();
         foreach (var a in s.Assignments.Values)
         {
-            var effect = Effects.Default();
-            if (a.Effect is not null) Json.DeepMerge(effect, a.Effect);
-            a.Effect = effect;
+            if (a.LegacyEffect is { } legacy)
+            {
+                // Older files: keep the preset, and its tuning unless one is already set.
+                if (legacy["preset"] is JsonValue pv && pv.TryGetValue<string>(out var lp) && EffectPresets.IsValid(lp))
+                {
+                    a.EffectPreset = lp;
+                    if (!s.Effects.ContainsKey(lp))
+                    {
+                        var tuning = (JsonObject)legacy.DeepClone();
+                        tuning.Remove("preset");
+                        s.Effects[lp] = tuning;
+                    }
+                }
+                a.LegacyEffect = null;
+            }
+            if (!EffectPresets.IsValid(a.EffectPreset)) a.EffectPreset = EffectPresets.Default;
+        }
+        foreach (var key in s.Effects.Keys.ToList())
+        {
+            if (!EffectPresets.IsValid(key) || s.Effects[key] is null) { s.Effects.Remove(key); continue; }
+            s.Effects[key].Remove("preset");
         }
         s.Power ??= new();
         s.Performance ??= new();
         s.Screensaver ??= new();
+        if (!EffectPresets.IsValid(s.Screensaver.EffectPreset)) s.Screensaver.EffectPreset = null;
         s.Screensaver.IdleMinutes = Math.Clamp(s.Screensaver.IdleMinutes, 1, 120);
         s.Screensaver.StopAfterHours = Math.Clamp(s.Screensaver.StopAfterHours, 0, 48);
         s.Power.LowBatteryThreshold = Math.Clamp(s.Power.LowBatteryThreshold, 0, 100);

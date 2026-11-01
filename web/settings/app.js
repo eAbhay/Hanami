@@ -9,6 +9,7 @@ import { createScreensaverTab } from "./tabs/screensaver.js";
 import { createGeneralTab } from "./tabs/general.js";
 import { createTransferTab } from "./tabs/transfer.js";
 import { FALLBACK_EFFECT } from "./defaults.js";
+import { loadEffects } from "./effects-module.js";
 
 
 const TABS = [
@@ -22,6 +23,7 @@ const TABS = [
 
 let state = null;
 let selectedMonitor = null;   // monitorKey shown when !sameOnAllMonitors
+let presetDefaults = {};      // PRESET_DEFAULTS from the effects engine, once it has loaded
 const listeners = new Set();
 
 // ------------------------------------------------------------------ context shared with tabs
@@ -48,29 +50,40 @@ const ctx = {
     return selectedMonitor ?? "*";
   },
 
-  /** Effective {wallpaperId, effect} for a key (falls back to "*"). */
-  assignmentFor(key) {
-    const a = state?.settings.assignments ?? {};
-    const x = a[key] ?? a["*"] ?? { wallpaperId: null, effect: FALLBACK_EFFECT };
-    return { wallpaperId: x.wallpaperId ?? null, effect: { ...FALLBACK_EFFECT, ...(x.effect ?? {}) } };
+  /** Full EffectConfig for a preset: contract fallback < the preset's defaults < the user's overrides. */
+  effectFor(preset) {
+    return { ...FALLBACK_EFFECT, ...(presetDefaults[preset] ?? {}), ...(state?.settings.effects?.[preset] ?? {}), preset };
   },
 
-  /** setAssignment for the current scope. When creating a new per-monitor override we send
-   *  the full assignment (copied from "*"), so the result never depends on how the host
-   *  fills in missing fields. */
-  assign({ wallpaperId, effect }, key = ctx.scopeKey()) {
+  /** Effective {wallpaperId, effectPreset, effect} for a key (falls back to "*"). */
+  assignmentFor(key) {
+    const a = state?.settings.assignments ?? {};
+    const x = a[key] ?? a["*"] ?? { wallpaperId: null, effectPreset: FALLBACK_EFFECT.preset };
+    const effectPreset = x.effectPreset ?? FALLBACK_EFFECT.preset;
+    return { wallpaperId: x.wallpaperId ?? null, effectPreset, effect: ctx.effectFor(effectPreset) };
+  },
+
+  /** Edits for the current scope. `effect.preset` picks the effect for that key; any other effect
+   *  keys are tuning of the (new) preset, shared by every place that uses it. When creating a new
+   *  per-monitor override we send the full assignment (copied from "*"), so the result never
+   *  depends on how the host fills in missing fields. */
+  async assign({ wallpaperId, effect }, key = ctx.scopeKey()) {
+    const cur = ctx.assignmentFor(key);
+    const { preset, ...tuning } = effect ?? {};
     const params = { monitorKey: key };
     const isNewOverride = key !== "*" && !state.settings.assignments[key];
     if (isNewOverride) {
-      const cur = ctx.assignmentFor(key);
       const wid = wallpaperId ?? cur.wallpaperId;
       if (wid) params.wallpaperId = wid;
-      params.effect = { ...cur.effect, ...(effect ?? {}) };
+      params.effectPreset = preset ?? cur.effectPreset;
     } else {
       if (wallpaperId !== undefined) params.wallpaperId = wallpaperId;
-      if (effect) params.effect = effect;
+      if (preset) params.effectPreset = preset;
     }
-    return ctx.mutate("setAssignment", params);
+    let result;
+    if (Object.keys(params).length > 1) result = await ctx.mutate("setAssignment", params);
+    if (Object.keys(tuning).length) result = await ctx.mutate("setEffectTuning", { preset: preset ?? cur.effectPreset, tuning });
+    return result;
   },
 
   /** Scope switching: "*" = same on all monitors, otherwise a monitorKey. */
@@ -99,6 +112,9 @@ function applyState(s) {
   }
   notify();
 }
+
+// The effects engine holds each preset's defaults; refresh once it has loaded.
+loadEffects().then((m) => { presetDefaults = m.PRESET_DEFAULTS ?? {}; if (state) notify(); }).catch(() => {});
 
 function notify() {
   for (const fn of listeners) {

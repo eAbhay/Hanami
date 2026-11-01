@@ -131,7 +131,7 @@ public sealed class ScreensaverManager : IDisposable
                 var view = await WallpaperView.CreateScreensaverAsync(_env, m, _paths);
                 var desktop = s.AssignmentFor(m.Key);
                 var wallpaper = _library.Resolve(s.Screensaver.WallpaperId ?? desktop.WallpaperId);
-                view.SendConfig(wallpaper, desktop.Effect, fps);
+                view.SendConfig(wallpaper, s.ScreensaverEffectFor(m.Key), fps);
                 await view.SetModeAsync(new ResolvedMode(Mode.Full, "Screensaver", false));
                 view.MessageReceived += OnPageMessage;
                 _views.Add(view);

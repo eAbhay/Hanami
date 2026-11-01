@@ -5,7 +5,7 @@ system tray as a single self-contained `.exe`.
 
 - **Video, image or built-in animated scenes** play behind your desktop icons, one per monitor.
 - **Interactive effects** draw over the wallpaper: sakura petals, snow, autumn leaves, fireflies,
-  rain and sparkles. They react to the mouse (repel, attract, or a gust of wind) and burst when
+  rain, sparkles and flame embers. Each effect remembers its own settings. They react to the mouse (repel, attract, or a gust of wind) and burst when
   you click the desktop.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,

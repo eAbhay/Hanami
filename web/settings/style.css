@@ -657,6 +657,8 @@ dialog.modal.closing::backdrop { opacity: 0; transition: opacity 0.14s; }
 .art-fireflies { background: radial-gradient(circle at 70% 30%, #2d3b62, #121735 70%); color: #ffe98a; }
 .art-fireflies svg { filter: drop-shadow(0 0 4px #ffe98a); }
 .art-rain { background: linear-gradient(160deg, #5a6a8e, #34405e 80%); color: #cfe0ff; }
+.art-embers { background: radial-gradient(circle at 50% 100%, #7a2a12, #2a0f10 75%); color: #ffb04a; }
+.art-embers svg { filter: drop-shadow(0 0 3px rgba(255, 150, 50, 0.8)); }
 .art-sparkles { background: linear-gradient(160deg, #5b3e9a, #a35fb5 60%, #ef93b6); color: #fff6c8; }
 .art-sparkles svg { filter: drop-shadow(0 0 3px rgba(255, 246, 200, 0.8)); }
 

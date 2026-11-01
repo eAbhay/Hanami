@@ -128,7 +128,7 @@ public sealed class WallpaperManager : IDisposable
         var s = _settings();
         var a = s.AssignmentFor(view.Monitor.Key);
         var wallpaper = _library.Resolve(a.WallpaperId);
-        view.SendConfig(wallpaper, a.Effect, ModeResolver.FpsCap(s, Power));
+        view.SendConfig(wallpaper, s.DesktopEffectFor(view.Monitor.Key), ModeResolver.FpsCap(s, Power));
     }
 
     public async Task ApplyModesAsync(Dictionary<IntPtr, Coverage>? coverage = null)

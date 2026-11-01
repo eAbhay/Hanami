@@ -8,7 +8,7 @@
 // Standalone dev mode (no window.chrome.webview): real mouse events drive pointer/click, a
 // built-in config is applied, and a small dev panel (top-left) switches everything.
 
-import { EffectsEngine, DEFAULT_EFFECT, PRESETS } from "../shared/effects.js";
+import { EffectsEngine, DEFAULT_EFFECT, PRESET_DEFAULTS, PRESETS } from "../shared/effects.js";
 import { createScene, SCENES } from "./scenes.js";
 import { mountClock } from "./clock.js";
 
@@ -252,7 +252,9 @@ function handle(msg) {
     case "config": {
       const cap = Number(msg.fpsCap);
       if (Number.isFinite(cap) && cap > 0) fpsCap = Math.min(240, cap);
-      if (msg.effect && typeof msg.effect === "object") engine.setConfig(msg.effect);
+      // The host sends the preset plus the user's overrides only; defaults fill the gaps (this also
+      // makes a reset take effect).
+      if (msg.effect && typeof msg.effect === "object") engine.setConfig({ ...(PRESET_DEFAULTS[msg.effect.preset] ?? {}), ...msg.effect });
       if ("wallpaper" in msg) setWallpaper(msg.wallpaper);
       applyMode(MODES.includes(msg.mode) ? msg.mode : mode);
       break;
@@ -308,7 +310,7 @@ function initDev() {
     fpsCap: Number(q.get("fps")) || 60,
     mode: MODES.includes(q.get("mode")) ? q.get("mode") : "full",
   };
-  if (PRESETS.some((p) => p.id === q.get("preset"))) state.effect.preset = q.get("preset");
+  if (PRESETS.some((p) => p.id === q.get("preset"))) state.effect = { ...PRESET_DEFAULTS[q.get("preset")] };
   if (["none", "repel", "attract", "wind"].includes(q.get("interaction"))) state.effect.interaction = q.get("interaction");
   if (state.url) state.background = "url";
 
@@ -355,6 +357,7 @@ function buildPanel(state, send) {
     body.appendChild(l);
     return s;
   };
+  const syncs = [];   // refresh the controls after a preset switch resets the tuning
   const slider = (label, key, min, max, step) => {
     const l = document.createElement("label");
     l.append(label);
@@ -368,6 +371,7 @@ function buildPanel(state, send) {
       o.textContent = (+r.value).toFixed(2);
       send();
     });
+    syncs.push(() => { r.value = state.effect[key]; o.textContent = (+state.effect[key]).toFixed(2); });
     l.append(r, o);
     body.appendChild(l);
   };
@@ -407,9 +411,15 @@ function buildPanel(state, send) {
   body.appendChild(row);
 
   select("Fit", FITS.map((f) => [f, f]), state.fit, (v) => { state.fit = v; send(); });
-  select("Preset", PRESETS.map((p) => [p.id, p.name]), state.effect.preset, (v) => { state.effect.preset = v; send(); });
-  select("Interaction", ["repel", "attract", "wind", "none"].map((v) => [v, v]), state.effect.interaction, (v) => { state.effect.interaction = v; send(); });
-  select("Click burst", [["true", "on"], ["false", "off"]], String(state.effect.clickBurst), (v) => { state.effect.clickBurst = v === "true"; send(); });
+  select("Preset", PRESETS.map((p) => [p.id, p.name]), state.effect.preset, (v) => {
+    state.effect = { ...PRESET_DEFAULTS[v] };
+    interactionSel.value = state.effect.interaction;
+    burstSel.value = String(state.effect.clickBurst);
+    for (const f of syncs) f();
+    send();
+  });
+  const interactionSel = select("Interaction", ["repel", "attract", "wind", "none"].map((v) => [v, v]), state.effect.interaction, (v) => { state.effect.interaction = v; send(); });
+  const burstSel = select("Click burst", [["true", "on"], ["false", "off"]], String(state.effect.clickBurst), (v) => { state.effect.clickBurst = v === "true"; send(); });
   slider("Density", "density", 0.1, 3, 0.05);
   slider("Speed", "speed", 0.2, 3, 0.05);
   slider("Size", "size", 0.5, 2, 0.05);
