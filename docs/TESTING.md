@@ -81,3 +81,21 @@ their `NativeWindowHandle`.
 clock, `&video=/devroot/Library/wallpapers/<id>/media.mp4` for a real video;
 `http://127.0.0.1:8766/web/settings/index.html` runs the settings UI on the mock bridge.
 Stop the server afterwards.
+
+## 8. Desktop pets
+
+Pets are native windows, so check them on the real screen. No pack ships in the exe: generate a test set (46 PNGs,
+128×128, e.g. coloured blobs numbered with their frame) into `devroot/Library/pets/pet-test0001/img/shime<N>.png` with a
+`manifest.json` (`{id, name, createdAt, frameWidth, frameHeight, frames:[1..46]}`), and add
+`"pets":{"items":[{"id":"pa","packId":"pet-test0001"}],"activity":"lively"}` to `devroot/config/settings.json` (keep a backup and
+restore it afterwards). Start the dev copy; `Pets: showing N` is logged.
+
+- GDI screen grabs only see layered windows (the pets) with `BitBlt(... SRCCOPY | CAPTUREBLT)`; `Graphics.CopyFromScreen`
+  without it shows nothing. Make the grabbing process DPI aware.
+- Pets live on top of whatever is maximized; they hide while the screensaver shows (it starts after the idle time: tap Shift
+  with `tools\dev\input.ps1 -Key` first) and while a window covers the whole monitor.
+- To test window terrain without touching the user's windows, open a small throw-away WinForms window of your own (visible,
+  titled, not a tool window), move it and minimize it from the script: pets standing on it are carried and then fall.
+- The pure parts (`World`, `PetBrain`, pack import) are unit-tested in `PetBrainTests`, `WorldTests` and `PetPackTests`.
+- Things only a person can check: dragging and throwing a pet, riding a window you drag, a click-through next to a pet, a
+  second monitor with another DPI.

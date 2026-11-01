@@ -281,6 +281,7 @@ public sealed class PetManager : IDisposable
 
         var wantScale = _settings().Pets.Scale * ScaleAt(pet.Brain.X, pet.Brain.Y);
         if (Math.Abs(wantScale - pet.Ps) > 0.01 || _settings().Pets.Activity != pet.Activity) { Reset(pet, pet.Brain.X, pet.Brain.Y); return; }
+        if (Win32.GetCursorPos(out var cursor)) pet.Brain.SetCursor(cursor.X, cursor.Y);
         pet.Brain.Step(_world);
     }
 
@@ -301,7 +302,7 @@ public sealed class PetManager : IDisposable
         var ay = b.Pose.AnchorY * k;
         var x = (int)Math.Round(b.X - ax * pet.Ps);
         var y = (int)Math.Round(b.Y - ay * pet.Ps);
-        pet.Window.Present(frame, flip, x, y, (int)Math.Round(f.Width * pet.Ps), (int)Math.Round(f.Height * pet.Ps));
+        pet.Window.Present(frame, flip, x, y, (int)Math.Round(f.Width * pet.Ps), (int)Math.Round(f.Height * pet.Ps), b.ReactProgress);
     }
 
     // ---- mouse -----------------------------------------------------------------------------------
@@ -351,6 +352,15 @@ public sealed class PetManager : IDisposable
             vy = (last.y - first.y) / dt * TickMs;
         }
         pet.Brain.EndDrag(vx, vy);
+    }
+
+    /// <summary>"Call here": the pet falls again from above the centre of the primary monitor.</summary>
+    public void CallHere(string itemId)
+    {
+        if (!_pets.TryGetValue(itemId, out var pet)) return;
+        var a = _world.WorkAreas[0];
+        Reset(pet, a.Left + a.Width / 2.0, a.Top - 160);
+        Draw(pet);
     }
 
     private void ShowMenu(Pet pet)

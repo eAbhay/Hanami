@@ -157,6 +157,7 @@ Events: host posts `{event: "<name>", data}`.
 | `renamePet` | `{id, name}` (a pack) | `State` |
 | `deletePet` | `{id}` (a pack; also removes the pets using it) | `State` |
 | `addPet` | `{packId}` (another copy; the same pack may be added more than once; at most 8 pets) | `State` |
+| `callPet` | `{id}` (a pet item: it falls again from above the centre of the primary monitor) | `State` |
 | `removePet` | `{id}` (a pet item) | `State` |
 | `saveThumbnail` | `{id, dataUrl, width?, height?, durationSec?}` (JPEG data URL) | `{ok: true}` |
 | `setPaused` | `{paused: boolean}` | `State` |
@@ -332,6 +333,37 @@ It ends on unplug, lock, sleep, or after `stopAfterHours`. The idle count restar
 The power request belongs to the Hanami process, so quitting Hanami restores Windows' own
 screen-off and sleep timers; Hanami never changes Windows power settings. Lid close always
 follows Windows (apps cannot block it).
+
+### Desktop pets
+
+Pets are native, not web: one small borderless WPF window per pet (`PetWindow`: transparent, topmost,
+`WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, never focused, not in the taskbar), placed with `SetWindowPos` in physical
+pixels. A layered window hit-tests on pixel alpha, so clicks on the transparent parts reach the app below. Frames face
+LEFT and are mirrored when a pet faces right; each pose's anchor (the pet's feet on a floor, its hands on a wall or
+ceiling) sits on the pet's position. The simulation (`Core/Pets/World`, `PetBrain`) is pure, in physical pixels, stepped
+at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames` (from Shimeji-ee's default
+`actions.xml`; the packs' own action scripts are never run).
+
+- **World** = each monitor's work area (floor = top of the taskbar, ceiling, side walls except where another monitor
+  continues them) and, when `pets.climbWindows`, the visible application windows (`WindowScan`: visible, not
+  minimized/cloaked, titled, not a tool window, overlay, shell window or ours, ≥ 120×60, frame bounds without the
+  invisible resize border). A window's top edge is a floor and its sides are walls, only where no window in front
+  covers them; maximized and fullscreen windows give no edges but still hide what is behind them. Rebuilt on
+  WinEvent hooks (location change, move/size, minimize, destroy/hide, foreground; at most once per tick), every
+  500 ms, and when the work areas change (checked every 2 s, also after resume).
+- **Behaviour**: stand, walk, run, sit, lie, sleep (after a long untouched stretch), climb screen edges and window
+  sides, hang from and climb along the ceiling, fall (gravity 2 px/tick², terminal ≈ 20), land (bounce frames), react
+  to a click (hearts rise inside the pet window), sometimes walk or run to the cursor when it is on the floor's level,
+  and sprawl dizzily after being carried around for 5+ seconds. Only abilities the pack's frames allow are used.
+  A pet on a window is carried when it moves and falls when the window is minimized, closed or covered. Pets never
+  move, resize or focus the user's windows. Mouse: press and drag (> 4 px) picks a pet up (the cursor holds its
+  anchor), release throws it with the last ~80 ms of cursor velocity, a click without moving reacts, right-click opens
+  Sit · Sleep · Hide pets · Pet settings.
+- **Visibility**: always on top of apps; hidden while a fullscreen app covers their monitor, while the screensaver
+  shows and while Windows is locked; "Hide pets" (tray or pet menu) hides them for the session only. They follow the
+  power rules without the maximized/fullscreen rules: `paused` freezes them on their current frame (and they can't be
+  picked up), `reduced` redraws at most every other tick. Pets never multiply; at most 8.
+- A pet is drawn at `pets.scale` × its monitor's DPI scale (resized explicitly when it crosses to another monitor).
 
 The settings UI must run standalone in a browser (`web/settings/index.html`) using
 `web/settings/mock-bridge.js` when `window.chrome?.webview` is missing.

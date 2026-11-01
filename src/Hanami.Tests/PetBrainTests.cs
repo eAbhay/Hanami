@@ -231,6 +231,82 @@ public sealed class PetBrainTests
         Assert.Equal(Trace(4), Trace(4));
     }
 
+    // ---- character -------------------------------------------------------------------------------
+
+    [Fact]
+    public void LivelyPet_SometimesChasesTheCursor_AndEndsUpNextToIt()
+    {
+        var world = Plain();
+        var nearest = double.MaxValue;
+        var chased = false;
+        for (var seed = 0; seed < 10 && !chased; seed++)
+        {
+            var pet = Pet(seed, activity: "lively", caps: new PetCapabilities(false, false, true, true));
+            pet.Spawn(300, 900);
+            for (var i = 0; i < 25 * 60 * 5 && !chased; i++)
+            {
+                pet.SetCursor(1500, 1000);                 // on this floor's level, far away
+                pet.Step(world);
+                if (pet.State == PetState.Chase) { chased = true; nearest = Math.Abs(pet.X - 1500); }
+            }
+            // follow the chase to its end
+            for (var i = 0; i < 25 * 30 && pet.State == PetState.Chase; i++) { pet.SetCursor(1500, 1000); pet.Step(world); nearest = Math.Min(nearest, Math.Abs(pet.X - 1500)); }
+            if (chased) Assert.True(nearest < 120, $"stopped {nearest} px from the cursor");
+        }
+        Assert.True(chased);
+    }
+
+    [Fact]
+    public void PetNeverChasesACursorOnAnotherLevel_OrWithoutOne()
+    {
+        var world = Plain();
+        var pet = Pet(1, activity: "lively");
+        pet.Spawn(300, 900);
+        for (var i = 0; i < 25 * 60 * 10; i++)
+        {
+            if (i % 2 == 0) pet.SetCursor(1500, 100);       // far above the floor
+            pet.Step(world);
+            Assert.NotEqual(PetState.Chase, pet.State);
+        }
+    }
+
+    [Fact]
+    public void Reaction_RunsHeartsFromZeroToOne_ThenEnds()
+    {
+        var world = Plain();
+        var pet = Pet();
+        pet.Spawn(900, 900);
+        Run(pet, world, 80);
+        Assert.Equal(-1, pet.ReactProgress);
+        pet.Click();
+        Assert.Equal(0, pet.ReactProgress);
+        var last = 0.0;
+        while (pet.State == PetState.React) { pet.Step(world); if (pet.ReactProgress >= 0) { Assert.True(pet.ReactProgress >= last); last = pet.ReactProgress; } }
+        Assert.True(last > 0.8);
+        Assert.Equal(-1, pet.ReactProgress);
+    }
+
+    [Fact]
+    public void PetCarriedAroundForAWhile_SprawlsDizzilyAfterLanding()
+    {
+        var world = Plain();
+        var pet = Pet();
+        pet.BeginDrag(500, 400);
+        for (var i = 0; i < 25 * 8; i++) { pet.DragTo(500 + (i % 50), 400); pet.Step(world); }
+        pet.EndDrag(0, 0);
+        var states = new HashSet<PetState>();
+        for (var i = 0; i < 200; i++) { pet.Step(world); states.Add(pet.State); }
+        Assert.Contains(PetState.Lie, states);
+
+        var quick = Pet();
+        quick.BeginDrag(500, 400);
+        for (var i = 0; i < 25; i++) { quick.DragTo(500 + i, 400); quick.Step(world); }
+        quick.EndDrag(0, 0);
+        var quickStates = new HashSet<PetState>();
+        for (var i = 0; i < 60; i++) { quick.Step(world); quickStates.Add(quick.State); }
+        Assert.DoesNotContain(PetState.Lie, quickStates);
+    }
+
     // ---- monitors --------------------------------------------------------------------------------
 
     [Fact]

@@ -19,7 +19,9 @@ public sealed class PetWindow : Window
     private readonly Image _image = new();
     private readonly ScaleTransform _flip = new(1, 1);
     private IntPtr _hwnd;
-    private (BitmapSource? frame, bool flip, int x, int y, int w, int h) _last;
+    private readonly Canvas _hearts = new() { IsHitTestVisible = false };
+    private readonly TextBlock[] _heartMarks = new TextBlock[3];
+    private (BitmapSource? frame, bool flip, int x, int y, int w, int h, int hearts) _last;
 
     /// <summary>Left button went down / moved / went up, with the cursor in physical pixels (move and up only while pressed).</summary>
     public event Action<Win32.POINT>? Pressed, Moved, Released;
@@ -40,7 +42,15 @@ public sealed class PetWindow : Window
         _image.RenderTransformOrigin = new Point(0.5, 0.5);
         _image.RenderTransform = _flip;
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.HighQuality);
-        Content = _image;
+        for (var i = 0; i < _heartMarks.Length; i++)
+        {
+            _heartMarks[i] = new TextBlock { Text = "\u2665", Foreground = new SolidColorBrush(Color.FromRgb(0xff, 0x6f, 0x9c)), Visibility = Visibility.Collapsed, IsHitTestVisible = false };
+            _hearts.Children.Add(_heartMarks[i]);
+        }
+        var root = new Grid();
+        root.Children.Add(_image);
+        root.Children.Add(_hearts);
+        Content = root;
         SourceInitialized += (_, _) => _hwnd = new WindowInteropHelper(this).Handle;
         // The window exists (hidden) from the start so it can be positioned before it is first shown.
         _hwnd = new WindowInteropHelper(this).EnsureHandle();
@@ -58,16 +68,37 @@ public sealed class PetWindow : Window
         return p;
     }
 
-    /// <summary>Draws <paramref name="frame"/> (mirrored when <paramref name="flip"/>) in the physical rectangle; does nothing when nothing changed.</summary>
-    public void Present(BitmapSource frame, bool flip, int x, int y, int w, int h)
+    /// <summary>
+    /// Draws <paramref name="frame"/> (mirrored when <paramref name="flip"/>) in the physical rectangle; does nothing
+    /// when nothing changed. <paramref name="hearts"/> is 0–1 while small hearts rise inside the window (a click), else −1.
+    /// </summary>
+    public void Present(BitmapSource frame, bool flip, int x, int y, int w, int h, double hearts = -1)
     {
-        var state = (frame, flip, x, y, w, h);
+        var step = hearts < 0 ? -1 : (int)(hearts * 20);
+        var state = (frame, flip, x, y, w, h, step);
         if (state.Equals(_last)) return;
+        PaintHearts(step < 0 ? -1 : step / 20.0, w, h);
         if (!ReferenceEquals(_last.frame, frame)) _image.Source = frame;
         if (_last.flip != flip) _flip.ScaleX = flip ? -1 : 1;
         _last = state;
         Win32.SetWindowPos(_hwnd, IntPtr.Zero, x, y, Math.Max(1, w), Math.Max(1, h), Win32.SWP_NOACTIVATE | Win32.SWP_NOZORDER);
         if (!IsVisible) Show();
+    }
+
+    private void PaintHearts(double t, double w, double h)
+    {
+        for (var i = 0; i < _heartMarks.Length; i++)
+        {
+            var m = _heartMarks[i];
+            if (t < 0) { m.Visibility = Visibility.Collapsed; continue; }
+            // Device pixels, since the window is sized in physical pixels (about 1 DIP per physical px under a per-monitor-aware app at the window's own DPI).
+            var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
+            m.FontSize = Math.Max(8, h * 0.16 / dpi);
+            Canvas.SetLeft(m, w / dpi * (0.28 + 0.2 * i));
+            Canvas.SetTop(m, h / dpi * (0.38 - 0.34 * Math.Clamp(t * (1.2 - 0.15 * i), 0, 1) - 0.04 * i));
+            m.Opacity = Math.Clamp(1.4 - 1.2 * t, 0, 1);
+            m.Visibility = Visibility.Visible;
+        }
     }
 
     /// <summary>Hides without destroying; the next <see cref="Present"/> shows it again.</summary>

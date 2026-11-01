@@ -324,6 +324,10 @@ public sealed class HanamiHost
                 await AfterSettingsChangedAsync();
                 return BuildState();
 
+            case "callPet":
+                _pets.CallHere(Required(p, "id"));
+                return BuildState();
+
             case "removePet":
                 _store.RemovePet(Required(p, "id"));
                 await AfterSettingsChangedAsync();

@@ -1,6 +1,6 @@
 namespace Hanami.Core.Pets;
 
-public enum PetState { Stand, Walk, Run, Sit, Lie, Sleep, Fall, Land, Dragged, Thrown, React, GrabWall, ClimbWall, GrabCeiling, ClimbCeiling }
+public enum PetState { Stand, Walk, Run, Sit, Lie, Sleep, Fall, Land, Dragged, Thrown, React, GrabWall, ClimbWall, GrabCeiling, ClimbCeiling, Chase }
 
 public enum PetCommand { Sit, Sleep }
 
@@ -29,6 +29,10 @@ public sealed class PetBrain
     private int _holdTicks;              // how long the pet has been held without moving
     private double _lastX, _smoothVx;
     private int _reactTicks;
+    private int _dragTicks;              // how long the current drag has lasted
+    private bool _dizzy;                 // dragged around for a long time: sprawls after landing
+    private double _cursorX, _cursorY;
+    private bool _hasCursor;
 
     public PetState State { get; private set; } = PetState.Fall;
     public double X { get; private set; }
@@ -42,6 +46,8 @@ public sealed class PetBrain
     public int Frame => _profile.Frames.Contains(Pose.Frame) ? Pose.Frame : 1;
     public Surface? Surface => _on;
     public bool IsHeld => State == PetState.Dragged;
+    /// <summary>0 → 1 while reacting to a click (hearts rise), −1 otherwise.</summary>
+    public double ReactProgress => State == PetState.React ? Math.Min(1, _reactTicks / (double)ReactPoses.Sum(p => p.Ticks)) : -1;
 
     public PetBrain(PetProfile profile, Random rng)
     {
@@ -52,6 +58,12 @@ public sealed class PetBrain
     }
 
     // ---- input from the mouse / app --------------------------------------------------------------
+
+    /// <summary>Where the cursor is (physical px), fed in every tick; pets sometimes walk or run over to it.</summary>
+    public void SetCursor(double x, double y)
+    {
+        _cursorX = x; _cursorY = y; _hasCursor = true;
+    }
 
     /// <summary>Starts a fall from a point (new pets and respawns).</summary>
     public void Spawn(double x, double y)
@@ -64,7 +76,7 @@ public sealed class PetBrain
     public void BeginDrag(double cursorX, double cursorY)
     {
         X = _lastX = cursorX; Y = cursorY;
-        _on = null; _ownerRect = null; _smoothVx = 0; _holdTicks = 0; _calmTicks = 0;
+        _on = null; _ownerRect = null; _smoothVx = 0; _holdTicks = 0; _calmTicks = 0; _dragTicks = 0; _dizzy = false;
         State = PetState.Dragged;
         SetAnim(ShimejiFrames.Fall);
     }
@@ -80,6 +92,7 @@ public sealed class PetBrain
     {
         if (State != PetState.Dragged) return;
         var max = 40 * _ps;
+        _dizzy = _dragTicks > 5 * ShimejiFrames.TickRate;     // carried around for 5+ seconds
         StartFall(PetState.Thrown, Math.Clamp(vx, -max, max), Math.Clamp(vy, -max, max));
     }
 
@@ -110,6 +123,7 @@ public sealed class PetBrain
     {
         if (State == PetState.Dragged)
         {
+            _dragTicks++;
             _smoothVx = _smoothVx * 0.7 + (X - _lastX) * 0.3;
             _lastX = X;
             if (Math.Abs(_smoothVx) < 0.5 * _ps) _holdTicks++; else _holdTicks = 0;
@@ -132,6 +146,7 @@ public sealed class PetBrain
                 if (--_stateTicks <= 0) ChooseNext();
                 break;
             case PetState.Walk or PetState.Run: StepWalk(world); break;
+            case PetState.Chase: StepChase(world); break;
             case PetState.GrabWall: if (--_stateTicks <= 0) StartClimbWall(); break;
             case PetState.ClimbWall: StepClimbWall(world); break;
             case PetState.GrabCeiling: if (--_stateTicks <= 0) StartClimbCeiling(); break;
@@ -200,6 +215,8 @@ public sealed class PetBrain
             Attach(hit.Floor, world);
             var hard = Vy > 9 * _ps;
             Vx = Vy = 0;
+            if (_dizzy && _profile.Caps.Sleep) { _dizzy = false; Enter(PetState.Lie, 75 + _rng.Next(75)); return; }
+            _dizzy = false;
             if (hard && _profile.Frames.Contains(18)) { State = PetState.Land; _stateTicks = 8; SetAnim(ShimejiFrames.Bounce); }
             else Enter(PetState.Stand, 25 + _rng.Next(75));
             return;
@@ -220,7 +237,7 @@ public sealed class PetBrain
         SetAnim(state switch
         {
             PetState.Walk => ShimejiFrames.Walk,
-            PetState.Run => ShimejiFrames.Run,
+            PetState.Run or PetState.Chase => ShimejiFrames.Run,
             PetState.Sit => _rng.Next(4) == 0 && _profile.Caps.Sit ? ShimejiFrames.SitLookUp : ShimejiFrames.Sit,
             PetState.Lie or PetState.Sleep => ShimejiFrames.Sprawl,
             _ => ShimejiFrames.Stand,
@@ -245,17 +262,38 @@ public sealed class PetBrain
             options.Add((PetState.Lie, calm ? 3 : lively ? 0.5 : 1, 100 + _rng.Next(200)));
             if (_calmTicks >= sleepAfter) options.Add((PetState.Sleep, 3, 750 + _rng.Next(1750)));
         }
+        // Now and then, go over to the cursor if it is on this floor's level, near enough to be worth the walk.
+        if (_hasCursor && _on is { Kind: SurfaceKind.Floor } && Math.Abs(_cursorX - X) > 120 * _ps && Math.Abs(_cursorX - X) < 1500 * _ps
+            && _cursorY >= Y - 500 * _ps && _cursorY <= Y + 60 * _ps)
+            options.Add((PetState.Chase, calm ? 0.1 : lively ? 2 : 0.5, 400));
         var roll = _rng.NextDouble() * options.Sum(o => o.weight);
         var pick = options[^1];
         foreach (var o in options) { if ((roll -= o.weight) < 0) { pick = o; break; } }
 
         if (pick.state is PetState.Walk or PetState.Run) Facing = _rng.Next(2) == 0 ? -1 : 1;
+        if (pick.state == PetState.Chase) { Enter(PetState.Chase, pick.ticks); Facing = _cursorX < X ? -1 : 1; return; }
         Enter(pick.state, pick.ticks);
     }
 
     private void StepWalk(World world)
     {
         if (--_stateTicks <= 0) { Enter(PetState.Stand, 25 + _rng.Next(50)); return; }
+        MoveOnFloor(world);
+    }
+
+    /// <summary>Walks towards the cursor (running when it is far), and settles next to it.</summary>
+    private void StepChase(World world)
+    {
+        if (--_stateTicks <= 0 || !_hasCursor) { Enter(PetState.Stand, 25 + _rng.Next(50)); return; }
+        var dx = _cursorX - X;
+        if (Math.Abs(dx) < 60 * _ps) { Enter(_profile.Caps.Sit && _rng.Next(2) == 0 ? PetState.Sit : PetState.Stand, 75 + _rng.Next(125)); return; }
+        Facing = dx < 0 ? -1 : 1;
+        SetAnim(Math.Abs(dx) > 300 * _ps ? ShimejiFrames.Run : ShimejiFrames.Walk);
+        MoveOnFloor(world);
+    }
+
+    private void MoveOnFloor(World world)
+    {
         if (_on is null) return;
         var step = -Pose.Vx * Facing * _ps;   // Pose.Vx is for a pet facing left
         var nx = X + step;

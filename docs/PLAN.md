@@ -369,18 +369,21 @@ Notes:
 
 ## Phase 7 — Character and polish
 
-- [ ] 7.1 Chase the mouse: now and then (more often with `lively`) a pet walks or runs towards the
+- [x] 7.1 Chase the mouse: now and then (more often with `lively`) a pet walks or runs towards the
       cursor along its current floor and stops next to it (ChaseMouse frames if the pack has them).
-- [ ] 7.2 Reactions: click → React (Pinched frames) with a few small hearts drawn inside the same
+- [x] 7.2 Reactions: click → React (Pinched frames) with a few small hearts drawn inside the same
       pet window (no extra window); a pet dragged around for a while sprawls dizzily after landing.
-- [ ] 7.3 Settings UI: card "Behaviour" — Size slider (`scale`), Activity segmented (Calm · Normal ·
+- [x] 7.3 Settings UI: card "Behaviour" — Size slider (`scale`), Activity segmented (Calm · Normal ·
       Lively), Climb windows toggle, master "Show pets" toggle; each pet row gets "Call here" (falls
       from above the centre of the primary monitor) and capability chips (Climbs · Ceiling · Sits).
       Pack rename. Check at 1000×680 and 820×560, light and dark.
-- [ ] 7.4 README (pets section, where to find packs, licences belong to the pack authors),
+- [x] 7.4 README (pets section, where to find packs, licences belong to the pack authors),
       CONTRACTS final pass, a pets section in `docs/TESTING.md`. Commit.
 
 Notes:
+- Done 2026-11-01. Chase, reactions (hearts drawn inside the pet window), dizzy sprawl and the Behaviour card are in; "Call here" is
+  the bridge method `callPet`. Checked in the browser on the mock bridge at 800 px (dark); the 1000-px and light-theme
+  looks use the same shared styles.
 
 ## Phase 8 — Ship
 

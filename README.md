@@ -22,7 +22,12 @@ system tray as a single self-contained `.exe`.
 - **Desktop pets (Shimeji packs).** Import Shimeji image sets (`shime1.png … shime46.png`, from a
   folder or `.zip`) on the Pets tab and put up to 8 on the desktop. Pet packs are not included; find
   one by searching for "<character> shimeji" and check its licence, which belongs to its author.
-  Hanami uses the packs' images only, with its own behaviour logic. They are carried by exported packs.
+  Hanami uses the packs' images only, with its own behaviour logic: pets walk along the taskbar and the
+  tops of your windows, climb window sides and screen edges, hang from the top of the screen, sit, nap,
+  fall when a window moves away, come over to your cursor now and then, and can be picked up and thrown.
+  They never move or resize your windows, hide while a fullscreen app or the screensaver is up, and freeze
+  when the power rules pause Hanami. Size, activity (calm / normal / lively) and "climb windows" are on the
+  Pets tab, "Hide pets" is in the tray menu. They are carried by exported packs.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that

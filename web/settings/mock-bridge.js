@@ -343,6 +343,11 @@ export function createMockHost(post) {
       return snapshot();
     },
 
+    callPet: ({ id }) => {
+      if (!state.settings.pets.items.some((i) => i.id === id)) throw new Error("Pet not found");
+      return snapshot();
+    },
+
     removePet: ({ id }) => {
       state.settings.pets.items = state.settings.pets.items.filter((i) => i.id !== id);
       emitState();

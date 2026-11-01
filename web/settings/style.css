@@ -938,3 +938,5 @@ code.path {
 .pet-list { display: flex; flex-direction: column; }
 .pet-thumb { width: 48px; height: 48px; object-fit: contain; image-rendering: auto; flex: none; }
 .row-actions { display: flex; align-items: center; gap: 6px; }
+.pet-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.pet-chips .chip { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--violet-soft, rgba(125, 99, 214, 0.18)); color: var(--text-2, inherit); }
