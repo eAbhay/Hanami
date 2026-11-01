@@ -1,4 +1,4 @@
-﻿# Implementation plan â€” round 4
+﻿# Implementation plan — round 5: desktop pets
 
 How to use this file (for a fresh chat, e.g. Sonnet):
 1. Read `CLAUDE.md`, then this file, then `docs/CONTRACTS.md`. Read `docs/TESTING.md` before testing.
@@ -6,153 +6,207 @@ How to use this file (for a fresh chat, e.g. Sonnet):
    working build, its checks done, boxes ticked here, and one commit.
 3. Don't redesign beyond what a phase says; if something in the plan turns out wrong, note it under
    the phase's "Notes" and pick the smallest fix that keeps the intent.
+4. Keep this file UTF-8 (round 4's copy got double-encoded: `â€”` instead of `—`). Edit it with the
+   file tools, not PowerShell `Set-Content`/`Out-File`.
 
-Round 3 (idle freeze, per-effect settings, embers, settings restructure, Tilt Warp clock) is done;
-see git history (`git show c2918b8:docs/PLAN.md`). Still open from it: the user's own Win+D
-no-flash check.
+Earlier rounds are in git history (`git log -- docs/PLAN.md`). Still open from round 4, for the
+user on the real desktop: click burst starts off (1.4), effect visibility before/after (2.6), the
+clock at a custom position/size/font in a real screensaver (3.5).
+
+## What we're building
+
+Shimeji-style companions that live on top of the desktop: they walk along the taskbar and the tops
+of app windows, climb window sides and screen edges, hang from the top of the screen, sit, sleep,
+fall when the window under them moves away, and can be picked up with the mouse and thrown.
 
 Decisions already made with the user (don't re-ask):
-- **Click burst is off by default** for every effect. Users who already switched it on keep it â€”
-  but stored overrides currently hold *every* key (the old drawer/migration wrote whole objects), so
-  a one-time migration drops `clickBurst` from stored overrides (see 1.2).
-- Effects look too faint at 100% opacity. Cause (measured from the code, see Phase 2): the
-  per-particle alphas and the flicker/pulse/life envelopes multiply the opacity slider down to an
-  average visible alpha of roughly 0.2â€“0.4 for fireflies, sparkles and embers.
-- Screensaver clock: the user sets its **position** and **font** (an installed Windows font, the
-  bundled Tilt Warp, or a font file they import). Applies to the screensaver clock (the only clock).
-- Fingerprint to end the screensaver: **dropped** by the user (not worth the effort).
-- Taskbar transparency: not an app feature. On Windows 11 the taskbar is XAML inside Explorer and
-  resets its own background, so making it transparent means injecting into `explorer.exe` (what
-  TranslucentTB does) â€” too fragile for Hanami. The user uses TranslucentTB instead.
+- **Art = Shimeji image sets.** A pack is a folder of PNGs named `shime1.png … shime46.png` (the
+  standard Shimeji-ee frame set). Hanami has its **own behaviour logic**; it does not run the packs'
+  `actions.xml` / `behaviors.xml` scripts. Packs are imported from a folder or `.zip`.
+  No pet ships in the exe (pack licences vary; the user downloads packs).
+- **Windows:** pets stand on and climb windows, and get carried or fall when windows move.
+  They **never move, resize or focus the user's windows**.
+- **Visibility:** always on top of apps; hidden while a fullscreen app/game runs on their monitor
+  and while the screensaver shows. When the power rules put a monitor in `paused`, its pets sit
+  still (no animation); `reduced` → pets at most 15 fps.
+- **Count:** the user adds/removes pets in settings (the same pack may be added more than once);
+  pets **never multiply**. Cap: 8 pets.
+
+Technical decisions (keep them unless they turn out wrong):
+- **Native WPF, not WebView2.** One small borderless window per pet (`AllowsTransparency`,
+  topmost, `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`, not in the taskbar or Alt+Tab). A layered window
+  hit-tests on pixel alpha, so clicks on the transparent parts go to the app underneath for free.
+  Each pet window is ~128×128 px; a WebView2 per pet (or a full-screen transparent overlay) would
+  cost far more memory and GPU for a few sprites.
+- **Simulation is pure and unit-tested** (`Core/Pets/`), in physical screen pixels, stepped at a
+  fixed rate. The window only draws the frame and moves to where the simulation says.
+- Frame meanings come from Shimeji-ee's default `conf/actions.xml` (see 1.1), stored as a C#
+  table, not parsed at runtime.
+
+```
+Core/Pets/PetPack.cs        pack manifest, frame set, validation (pure)
+Core/Pets/ShimejiFrames.cs  frame numbers + durations + anchors per animation (pure table)
+Core/Pets/World.cs          surfaces: floors / walls / ceilings from work areas + windows (pure)
+Core/Pets/PetBrain.cs       state machine + physics: Step(dt, world, input) (pure)
+Platform/WindowScan.cs      EnumWindows → visible rects in z-order; WinEvent hooks
+App/PetWindow.cs            WPF window: draws a frame, moves, mouse drag/throw/click
+App/PetManager.cs           owns the pets, ticks them, applies power/visibility rules
+```
 
 ---
 
-## Phase 1 â€” Click burst off by default
+## Phase 1 — Pet packs: format, import, library, settings (no pets on screen yet)
 
-- [x] 1.1 `web/shared/effects.js`: `DEFAULT_EFFECT.clickBurst = false` (all presets inherit it).
-      `web/settings/defaults.js` `FALLBACK_EFFECT.clickBurst = false`; the drawer's
-      `toggle(true, â€¦)` initial value â†’ `false`; dev panel follows `PRESET_DEFAULTS` already.
-      `mock-bridge.js` if it seeds `clickBurst: true` anywhere.
-- [x] 1.2 Migration in `SettingsStore.Normalize`: add `AppSettings.SettingsVersion` (int, missing =
-      1). When < 2: remove the `clickBurst` key from every `effects[preset]` override, then set 2.
-      Write it back on the next save as usual. Unit tests: v1 file with `clickBurst:true` â†’ key gone,
-      version 2; v2 file with `clickBurst:true` â†’ kept; pack import of an old settings file migrates too.
-- [x] 1.3 `docs/CONTRACTS.md` (`clickBurst` default false; `settingsVersion`), README line, drawer
-      hint text unchanged. `tools/dev/perf.ps1` sends an explicit config â€” leave it.
-- [ ] 1.4 (done in a browser; real-desktop check is the user's) Check: dev page click â†’ no burst on a fresh preset; settings drawer toggle starts off and
-      turning it on works on the real desktop. Commit.
-
-## Phase 2 â€” Effect visibility
-
-**Why they look faint (from the code):** `_render` draws `p.alpha Ã— p.fade Ã— opacity`, and then:
-- fireflies: pulse `0.12 + 0.88Â·sÂ³` â†’ mean â‰ˆ 0.40, Ã— alpha 0.6â€“1 â†’ **â‰ˆ 0.32**;
-- sparkles: the same twinkle curve, and size shrinks to 45% at the trough â†’ **â‰ˆ 0.3**, smaller too;
-- embers: flicker `0.72 Â± 0.28` Ã— life envelope `min(1,7t)Â·(1âˆ’t)^1.15` (mean â‰ˆ 0.45) Ã— alpha
-  (0.39â€“1) â†’ **â‰ˆ 0.2**;
-- snow: small (1.6â€“5.5 px) with alphas 0.45â€“0.95; rain alphas 0.22â€“0.55 (by design, but faint);
-- sakura/leaves are mostly fine (alpha 0.85â€“1 for most), they only fade on bright scenes.
-So "100% opacity" never means opaque. Fix in three parts, keeping the perf budget:
-
-- [x] 2.0 Measure first. Add a dev-only diagnostic to the engine (not in the contract, like
-      `stats`): `stats.meanAlpha` = mean of the final `globalAlpha` actually drawn per particle,
-      averaged over ~2 s. Record a before table for every preset at defaults in Notes.
-- [x] 2.1 New tuning key **`flicker`** (0â€“1, 1 = today's depth). Scales the depth of the fireflies
-      pulse, the sparkles twinkle (alpha *and* size) and the embers flicker:
-      `value = 1 âˆ’ flickerÂ·(1 âˆ’ today's factor)`. Per-preset defaults in `PRESET_DEFAULTS`
-      (start: fireflies 0.5, sparkles 0.5, embers 0.4; others 0 and unused). Add a capability flag
-      on `PRESETS` entries (`flicker: true` for those three) so the drawer shows the slider only
-      where it does something. Sanitize 0â€“1.
-- [x] 2.2 **Opacity above 100%.** Extend `opacity` to 0â€“2. Up to 1 it multiplies as today; above 1
-      it lifts faint particles without clipping bright ones: `a' = 1 âˆ’ (1 âˆ’ a)^opacity` where
-      `a = p.alpha Ã— fade Ã— envelope` (apply in `_render`/each `draw` where the final alpha is
-      known â€” refactor so the multiplier is applied once). Slider 0â€“200%, hint "Above 100% makes
-      faint particles stronger".
-- [x] 2.3 **Retune defaults** so each preset's `meanAlpha` at defaults is â‰¥ ~0.55 (rain â‰¥ 0.4):
-      raise the low alpha ranges (snow mid layer, rain, embers `0.55 + 0.45z` term), soften the
-      embers life envelope's tail (e.g. exponent 1.15 â†’ 0.8), raise the fireflies pulse floor
-      0.12 â†’ 0.3. Don't change motion. Record the after table in Notes.
-- [x] 2.4 Light particles over bright video (snow, sakura, sparkles): bake a very soft dark halo
-      (~10â€“15% alpha, a few px) into the sprites at build time so they separate from white skies.
-      Sprite-only change, no runtime cost. Judge on the dev page with a bright image
-      (`?src=<bright jpg>`) and a dark scene; if it looks dirty on dark scenes, drop it and note why.
-- [x] 2.5 Contract (`flicker`, opacity range, capability flag), drawer slider + mock bridge, host:
-      nothing (overrides are opaque JSON) â€” but check `EffectSettingsTests` still pass and add one
-      for an override containing `flicker` surviving a round-trip.
-- [ ] 2.6 (not done: the user checks on the real desktop) Real-screen check: `capture-desktop.ps1` before/after of embers and fireflies over the
-      user's video wallpaper; show the user. Commit.
-
-Notes (measured in the dev page, `engine.stats.meanAlpha`, defaults, 2 s means; "before" is the
-estimate from the code above, not a measurement):
-
-| preset | before | after |
-|---|---|---|
-| fireflies | ~0.32 | 0.69 |
-| sparkles | ~0.30 | 0.54 |
-| embers | ~0.20 | 0.46 (sparks fade out fast by design; opacity > 100% lifts it) |
-| rain | ~0.3 | 0.42 |
-| snow / sakura / leaves | â€“ | 0.83 / 0.84 / 0.89 |
-
-- Halo: baked into snow and sakura sprites only. Sparkles are drawn additively, where a dark halo does
-  nothing, so they have none. Looks clean on the dark scene; not judged over a bright video.
-- Opacity above 1 goes through `engine.fin()`; embers' crossfade between two tints splits the final alpha.
-
-## Phase 3 â€” Screensaver clock: position, size, font
-
-Contract first:
-
-- [x] 3.1 `docs/CONTRACTS.md`:
-  - `Settings.screensaver.clock: { x: number; y: number; size: number; font: string | null;
-    dateFont: "system" | "same"; showDate: boolean }`. `x, y` = the clock block's centre as a
-    fraction of the monitor (defaults 0.5, 0.31 = today's spot), `size` 0.5â€“1.6 (default 1),
-    `font` null = bundled Tilt Warp, `"system:<family>"` = an installed Windows font,
-    `"library:<file>"` = an imported font in `Library/fonts/`. Same clock on every monitor.
-  - Host â†’ wallpaper page `config` gains `clock` (screensaver pages only) with `font` resolved to
-    `{family: string, src?: string}` (src = `https://library.hanami/fonts/<file>`).
-  - Bridge: `getFonts` â†’ `{bundled: FontInfo[], system: string[], imported: FontInfo[]}`;
-    `importFont` (file dialog: .ttf .otf .woff .woff2, copies into `Library/fonts/`) â†’
-    `{imported: FontInfo}` | `{cancelled: true}`; `deleteFont {id}` â†’ `State` (if it's the selected
-    font, `clock.font` resets to null).
-  - On-disk layout: `Library/fonts/<id>.<ext>`.
-- [x] 3.2 Host: `ClockSettings` with clamping in `Normalize` (x, y 0â€“1, size range, unknown font
-      strings kept but resolved to Tilt Warp if missing). Font ids: sanitize file names (no path
-      separators, no `..`, fixed allowed extensions), de-duplicate. System fonts from
-      `System.Windows.Media.Fonts.SystemFontFamilies` (family names, sorted, cached). Packs: when
-      settings are exported and `clock.font` is a library font, include that file; import restores
-      it. Tests: clamping, id sanitizing (`..\x.ttf`, `a/b.otf`, `.exe`), pack round-trip with a
-      font, delete-selected resets to null.
-- [x] 3.3 Page (`clock.js`, `style.css`): take `clock` from config. Position the block by its
-      centre at `(xÂ·100vw, yÂ·100vh)`, clamped so it stays fully on screen. Scale with `size`
-      (font-size and `.time-wrap` box). The `#glass-edge` filter offsets/blurs are in px tuned for
-      size 1 â€” scale them by `size` (update the filter attributes in `layout()`). Font: system â†’
-      family name; library â†’ `new FontFace("Hanami User Clock", "url(src)")`, `document.fonts.add`,
-      await load; on failure fall back to Tilt Warp and post `{type:"fontError", font, message}`
-      (log it host-side). Keep the fade-in-after-font-load rule. `dateFont: "same"` uses the clock
-      family for the date; `showDate` hides it.
-- [x] 3.4 Settings UI, Screensaver tab, new card **"Clock"**:
-  - a small monitor-shaped placement preview (current screensaver wallpaper thumbnail, a
-    clock-shaped handle showing the current time in the chosen font) â€” drag the handle to place it,
-    snaps to centre lines within ~2%; under it 9 anchor buttons (corners, edges, centre with a
-    margin) that set `x, y`; keyboard: arrow keys nudge 1%.
-  - Size slider; Font select (groups: Bundled Â· Imported Â· Installed), "Import fontâ€¦" button,
-    remove (Ã—) on imported fonts; "Use clock font for the date" toggle; "Show date" toggle.
-  - Each font option previews in its own face. Changes â†’ `updateSettings` debounced 150 ms.
-  - mock-bridge: `getFonts` with a few fake system fonts, `importFont` fake.
-- [ ] 3.5 (browser-checked: dev page at sizes 0.7/1.6 and settings mock at 1000 and 820 px; real-app check is the user's) Check: browser (mock) at 1000Ã—680 and 820Ã—560, light/dark. Real app: pick an installed
-      font, import a .ttf (any OFL font from `C:\Windows\Fonts` copied to a temp folder is fine),
-      move the clock to bottom-left, size 0.7 â†’ Preview screensaver, `input.ps1 -Crop`, show the
-      user. Glass rim must still look right at size 0.6 and 1.5. Commit.
+- [ ] 1.1 Get the frame meanings: fetch Shimeji-ee's default `conf/actions.xml`
+      (https://github.com/gil/shimeji-ee or https://github.com/chaoskagami/shimeji-ee, `conf/`)
+      into the scratchpad. From it, write `ShimejiFrames.cs`: for each animation Hanami needs —
+      Stand, Walk, Run, Sit (+ sit variants), Sprawl/Lie, Sleep (if present), Fall, Land/Bounce,
+      Dragged (with its left/right swing frames), Thrown, GrabWall, ClimbWall, GrabCeiling,
+      ClimbCeiling, Pinched/reaction, ChaseMouse — the list of `(frame number, duration in 1/25 s
+      ticks, anchor x/y, velocity x/y)` exactly as the XML gives them. Note the source commit in a
+      comment. Don't copy the XML into the repo.
+- [ ] 1.2 `CONTRACTS.md` first:
+  - On disk: `Library/pets/<packId>/manifest.json` (`{id, name, createdAt, frameWidth,
+    frameHeight, frames: number[]}` — which shime numbers exist) + `img/shime<N>.png`.
+  - `Settings.pets: { enabled: boolean (default true); items: {id: string; packId: string}[];
+    scale: number (0.5–2, default 1); climbWindows: boolean (default true);
+    activity: "calm" | "normal" | "lively" (default "normal") }`.
+  - `State.petPacks: PetPackInfo[]` (`{id, name, preview: library.hanami URL of shime1, frames,
+    sizeBytes, capabilities: {climb, ceiling, sit, sleep}}`).
+  - Bridge: `importPet` (dialog: pick a folder **or** .zip files) → `{imported: PetPackInfo[]}` |
+    `{cancelled: true}`; `renamePet {id, name}`; `deletePet {id}` (also removes its items);
+    `addPet {packId}` → State; `removePet {id}` → State. `updateSettings` covers the rest.
+- [ ] 1.3 `Core/Pets/PetPack.cs` + host import (follow `Library`'s style, reuse its helpers):
+  - Find the images: the chosen folder itself, its `img/`, or one level deeper (packs are often
+    `Name/img/…` or `shimeji-ee/img/Name/…`; a zip may hold several characters → import each as its
+    own pack, named after its folder).
+  - Accept only `shime<N>.png`, N in 1–46; everything else is ignored. Required: shime1 and the
+    frames of Stand, Walk, Fall, Dragged — otherwise reject with a readable reason. Missing climb /
+    ceiling / sit frames just switch those capabilities off.
+  - Safety: zip-slip proof (never trust entry paths), caps (≤ 200 entries considered, ≤ 2 MB per
+    PNG, ≤ 40 MB per pack), decode each PNG once to check it really is one and read its size; all
+    frames of a pack must share one size (else reject).
+  - Tests: the folder layouts above, a zip with two characters, missing required frame, non-PNG
+    named `.png`, `../` entry, oversize, mixed frame sizes, manifest round-trip, settings clamping
+    (`scale`, cap of 8 items, items whose pack is gone are dropped on load).
+- [ ] 1.4 Export/Import packs: pet packs become export items (`kind: "pet"`); importing restores
+      them and their settings items. Test the round-trip.
+- [ ] 1.5 Settings UI, minimal: new tab **Pets** between Screensaver and Power. Header (action:
+      Import pet) · card "Your pets": the items (preview = shime1, name, Remove) and an "Add a pet"
+      picker over the imported packs · empty state explaining where packs come from (Shimeji packs —
+      search for "<character> shimeji"; check each pack's terms). mock-bridge support.
+- [ ] 1.6 Check: import a real pack (**ask the user where theirs is** — import into the dev root,
+      never the real install), it appears with its preview; a broken folder gives a clear error.
+      Commit.
 
 Notes:
-- Clock `x, y` is the centre of the **time** (the date hangs below it). The page clamps so the glyphs and
-  the date stay on screen; the settings preview applies the same clamp (and stores the clamped value
-  when dragging), so what you see is what the screensaver shows.
-- 3.4: the font list is a native `<select>` (Bundled Â· Imported Â· Installed, each option in its own
-  face), so imported fonts are removed with a "Remove" button next to the select rather than an x on the
-  option.
-- A font that fails to load makes the page show Tilt Warp and post `fontError`; the host logs it.
 
-## Phase 4 â€” Ship
+## Phase 2 — Pets on screen: ground life, drag and throw
 
-- [x] 4.1 README: click burst default, flicker/opacity, clock position/size/fonts.
-- [x] 4.2 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
+World = each monitor's **work area** only in this phase (floor = top of the taskbar, walls = work
+area sides, ceiling = work area top).
+
+- [ ] 2.1 `World.cs`: `Surface { Kind: Floor | Wall | Ceiling, From, To, At, Side, OwnerHwnd? }` in
+      physical px, built from `Monitors.Enumerate()` work areas. Queries: floor under a point,
+      first floor crossed by a movement segment (for falling), nearest wall in a direction.
+- [ ] 2.2 `PetBrain.cs`: states Stand, Walk, Run, Sit, Lie, Sleep, Fall, Land, Dragged, Thrown,
+      React. Fixed step at 25 Hz (like Shimeji, so frame durations are exact); the window draws the
+      latest state. Gravity + terminal velocity for Fall/Thrown; Thrown keeps the release velocity,
+      bounces off walls with damping, lands on a floor. Idle choices weighted by `activity`
+      (calm = more sitting/sleeping, lively = more running); Sleep only after a long calm stretch.
+      Walking turns at walls. Deterministic with an injected `Random`.
+      Tests: falls and lands on the floor, stays inside the work area, thrown at a wall bounces,
+      dragged follows the input exactly, a long run (10 simulated minutes, many seeds) never leaves
+      the screen or produces NaN.
+- [ ] 2.3 `PetWindow.cs`: WPF window as above; frames loaded once per pack as frozen
+      `BitmapSource`s (shared by every pet using that pack); drawn at `scale × monitor DPI scale`
+      (frames are authored for 100%); flipped horizontally when facing right (Shimeji frames face
+      left). Position = pet position minus the frame's anchor. One `SetWindowPos`
+      (`SWP_NOACTIVATE | SWP_NOZORDER`) per change, nothing when nothing changed.
+- [ ] 2.4 Mouse: left-press on the pet → Dragged (the cursor holds the frame's anchor point, the
+      swing frame follows cursor velocity); release → Thrown with the last ~80 ms of cursor velocity.
+      A click without moving (< 4 px) → React. Right-click → small menu: Sit · Sleep · Hide pets ·
+      Pet settings. The pet window must never take focus (typing in the app underneath keeps
+      working while you drag).
+- [ ] 2.5 `PetManager.cs`: a window per settings item; each pet spawns falling from the top at a
+      random spot on the primary monitor; one `DispatcherTimer` for all pets, stopped when no pet is
+      visible. Tray menu: "Show pets / Hide pets" (this session only, not saved). Settings changes
+      (add/remove/scale/enabled) apply without restarting the other pets.
+- [ ] 2.6 Check on the real screen (`capture-desktop.ps1`; synthetic drag via `input.ps1` if it can,
+      else ask the user to try): pets fall and land on the taskbar, walk, sit; drag and throw work;
+      clicks on transparent pixels next to a pet reach the app below. Perf with 3 pets: well under
+      1% CPU for the pets' part, no memory growth over 10 min. Commit.
+
+Notes:
+
+## Phase 3 — Windows as terrain: stand, climb, get carried
+
+- [ ] 3.1 `Platform/WindowScan.cs`: top-level windows in z-order that are visible, not minimized,
+      not cloaked (`DWMWA_CLOAKED`), not tool windows, not ours, not the shell's desktop/taskbar
+      windows, at least ~120×60 px; bounds from `DWMWA_EXTENDED_FRAME_BOUNDS` (`GetWindowRect`
+      includes the invisible resize border). Maximized windows give no top-edge floor but still
+      cover what's behind them.
+- [ ] 3.2 `World.cs`: per window, a floor on its top edge and walls on its sides — **only the parts
+      not covered by windows above it** in z-order (interval subtraction). Pure; tests with
+      overlapping rectangles: fully covered edge → no surface, partly covered → split segments.
+- [ ] 3.3 Keeping it fresh: rescan every 500 ms, plus out-of-context `SetWinEventHook` for
+      `EVENT_OBJECT_LOCATIONCHANGE` (window objects only), `EVENT_SYSTEM_MOVESIZESTART/END`,
+      `EVENT_SYSTEM_MINIMIZESTART`, `EVENT_OBJECT_DESTROY`/`HIDE`, `EVENT_SYSTEM_FOREGROUND`
+      (z-order). The window a pet stands or climbs on moves → **carry** the pet by the same delta
+      that tick; its surface disappears (minimized, closed, now covered) → Fall. At most one
+      hook-driven rescan per tick.
+- [ ] 3.4 `PetBrain` climbing: at a wall, GrabWall → ClimbWall up/down; at the top of a window side
+      it can step onto that window's top edge; at the work-area top, GrabCeiling → ClimbCeiling,
+      eventually letting go → Fall. Walking off the end of a window top → Fall (sometimes a jump down
+      to a lower floor). Only when the pack has those frames and `climbWindows` is on (off = work
+      area only, as in phase 2). Tests on hand-built worlds.
+- [ ] 3.5 Pets are topmost, so a pet on a window that later gets covered would float in front of
+      the covering window. The interval subtraction removes covered edges, so it falls instead —
+      classic Shimeji behaviour; accept it and note it.
+- [ ] 3.6 Check on the real screen with a couple of ordinary windows: pets land on window tops,
+      climb sides, ride along when the window is dragged (**ask the user to drag one**), fall when
+      it's minimized. Confirm Hanami moved, resized or activated no user window. Commit.
+
+Notes:
+
+## Phase 4 — Living with the rest of Hanami: power, fullscreen, screensaver, monitors
+
+- [ ] 4.1 Per pet, its current monitor decides: a fullscreen app there (`CoverageProbe`) → hide
+      that pet; that monitor's mode `paused` (from `ModeResolver`: manual pause, battery rules,
+      maximized rule) → freeze on the current frame, still visible; `reduced` → 15 fps cap.
+      Screensaver showing → hide all pets (never above it) and restore them where they were when it
+      ends. Session locked → hide all, stop the timer.
+- [ ] 4.2 Multi-monitor: the world is the union of all monitors; pets walk across where work areas
+      touch and fall onto a lower monitor's floor; a pet outside every monitor (monitor unplugged,
+      resolution change) respawns falling on the primary. Per-monitor DPI: when a pet crosses to a
+      monitor with another scale, resize its window explicitly (don't rely on WPF's automatic
+      DPI-change resize for a layered window). Unit-test the world maths with two monitors at
+      different DPI; real check on this laptop's single screen, and note the external-monitor check
+      for the user's other laptop.
+- [ ] 4.3 Resume from sleep and Explorer restarts (`TaskbarCreated` registered message): re-read
+      work areas and rescan; pets fall to the new floor.
+- [ ] 4.4 Check: screensaver preview with pets out → none over it, back in place after; manual
+      pause → pets freeze; fullscreen video in a browser → that monitor's pets vanish and come back.
+      Commit.
+
+Notes:
+
+## Phase 5 — Character and polish
+
+- [ ] 5.1 Chase the mouse: now and then (more often with `lively`) a pet walks or runs towards the
+      cursor along its current floor and stops next to it (ChaseMouse frames if the pack has them).
+- [ ] 5.2 Reactions: click → React (Pinched frames) with a few small hearts drawn inside the same
+      pet window (no extra window); a pet dragged around for a while sprawls dizzily after landing.
+- [ ] 5.3 Settings UI: card "Behaviour" — Size slider (`scale`), Activity segmented (Calm · Normal ·
+      Lively), Climb windows toggle, master "Show pets" toggle; each pet row gets "Call here" (falls
+      from above the centre of the primary monitor) and capability chips (Climbs · Ceiling · Sits).
+      Pack rename. Check at 1000×680 and 820×560, light and dark.
+- [ ] 5.4 README (pets section, where to find packs, licences belong to the pack authors),
+      CONTRACTS final pass, a pets section in `docs/TESTING.md`. Commit.
+
+Notes:
+
+## Phase 6 — Ship
+
+- [ ] 6.1 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
       (`--dev --startup`, no debug port), commit, tell the user `dist\Hanami.exe` is updated.
