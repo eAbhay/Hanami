@@ -443,7 +443,7 @@ public sealed class HanamiHost
         }
         else
         {
-            var dlg = new OpenFileDialog { Title = "Import a Shimeji .zip", Multiselect = true, Filter = "Zip files|*.zip" };
+            var dlg = new OpenFileDialog { Title = "Import a Shimeji .zip", Multiselect = true, Filter = "Zip files (*.zip)|*.zip|All files (*.*)|*.*" };
             if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
             var files = dlg.FileNames;
             work = () =>
@@ -557,7 +557,7 @@ public sealed class HanamiHost
 
     private async Task<JsonNode> ImportPackAsync()
     {
-        var dlg = new OpenFileDialog { Title = "Import Hanami pack", Filter = $"Hanami pack|*{PackService.Extension}" };
+        var dlg = new OpenFileDialog { Title = "Import Hanami pack", Filter = $"Hanami pack (*{PackService.Extension})|*{PackService.Extension}|All files (*.*)|*.*" };
         if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
 
         var progress = ThrottledProgress("importPack");
