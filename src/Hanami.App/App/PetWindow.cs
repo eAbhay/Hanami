@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -56,13 +56,13 @@ public sealed class PetWindow : Window
         _hwnd = new WindowInteropHelper(this).EnsureHandle();
         Win32.SetExStyle(_hwnd, Win32.GetExStyle(_hwnd) | Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE);
 
-        MouseLeftButtonDown += (_, e) => { CaptureMouse(); Pressed?.Invoke(Cursor()); e.Handled = true; };
-        MouseMove += (_, e) => { if (IsMouseCaptured && e.LeftButton == MouseButtonState.Pressed) Moved?.Invoke(Cursor()); };
-        MouseLeftButtonUp += (_, e) => { if (IsMouseCaptured) { ReleaseMouseCapture(); Released?.Invoke(Cursor()); } e.Handled = true; };
+        MouseLeftButtonDown += (_, e) => { CaptureMouse(); Pressed?.Invoke(CursorPos()); e.Handled = true; };
+        MouseMove += (_, e) => { if (IsMouseCaptured && e.LeftButton == MouseButtonState.Pressed) Moved?.Invoke(CursorPos()); };
+        MouseLeftButtonUp += (_, e) => { if (IsMouseCaptured) { ReleaseMouseCapture(); Released?.Invoke(CursorPos()); } e.Handled = true; };
         MouseRightButtonUp += (_, e) => { RightClicked?.Invoke(); e.Handled = true; };
     }
 
-    private static Win32.POINT Cursor()
+    private static Win32.POINT CursorPos()
     {
         Win32.GetCursorPos(out var p);
         return p;
@@ -70,7 +70,7 @@ public sealed class PetWindow : Window
 
     /// <summary>
     /// Draws <paramref name="frame"/> (mirrored when <paramref name="flip"/>) in the physical rectangle; does nothing
-    /// when nothing changed. <paramref name="hearts"/> is 0–1 while small hearts rise inside the window (a click), else −1.
+    /// when nothing changed. <paramref name="hearts"/> is 0â€“1 while small hearts rise inside the window (a click), else âˆ’1.
     /// </summary>
     public void Present(BitmapSource frame, bool flip, int x, int y, int w, int h, double hearts = -1)
     {

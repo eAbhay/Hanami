@@ -387,5 +387,8 @@ Notes:
 
 ## Phase 8 — Ship
 
-- [ ] 8.1 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
+- [x] 8.1 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
       (`--dev --startup`, no debug port), commit, tell the user `dist\Hanami.exe` is updated.
+
+Notes:
+- Done 2026-11-01: 159 tests pass, `dist\Hanami.exe` (72.7 MB) rebuilt, dev copy relaunched with `--dev --startup`.
