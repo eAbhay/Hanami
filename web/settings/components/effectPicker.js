@@ -26,6 +26,7 @@ export function effectPicker({ onSelect, onTune, allowSameAsDesktop = false, ari
   const grid = h("div.preset-grid", { role: "radiogroup", "aria-label": ariaLabel });
   let presets = Object.keys(GLYPH).map((id) => ({ id, name: cap(id), description: "" }));
   let selected;   // preset id, or null for "same as desktop"
+  let sameDetail = "";
 
   function tile(id, name, description, art, gear) {
     const t = h("div.tile", { role: "radio", tabindex: 0, "data-id": id ?? "", "aria-checked": "false", title: description || name,
@@ -46,6 +47,7 @@ export function effectPicker({ onSelect, onTune, allowSameAsDesktop = false, ari
       allowSameAsDesktop ? tile(null, "Same as desktop", "Use whatever effect the desktop wallpaper shows", h("div.tile-art.art-same", svg("monitors")), false) : null,
       ...presets.map((p) => tile(p.id, p.name, p.description, art(p.id), p.id !== "none"))].filter(Boolean));
     if (selected !== undefined) grid.set(selected);
+    if (sameDetail) grid.setSameDetail(presets.find((p) => p.name === sameDetail)?.id ?? sameDetail.toLowerCase());
   }
 
   function choose(id) {
@@ -53,6 +55,13 @@ export function effectPicker({ onSelect, onTune, allowSameAsDesktop = false, ari
     grid.set(id);
     onSelect(id);
   }
+
+  /** Names the effect "Same as desktop" resolves to (allowSameAsDesktop only). */
+  grid.setSameDetail = (presetId) => {
+    sameDetail = presets.find((p) => p.id === presetId)?.name ?? (presetId ? cap(presetId) : "");
+    const t = grid.querySelector('[data-id=""] .tile-name');
+    if (t) t.textContent = sameDetail ? `Same as desktop · ${sameDetail}` : "Same as desktop";
+  };
 
   grid.set = (id) => {
     selected = id;

@@ -38,15 +38,15 @@ public sealed class EffectSettingsTests : IDisposable
     {
         var s = SettingsStore.Load(Write(OldShape));
 
-        Assert.Equal("snow", s.Assignments["*"].EffectPreset);
+        Assert.Equal("snow", s.Looks["builtin:night"].Desktop.EffectPreset);
         Assert.Equal("builtin:night", s.Assignments["*"].WallpaperId);
         Assert.Equal(2.0, (double?)s.Effects["snow"]["density"]);
         Assert.Equal("wind", (string?)s.Effects["snow"]["interaction"]);
         Assert.False(s.Effects["snow"].ContainsKey("preset"));
-        Assert.Equal("rain", s.Assignments["MON"].EffectPreset);
+        Assert.Equal("rain", s.Looks["builtin:dawn"].Desktop.EffectPreset);
         Assert.Equal(0.5, (double?)s.Effects["rain"]["wind"]);
         Assert.Equal(3, s.Screensaver.IdleMinutes);
-        Assert.Null(s.Screensaver.EffectPreset);
+        Assert.Null(s.Looks["builtin:night"].Screensaver.EffectPreset);
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public sealed class EffectSettingsTests : IDisposable
         Assert.Equal(0.5, (double?)store.Current.Effects["snow"]["density"]);   // existing overrides win
         var written = JsonNode.Parse(File.ReadAllText(path))!;
         Assert.Null(written["assignments"]!["*"]!["effect"]);
-        Assert.Equal("snow", (string?)written["assignments"]!["*"]!["effectPreset"]);
+        Assert.Equal("snow", (string?)written["looks"]!["builtin:twilight"]!["desktop"]!["effectPreset"]);
     }
 
     [Fact]
@@ -74,9 +74,9 @@ public sealed class EffectSettingsTests : IDisposable
             { "assignments": { "*": { "effectPreset": "lasers" } }, "effects": { "lasers": { "density": 3 } },
               "screensaver": { "effectPreset": "lasers" } }
             """));
-        Assert.Equal("sakura", s.Assignments["*"].EffectPreset);
+        Assert.Equal("sakura", s.Looks["builtin:twilight"].Desktop.EffectPreset);
         Assert.Empty(s.Effects);
-        Assert.Null(s.Screensaver.EffectPreset);
+        Assert.Null(s.Looks["builtin:twilight"].Screensaver.EffectPreset);
     }
 
     [Fact]
@@ -96,18 +96,20 @@ public sealed class EffectSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Screensaver_UsesOwnPreset_OrTheMonitorsDesktopOne()
+    public void Screensaver_UsesOwnPreset_OrTheBackgroundsDesktopOne()
     {
         var s = new AppSettings { SameOnAllMonitors = false };
-        s.Assignments["*"].EffectPreset = "snow";
-        s.Assignments["MON"] = new Assignment { EffectPreset = "leaves" };
+        s.Assignments["*"].WallpaperId = "A";
+        s.Assignments["MON"] = new Assignment { WallpaperId = "B" };
+        s.Looks["A"] = new LookSettings { Desktop = { EffectPreset = "snow" } };
+        s.Looks["B"] = new LookSettings { Desktop = { EffectPreset = "leaves" } };
         s.Effects["leaves"] = new JsonObject { ["speed"] = 2.0 };
 
         Assert.Equal("leaves", (string?)s.DesktopEffectFor("MON")["preset"]);
         Assert.Equal("leaves", (string?)s.ScreensaverEffectFor("MON")["preset"]);
         Assert.Equal("snow", (string?)s.ScreensaverEffectFor("OTHER")["preset"]);
 
-        s.Screensaver.EffectPreset = "embers";
+        s.Looks["B"].Screensaver.EffectPreset = "embers";
         Assert.Equal("embers", (string?)s.ScreensaverEffectFor("MON")["preset"]);
         Assert.False(s.ScreensaverEffectFor("MON").ContainsKey("speed"));   // tuning belongs to the preset
         Assert.Equal("leaves", (string?)s.DesktopEffectFor("MON")["preset"]);
@@ -131,21 +133,21 @@ public sealed class EffectSettingsTests : IDisposable
     }
 
     [Fact]
-    public void V1File_DropsStoredClickBurst_AndBecomesV2()
+    public void V1File_DropsStoredClickBurst_AndIsMigratedToCurrent()
     {
         var path = Write("""
             { "effects": { "snow": { "density": 2, "clickBurst": true }, "rain": { "clickBurst": false } } }
             """);
         var store = new SettingsStore(path);
 
-        Assert.Equal(2, store.Current.SettingsVersion);
+        Assert.Equal(AppSettings.CurrentVersion, store.Current.SettingsVersion);
         Assert.False(store.Current.Effects["snow"].ContainsKey("clickBurst"));
         Assert.Equal(2.0, (double?)store.Current.Effects["snow"]["density"]);
         Assert.False(store.Current.Effects["rain"].ContainsKey("clickBurst"));
 
         store.Save();
         var written = JsonNode.Parse(File.ReadAllText(path))!;
-        Assert.Equal(2, (int?)written["settingsVersion"]);
+        Assert.Equal(AppSettings.CurrentVersion, (int?)written["settingsVersion"]);
         Assert.Null(written["effects"]!["snow"]!["clickBurst"]);
     }
 
@@ -156,7 +158,7 @@ public sealed class EffectSettingsTests : IDisposable
             { "settingsVersion": 2, "effects": { "snow": { "clickBurst": true } } }
             """));
         Assert.True((bool?)s.Effects["snow"]["clickBurst"]);
-        Assert.Equal(2, s.SettingsVersion);
+        Assert.Equal(AppSettings.CurrentVersion, s.SettingsVersion);
     }
 
     [Fact]
@@ -172,12 +174,12 @@ public sealed class EffectSettingsTests : IDisposable
     }
 
     [Fact]
-    public void Patch_CanSetAndClearScreensaverEffect()
+    public void SetLook_CanSetAndClearScreensaverEffect()
     {
         var store = new SettingsStore(Path.Combine(_dir, "config", "settings.json"));
-        store.Patch(JsonNode.Parse("""{"screensaver":{"effectPreset":"embers"}}""")!.AsObject());
-        Assert.Equal("embers", store.Current.Screensaver.EffectPreset);
-        store.Patch(JsonNode.Parse("""{"screensaver":{"effectPreset":null}}""")!.AsObject());
-        Assert.Null(store.Current.Screensaver.EffectPreset);
+        store.SetLook("builtin:twilight", JsonNode.Parse("""{"screensaver":{"effectPreset":"embers"}}""")!.AsObject());
+        Assert.Equal("embers", store.Current.Looks["builtin:twilight"].Screensaver.EffectPreset);
+        store.SetLook("builtin:twilight", JsonNode.Parse("""{"screensaver":{"effectPreset":null}}""")!.AsObject());
+        Assert.Null(store.Current.Looks["builtin:twilight"].Screensaver.EffectPreset);
     }
 }

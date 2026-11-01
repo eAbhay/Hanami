@@ -9,17 +9,19 @@ export function createWallpapersTab(ctx) {
   const importBtn = h("button.btn.primary", { type: "button", onclick: doImport }, svg("upload"), h("span", "Import video / image"));
 
   const backgrounds = wallpaperPicker(ctx, { manage: true, onSelect: apply, onImport: doImport });
+  const currentId = () => ctx.assignmentFor(ctx.scopeKey()).wallpaperId;
   const effects = effectPicker({
-    onSelect: (preset) => ctx.assign({ effect: { preset } }).catch(() => {}),
-    onTune: (preset) => ctx.openTuning(preset, { wallpaperId: ctx.assignmentFor(ctx.scopeKey()).wallpaperId }),
+    onSelect: (preset) => { const id = currentId(); if (id) return ctx.setLook(id, { desktop: { effectPreset: preset } }).catch(() => {}); },
+    onTune: (preset) => ctx.openTuning(preset, { wallpaperId: currentId(), target: "desktop" }),
   });
+  const effectNote = h("span.card-meta", "Use the gear to tune an effect");
 
   const el = h("section",
     pageHeader("Wallpaper", "Pick a background and an effect. Click a card to apply it.", importBtn),
     scope,
     progress,
     card("Background", null, backgrounds.el),
-    card("Effect", "Use the gear to tune an effect", effects));
+    card("Effect", effectNote, effects));
 
   ctx.on("progress", (p) => {
     if (p?.task !== "import") return;
@@ -46,7 +48,7 @@ export function createWallpapersTab(ctx) {
   async function apply(w) {
     const key = ctx.scopeKey();
     if (ctx.assignmentFor(key).wallpaperId === w.id) return;
-    await ctx.assign({ wallpaperId: w.id });
+    await ctx.assign(w.id);
     ctx.toast(`${w.name} applied ${key === "*" ? "to all monitors" : `to ${ctx.monitorName(key)}`}`, "success", 2200);
   }
 
@@ -54,7 +56,9 @@ export function createWallpapersTab(ctx) {
     scope.update(s);
     const a = ctx.assignmentFor(ctx.scopeKey());
     backgrounds.update(s, a.wallpaperId);
-    effects.set(a.effectPreset);
+    effects.set(ctx.lookFor(a.wallpaperId).desktop.effectPreset);
+    const w = ctx.wallpaper(a.wallpaperId);
+    effectNote.textContent = w ? `Saved with ${w.name} · gear tunes it` : "Use the gear to tune an effect";
   }
 
   return { el, update, hide: backgrounds.hide };

@@ -55,7 +55,13 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
     if (isBuiltin(w)) return SCENE_BLURB[w.id.split(":")[1]] ?? "Animated scene";
     return [w.type === "video" ? formatDuration(w.durationSec) : "", resLabel(w.width, w.height)].filter(Boolean).join(" · ") || TYPE_LABEL[w.type];
   };
-  const cardSig = (w) => [w.name, w.thumbnail ?? "", thumbnailFailed(w.id), w.durationSec, w.width, w.height, w.sizeBytes].join("|");
+  // What comes back when this wallpaper is applied: the effect of its look (none until it has one).
+  const fxName = (w) => {
+    const p = ctx.state.settings.looks?.[w.id]?.desktop?.effectPreset;
+    return !p ? "" : p === "none" ? "No effect" : p[0].toUpperCase() + p.slice(1);
+  };
+  const fxBadge = (w) => (fxName(w) ? h("span.badge.badge-fx", { title: "Effect saved with this wallpaper" }, fxName(w)) : null);
+  const cardSig = (w) => [fxName(w), w.name, w.thumbnail ?? "", thumbnailFailed(w.id), w.durationSec, w.width, w.height, w.sizeBytes].join("|");
 
   function buildCard(w) {
     const menuBtn = h("button.icon-btn.card-menu", { type: "button", title: "More options", "aria-label": `More options for ${w.name}`,
@@ -66,6 +72,7 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
       h("div.thumb-wrap",
         thumbFor(w),
         h(`span.badge.badge-${w.type}`, TYPE_LABEL[w.type] ?? w.type),
+        fxBadge(w),
         h("span.applied-mark", { title: "Applied" }, svg("check"))),
       h("div.card-body",
         h("div.card-text", h("div.card-title", { title: w.name }, w.name),

@@ -129,9 +129,8 @@ public sealed class ScreensaverManager : IDisposable
             foreach (var m in Monitors.Enumerate())
             {
                 var view = await WallpaperView.CreateScreensaverAsync(_env, m, _paths);
-                var desktop = s.AssignmentFor(m.Key);
-                var wallpaper = _library.Resolve(s.Screensaver.WallpaperId ?? desktop.WallpaperId);
-                view.SendConfig(wallpaper, s.ScreensaverEffectFor(m.Key), fps, new FontLibrary(_library).ClockMessage(s.Screensaver.Clock));
+                var wallpaper = _library.Resolve(s.ScreensaverWallpaperFor(m.Key));
+                view.SendConfig(wallpaper, s.ScreensaverEffectFor(m.Key), fps, new FontLibrary(_library).ClockMessage(s.ScreensaverClockFor(m.Key)));
                 await view.SetModeAsync(new ResolvedMode(Mode.Full, "Screensaver", false));
                 view.MessageReceived += OnPageMessage;
                 _views.Add(view);

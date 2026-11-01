@@ -140,15 +140,15 @@ function initialState() {
     libraryDir: LIB,
     settings: {
       sameOnAllMonitors: true,
-      assignments: { "*": { wallpaperId: "builtin:twilight", effectPreset: "sakura" } },
-      effects: {},   // per-effect overrides, e.g. { snow: { density: 2 } }
+      assignments: { "*": { wallpaperId: "builtin:twilight" } },
+      effects: {},   // effect defaults: per-effect overrides, e.g. { snow: { density: 2 } }
+      looks: {},     // per wallpaper: { desktop: { effectPreset, tuning }, screensaver: { effectPreset | absent, tuning, clock } }
       power: {
         onAC: "full", onBattery: "paused", lowBattery: "paused", lowBatteryThreshold: 20,
         energySaver: "reduced", whenMaximized: "paused", whenFullscreen: "paused",
       },
       performance: { fpsCap: 60, batteryFpsCap: 30 },
-      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, effectPreset: null, requireSignIn: false, stopAfterHours: 0,
-        clock: { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true } },
+      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, stopAfterHours: 0 },
       startWithWindows: true,
       paused: false,
     },
@@ -165,6 +165,10 @@ function initialState() {
 }
 
 const RANK = { paused: 0, reduced: 1, full: 2 };
+const defaultLook = () => ({
+  desktop: { effectPreset: "sakura", tuning: {} },
+  screensaver: { tuning: {}, clock: { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true } },
+});
 
 export function createMockHost(post) {
   const state = initialState();
@@ -209,6 +213,7 @@ export function createMockHost(post) {
   const emit = (event, data) => setTimeout(() => post({ event, data: clone(data) }), 0);
   const emitState = () => emit("stateChanged", snapshot());
   const findWp = (id) => state.wallpapers.find((w) => w.id === id);
+  const lookOf = (id) => state.settings.looks[id] ?? defaultLook();
 
   async function progress(task, steps, labelFor) {
     for (let i = 0; i <= steps; i++) {
@@ -239,33 +244,59 @@ export function createMockHost(post) {
 
     updateSettings: (patch) => {
       if (!isObj(patch)) throw new Error("updateSettings expects an object");
+      const prevBackground = state.settings.screensaver.wallpaperId ?? state.settings.assignments["*"].wallpaperId;
       deepMerge(state.settings, patch);
       const ss = state.settings.screensaver;
       ss.idleMinutes = Math.min(120, Math.max(1, Math.round(ss.idleMinutes)));
-      const ck = ss.clock;
-      ck.x = Math.min(1, Math.max(0, ck.x)); ck.y = Math.min(1, Math.max(0, ck.y));
-      ck.size = Math.min(1.6, Math.max(0.5, ck.size));
+      if (ss.wallpaperId && !state.settings.looks[ss.wallpaperId]) {   // a new background brings the previous one's screensaver look
+        const look = defaultLook();
+        look.screensaver = clone(lookOf(prevBackground).screensaver);
+        state.settings.looks[ss.wallpaperId] = look;
+      }
       emitState();
       return snapshot();
     },
 
-    setAssignment: ({ monitorKey, wallpaperId, effectPreset } = {}) => {
+    setAssignment: ({ monitorKey, wallpaperId } = {}) => {
       if (monitorKey !== "*" && !state.monitors.some((m) => m.key === monitorKey)) throw new Error(`Unknown monitor ${monitorKey}`);
       if (wallpaperId !== undefined && wallpaperId !== null && !findWp(wallpaperId)) throw new Error("That wallpaper no longer exists");
       const a = state.settings.assignments;
-      const cur = a[monitorKey] ?? clone(a["*"]) ?? { wallpaperId: null, effectPreset: "sakura" };
+      const cur = a[monitorKey] ?? clone(a["*"]) ?? { wallpaperId: null };
+      if (wallpaperId && !state.settings.looks[wallpaperId]) state.settings.looks[wallpaperId] = clone(lookOf(cur.wallpaperId));   // starts from the look it replaces
       if (wallpaperId !== undefined) cur.wallpaperId = wallpaperId;
-      if (effectPreset) cur.effectPreset = effectPreset;
       a[monitorKey] = cur;
       emitState();
       return snapshot();
     },
 
-    setEffectTuning: ({ preset, tuning } = {}) => {
+    setLook: ({ wallpaperId, desktop, screensaver } = {}) => {
+      if (!wallpaperId) throw new Error("Missing wallpaperId");
+      const look = (state.settings.looks[wallpaperId] ??= defaultLook());
+      if (desktop) deepMerge(look.desktop, desktop);
+      if (screensaver) {
+        const { effectPreset, clock, ...rest } = screensaver;
+        deepMerge(look.screensaver, rest);
+        if ("effectPreset" in screensaver) { if (effectPreset) look.screensaver.effectPreset = effectPreset; else delete look.screensaver.effectPreset; }
+        if (clock) {
+          deepMerge(look.screensaver.clock, clock);
+          const ck = look.screensaver.clock;
+          ck.x = Math.min(1, Math.max(0, ck.x)); ck.y = Math.min(1, Math.max(0, ck.y));
+          ck.size = Math.min(1.6, Math.max(0.5, ck.size));
+        }
+      }
+      emitState();
+      return snapshot();
+    },
+
+    setEffectTuning: ({ preset, tuning, wallpaperId, target = "desktop" } = {}) => {
       if (!preset) throw new Error("Missing preset");
-      const fx = state.settings.effects;
-      if (tuning === null) delete fx[preset];
-      else fx[preset] = { ...(fx[preset] ?? {}), ...tuning };
+      let bag = state.settings.effects;
+      if (wallpaperId) {
+        const look = (state.settings.looks[wallpaperId] ??= defaultLook());
+        bag = target === "screensaver" && look.screensaver.effectPreset ? look.screensaver.tuning : look.desktop.tuning;
+      }
+      if (tuning === null) delete bag[preset];
+      else bag[preset] = { ...(bag[preset] ?? {}), ...tuning };
       emitState();
       return snapshot();
     },
@@ -301,6 +332,7 @@ export function createMockHost(post) {
       state.wallpapers = state.wallpapers.filter((x) => x.id !== id);
       for (const a of Object.values(state.settings.assignments)) if (a.wallpaperId === id) a.wallpaperId = null;
       if (state.settings.screensaver.wallpaperId === id) state.settings.screensaver.wallpaperId = null;
+      delete state.settings.looks[id];
       emitState();
       return snapshot();
     },
@@ -373,7 +405,7 @@ export function createMockHost(post) {
 
     deleteFont: ({ id }) => {
       importedFonts = importedFonts.filter((f) => f.id !== id);
-      if (state.settings.screensaver.clock.font === `library:${id}`) state.settings.screensaver.clock.font = null;
+      for (const look of Object.values(state.settings.looks)) if (look.screensaver.clock.font === `library:${id}`) look.screensaver.clock.font = null;
       emitState();
       return snapshot();
     },

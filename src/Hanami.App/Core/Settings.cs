@@ -10,7 +10,7 @@ public enum Mode { Paused = 0, Reduced = 1, Full = 2 }
 public sealed class AppSettings
 {
     /// <summary>The settings shape this build writes. Files without the key are version 1.</summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>Bumped by one-time migrations in <see cref="SettingsStore.Normalize"/>.</summary>
     public int SettingsVersion { get; set; } = 1;
@@ -21,10 +21,14 @@ public sealed class AppSettings
     public Dictionary<string, Assignment> Assignments { get; set; } = new() { ["*"] = new Assignment() };
 
     /// <summary>
-    /// The user's tuning overrides per effect preset (keys of EffectConfig minus "preset"). Missing
-    /// keys fall back to that preset's defaults, which live only in web/shared/effects.js.
+    /// The effect defaults: the user's tuning per effect preset (keys of EffectConfig minus "preset"),
+    /// the starting point for wallpapers that haven't tuned that effect themselves. Missing keys fall
+    /// back to that preset's defaults, which live only in web/shared/effects.js.
     /// </summary>
     public Dictionary<string, JsonObject> Effects { get; set; } = new();
+
+    /// <summary>Every wallpaper's own look (desktop effect + tuning, screensaver clock + effect), by wallpaper id.</summary>
+    public Dictionary<string, LookSettings> Looks { get; set; } = new();
 
     public PowerSettings Power { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
@@ -35,34 +39,88 @@ public sealed class AppSettings
     public Assignment AssignmentFor(string monitorKey) =>
         !SameOnAllMonitors && Assignments.TryGetValue(monitorKey, out var a) ? a : Assignments["*"];
 
-    /// <summary>The EffectConfig sent to a page: the preset plus the user's overrides for it (may be partial).</summary>
-    public JsonObject ComposeEffect(string preset)
+    /// <summary>A wallpaper's look, or the built-in default look when it has none (nothing is stored).</summary>
+    public LookSettings LookFor(string? wallpaperId) =>
+        wallpaperId is not null && Looks.TryGetValue(wallpaperId, out var look) ? look : new LookSettings();
+
+    /// <summary>The wallpaper the desktop shows on a monitor.</summary>
+    public string? DesktopWallpaperFor(string monitorKey) => AssignmentFor(monitorKey).WallpaperId;
+
+    /// <summary>The wallpaper the screensaver shows on a monitor: its own, or the desktop's when unset.</summary>
+    public string? ScreensaverWallpaperFor(string monitorKey) => Screensaver.WallpaperId ?? DesktopWallpaperFor(monitorKey);
+
+    /// <summary>
+    /// The EffectConfig sent to a page: the preset plus the user's overrides for it (may be partial).
+    /// Layers, lowest first: the preset's defaults (on the page) → <see cref="Effects"/> → the look's own tuning.
+    /// </summary>
+    public JsonObject ComposeEffect(string preset, JsonObject? lookTuning = null)
     {
         var effect = new JsonObject { ["preset"] = preset };
-        if (Effects.TryGetValue(preset, out var tuning))
-            foreach (var (key, value) in tuning)
-                if (key != "preset") effect[key] = value?.DeepClone();
+        foreach (var layer in new[] { Effects.GetValueOrDefault(preset), lookTuning })
+            if (layer is not null)
+                foreach (var (key, value) in layer)
+                    if (key != "preset") effect[key] = value?.DeepClone();
         return effect;
     }
 
     /// <summary>The effect the desktop shows on a monitor.</summary>
-    public JsonObject DesktopEffectFor(string monitorKey) => ComposeEffect(AssignmentFor(monitorKey).EffectPreset);
+    public JsonObject DesktopEffectFor(string monitorKey)
+    {
+        var d = LookFor(DesktopWallpaperFor(monitorKey)).Desktop;
+        return ComposeEffect(d.EffectPreset, d.Tuning.GetValueOrDefault(d.EffectPreset));
+    }
 
-    /// <summary>The effect the screensaver shows on a monitor: its own preset, or the desktop's when unset.</summary>
-    public JsonObject ScreensaverEffectFor(string monitorKey) =>
-        ComposeEffect(Screensaver.EffectPreset ?? AssignmentFor(monitorKey).EffectPreset);
+    /// <summary>
+    /// The effect the screensaver shows on a monitor: the screensaver background's own screensaver effect,
+    /// or (when unset) its desktop effect with the same tuning.
+    /// </summary>
+    public JsonObject ScreensaverEffectFor(string monitorKey)
+    {
+        var look = LookFor(ScreensaverWallpaperFor(monitorKey));
+        if (look.Screensaver.EffectPreset is { } own) return ComposeEffect(own, look.Screensaver.Tuning.GetValueOrDefault(own));
+        return ComposeEffect(look.Desktop.EffectPreset, look.Desktop.Tuning.GetValueOrDefault(look.Desktop.EffectPreset));
+    }
+
+    /// <summary>The clock the screensaver shows on a monitor (its background's own).</summary>
+    public ClockSettings ScreensaverClockFor(string monitorKey) => LookFor(ScreensaverWallpaperFor(monitorKey)).Screensaver.Clock;
 }
 
 public sealed class Assignment
 {
     public string? WallpaperId { get; set; } = "builtin:twilight";
 
-    /// <summary>Which effect shows here; its settings come from <see cref="AppSettings.Effects"/>.</summary>
-    public string EffectPreset { get; set; } = EffectPresets.Default;
+    /// <summary>Before settings version 3 the effect lived here; it moved to <see cref="AppSettings.Looks"/>. Read only to migrate, never written back.</summary>
+    [JsonPropertyName("effectPreset")]
+    public string? LegacyEffectPreset { get; set; }
 
-    /// <summary>Older files stored the whole effect here. Read only to migrate, then cleared (never written back).</summary>
+    /// <summary>Even older files stored the whole effect here. Read only to migrate, then cleared (never written back).</summary>
     [JsonPropertyName("effect")]
     public JsonObject? LegacyEffect { get; set; }
+}
+
+/// <summary>What one wallpaper looks like on the desktop and as a screensaver background. See docs/CONTRACTS.md.</summary>
+public sealed class LookSettings
+{
+    public DesktopLook Desktop { get; set; } = new();
+    public ScreensaverLook Screensaver { get; set; } = new();
+
+    public LookSettings Clone() => Json.FromNode<LookSettings>(Json.ToNode(this));
+}
+
+public sealed class DesktopLook
+{
+    public string EffectPreset { get; set; } = EffectPresets.Default;
+
+    /// <summary>This wallpaper's slider tuning, kept per preset so switching effects and back keeps each one's sliders.</summary>
+    public Dictionary<string, JsonObject> Tuning { get; set; } = new();
+}
+
+public sealed class ScreensaverLook
+{
+    /// <summary>null = same as the desktop effect, sharing its tuning.</summary>
+    public string? EffectPreset { get; set; }
+    public Dictionary<string, JsonObject> Tuning { get; set; } = new();
+    public ClockSettings Clock { get; set; } = new();
 }
 
 public sealed class PowerSettings
@@ -135,14 +193,25 @@ public sealed class SettingsStore
         Save();
     }
 
-    /// <summary>Merges <paramref name="tuning"/> into a preset's overrides; null resets the preset to its defaults.</summary>
-    public AppSettings SetEffectTuning(string preset, JsonObject? tuning)
+    /// <summary>
+    /// Merges <paramref name="tuning"/> into a preset's overrides; null resets that level to its defaults.
+    /// Without a wallpaper this edits the effect defaults; with one, that wallpaper's look
+    /// (<paramref name="target"/> "desktop" or "screensaver"; a screensaver effect that is "same as
+    /// desktop" shares the desktop tuning, so that is what gets edited).
+    /// </summary>
+    public AppSettings SetEffectTuning(string preset, JsonObject? tuning, string? wallpaperId = null, string target = "desktop")
     {
         if (!EffectPresets.IsValid(preset)) throw new ArgumentException($"Unknown effect '{preset}'");
-        if (tuning is null) Current.Effects.Remove(preset);
+        var bag = Current.Effects;
+        if (wallpaperId is not null)
+        {
+            var look = GetOrCreateLook(wallpaperId);
+            bag = target == "screensaver" && look.Screensaver.EffectPreset is not null ? look.Screensaver.Tuning : look.Desktop.Tuning;
+        }
+        if (tuning is null) bag.Remove(preset);
         else
         {
-            if (!Current.Effects.TryGetValue(preset, out var existing)) Current.Effects[preset] = existing = new JsonObject();
+            if (!bag.TryGetValue(preset, out var existing)) bag[preset] = existing = new JsonObject();
             Json.DeepMerge(existing, tuning);
         }
         Current = Normalize(Current);
@@ -150,16 +219,91 @@ public sealed class SettingsStore
         return Current;
     }
 
+    /// <summary>
+    /// Shows <paramref name="wallpaperId"/> on a monitor's desktop. A wallpaper without a look yet starts
+    /// from a copy of the look of the wallpaper it replaces, so nothing suddenly changes.
+    /// </summary>
+    public AppSettings SetAssignment(string monitorKey, string? wallpaperId)
+    {
+        if (monitorKey != "*" && !Current.Assignments.ContainsKey(monitorKey))
+            Current.Assignments[monitorKey] = new Assignment { WallpaperId = Current.Assignments["*"].WallpaperId };
+        var assignment = Current.Assignments[monitorKey];
+        if (wallpaperId is not null && !Current.Looks.ContainsKey(wallpaperId))
+            Current.Looks[wallpaperId] = Current.LookFor(assignment.WallpaperId).Clone();
+        assignment.WallpaperId = wallpaperId;
+        Current = Normalize(Current);
+        Save();
+        return Current;
+    }
+
+    /// <summary>
+    /// Call after the screensaver background changed from <paramref name="previousId"/>: a wallpaper
+    /// without a look gets the previous background's screensaver look (clock and effect).
+    /// </summary>
+    public void EnsureScreensaverLook(string? previousId)
+    {
+        if (Current.Screensaver.WallpaperId is not { } id || Current.Looks.ContainsKey(id)) return;
+        Current.Looks[id] = new LookSettings { Screensaver = Current.LookFor(previousId).Clone().Screensaver };
+        Current = Normalize(Current);
+        Save();
+    }
+
+    /// <summary>Applies a partial look (same shape as the JSON; <c>screensaver.effectPreset: null</c> = same as desktop).</summary>
+    public AppSettings SetLook(string wallpaperId, JsonObject patch)
+    {
+        var node = (JsonObject)Json.ToNode(GetOrCreateLook(wallpaperId))!;
+        Json.DeepMerge(node, patch);
+        // The look is written without nulls, so DeepMerge's explicit null can't clear a preset.
+        if (node["screensaver"] is JsonObject ss && ss.ContainsKey("effectPreset") && ss["effectPreset"] is null)
+            ss.Remove("effectPreset");
+        Current.Looks[wallpaperId] = Json.FromNode<LookSettings>(node);
+        Current = Normalize(Current);
+        Save();
+        return Current;
+    }
+
+    /// <summary>Forgets looks of wallpapers that no longer exist (built-ins always exist).</summary>
+    public void PruneLooks(Func<string, bool> exists)
+    {
+        var gone = Current.Looks.Keys.Where(id => !Library.IsBuiltin(id) && !exists(id)).ToList();
+        if (gone.Count == 0) return;
+        foreach (var id in gone) Current.Looks.Remove(id);
+        Save();
+    }
+
+    public void RemoveLook(string wallpaperId)
+    {
+        if (Current.Looks.Remove(wallpaperId)) Save();
+    }
+
+    private LookSettings GetOrCreateLook(string wallpaperId)
+    {
+        if (!Current.Looks.TryGetValue(wallpaperId, out var look)) Current.Looks[wallpaperId] = look = new LookSettings();
+        return look;
+    }
+
     public void Save() => Json.WriteFileAtomic(_path, JsonSerializer.Serialize(Current, Json.FileOptions));
 
-    private static void NormalizeClock(ScreensaverSettings ss)
+    private static ClockSettings NormalizeClock(ClockSettings? c)
     {
-        var c = ss.Clock ??= new ClockSettings();
+        c ??= new ClockSettings();
         c.X = Finite(c.X, ClockSettings.DefaultX, 0, 1);
         c.Y = Finite(c.Y, ClockSettings.DefaultY, 0, 1);
         c.Size = Finite(c.Size, 1, 0.5, 1.6);
         if (c.DateFont is not ("system" or "same")) c.DateFont = "system";
         if (!FontLibrary.IsValidSetting(c.Font)) c.Font = null;
+        return c;
+    }
+
+    private static Dictionary<string, JsonObject> NormalizeTuning(Dictionary<string, JsonObject>? tuning)
+    {
+        tuning ??= new();
+        foreach (var key in tuning.Keys.ToList())
+        {
+            if (!EffectPresets.IsValid(key) || tuning[key] is null) { tuning.Remove(key); continue; }
+            tuning[key].Remove("preset");
+        }
+        return tuning;
     }
 
     private static double Finite(double v, double fallback, double lo, double hi) =>
@@ -176,10 +320,10 @@ public sealed class SettingsStore
         {
             if (a.LegacyEffect is { } legacy)
             {
-                // Older files: keep the preset, and its tuning unless one is already set.
+                // Oldest files: keep the preset, and its tuning unless one is already set.
                 if (legacy["preset"] is JsonValue pv && pv.TryGetValue<string>(out var lp) && EffectPresets.IsValid(lp))
                 {
-                    a.EffectPreset = lp;
+                    a.LegacyEffectPreset = lp;
                     if (!s.Effects.ContainsKey(lp))
                     {
                         var tuning = (JsonObject)legacy.DeepClone();
@@ -189,7 +333,6 @@ public sealed class SettingsStore
                 }
                 a.LegacyEffect = null;
             }
-            if (!EffectPresets.IsValid(a.EffectPreset)) a.EffectPreset = EffectPresets.Default;
         }
         foreach (var key in s.Effects.Keys.ToList())
         {
@@ -202,17 +345,54 @@ public sealed class SettingsStore
             // stored clickBurst is almost always the old default rather than a choice: drop it.
             foreach (var tuning in s.Effects.Values) tuning.Remove("clickBurst");
         }
+        s.Looks ??= new();
+        s.Screensaver ??= new();
+        if (s.SettingsVersion < 3) MigrateToLooks(s);
+        foreach (var a in s.Assignments.Values) a.LegacyEffectPreset = null;
+        s.Screensaver.LegacyEffectPreset = null;
+        s.Screensaver.LegacyClock = null;
+        foreach (var id in s.Looks.Keys.ToList())
+        {
+            var look = s.Looks[id] ??= new LookSettings();
+            look.Desktop ??= new();
+            look.Screensaver ??= new();
+            if (!EffectPresets.IsValid(look.Desktop.EffectPreset)) look.Desktop.EffectPreset = EffectPresets.Default;
+            look.Desktop.Tuning = NormalizeTuning(look.Desktop.Tuning);
+            if (!EffectPresets.IsValid(look.Screensaver.EffectPreset)) look.Screensaver.EffectPreset = null;
+            look.Screensaver.Tuning = NormalizeTuning(look.Screensaver.Tuning);
+            look.Screensaver.Clock = NormalizeClock(look.Screensaver.Clock);
+        }
         s.SettingsVersion = AppSettings.CurrentVersion;
         s.Power ??= new();
         s.Performance ??= new();
-        s.Screensaver ??= new();
-        if (!EffectPresets.IsValid(s.Screensaver.EffectPreset)) s.Screensaver.EffectPreset = null;
         s.Screensaver.IdleMinutes = Math.Clamp(s.Screensaver.IdleMinutes, 1, 120);
         s.Screensaver.StopAfterHours = Math.Clamp(s.Screensaver.StopAfterHours, 0, 48);
-        NormalizeClock(s.Screensaver);
         s.Power.LowBatteryThreshold = Math.Clamp(s.Power.LowBatteryThreshold, 0, 100);
         s.Performance.FpsCap = Math.Clamp(s.Performance.FpsCap, 5, 240);
         s.Performance.BatteryFpsCap = Math.Clamp(s.Performance.BatteryFpsCap, 5, 240);
         return s;
+    }
+
+    /// <summary>
+    /// v3: the effect (per monitor slot) and the screensaver effect + clock moved into each wallpaper's
+    /// look. Nothing visible changes: the global tuning in <see cref="AppSettings.Effects"/> still applies.
+    /// </summary>
+    private static void MigrateToLooks(AppSettings s)
+    {
+        foreach (var a in s.Assignments.Values)
+        {
+            if (a.WallpaperId is not { } w || s.Looks.ContainsKey(w)) continue;
+            var preset = EffectPresets.IsValid(a.LegacyEffectPreset) ? a.LegacyEffectPreset! : EffectPresets.Default;
+            s.Looks[w] = new LookSettings { Desktop = { EffectPreset = preset } };
+        }
+        var backgrounds = s.Screensaver.WallpaperId is { } own
+            ? [own]
+            : s.Assignments.Values.Select(a => a.WallpaperId).OfType<string>().Distinct().ToArray();
+        foreach (var w in backgrounds)
+        {
+            if (!s.Looks.TryGetValue(w, out var look)) s.Looks[w] = look = new LookSettings();
+            if (s.Screensaver.LegacyEffectPreset is not null) look.Screensaver.EffectPreset = s.Screensaver.LegacyEffectPreset;
+            if (s.Screensaver.LegacyClock is { } clock) look.Screensaver.Clock = Json.FromNode<ClockSettings>(Json.ToNode(clock));
+        }
     }
 }

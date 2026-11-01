@@ -6,15 +6,19 @@ public sealed class ScreensaverSettings
     public int IdleMinutes { get; set; } = 2;
     /// <summary>null = each monitor shows its own desktop wallpaper and effect.</summary>
     public string? WallpaperId { get; set; }
-    /// <summary>null = same effect as each monitor's desktop.</summary>
-    public string? EffectPreset { get; set; }
+    /// <summary>Before settings version 3 the screensaver effect lived here; now in each wallpaper's look. Read only to migrate, never written back.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("effectPreset")]
+    public string? LegacyEffectPreset { get; set; }
     public bool RequireSignIn { get; set; }
     /// <summary>0 = never stop on its own.</summary>
     public double StopAfterHours { get; set; }
-    public ClockSettings Clock { get; set; } = new();
+
+    /// <summary>Before settings version 3 the clock lived here; now in each wallpaper's look. Read only to migrate, never written back.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("clock")]
+    public ClockSettings? LegacyClock { get; set; }
 }
 
-/// <summary>Where and how the screensaver clock is drawn (same on every monitor). See docs/CONTRACTS.md.</summary>
+/// <summary>Where and how the screensaver clock is drawn (a wallpaper's own, as a screensaver background). See docs/CONTRACTS.md.</summary>
 public sealed class ClockSettings
 {
     public const double DefaultX = 0.5, DefaultY = 0.31;

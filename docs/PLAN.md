@@ -81,7 +81,7 @@ wallpapers or screensavers back and forth brings each one's settings back. No pr
 
 Contract first, then code:
 
-- [ ] 1.1 `docs/CONTRACTS.md`:
+- [x] 1.1 `docs/CONTRACTS.md`:
   - `type ClockSettings` = today's `screensaver.clock` shape (unchanged fields).
   - `Settings.looks: Record<wallpaperId, { desktop: { effectPreset: PresetId;
     tuning: Partial<Record<PresetId, Partial<EffectTuning>>> };
@@ -100,7 +100,7 @@ Contract first, then code:
     they're shared), without it the effect defaults; `tuning: null` resets that level.
   - Host → page messages unchanged in shape (`config.effect`, `config.clock` are composed by the
     host).
-- [ ] 1.2 Host (`Core/Settings.cs` + composition):
+- [x] 1.2 Host (`Core/Settings.cs` + composition):
   - `LookSettings`, `AppSettings.Looks`; `ComposeEffect(preset, look tuning)`; desktop config =
     look of the monitor's wallpaper; screensaver config = look of the screensaver background
     (`screensaver.wallpaperId ?? desktop wallpaper`): effect = its screensaver effect or, when null,
@@ -119,7 +119,7 @@ Contract first, then code:
     copy-on-first-select, "same as desktop" shares tuning (editing via target screensaver lands in
     desktop tuning), own screensaver effect has separate tuning, layering order, per-preset tuning
     survives switching presets, delete wallpaper removes look, pack round-trip with looks.
-- [ ] 1.3 Settings UI (`web/settings/`):
+- [x] 1.3 Settings UI (`web/settings/`):
   - Wallpaper tab: the Effect card edits the selected wallpaper's desktop look; caption "Saved
     with <wallpaper name>".
   - Screensaver tab: Effect and Clock cards edit the screensaver background's screensaver look
@@ -134,7 +134,7 @@ Contract first, then code:
   - Wallpaper tiles: a tiny effect icon/name on each tile that has a look, so you can see what
     comes back.
   - `mock-bridge.js`: looks, `setLook`, extended `setEffectTuning`.
-- [ ] 1.4 Check: in the real app, wallpaper A + embers tuned to 150% → switch to B, set rain → back
+- [x] 1.4 Check: in the real app, wallpaper A + embers tuned to 150% → switch to B, set rain → back
       to A: embers at 150% is back. Screensaver on A with "same as desktop" → preview shows A's
       embers at 150% and A's clock; move A's clock, switch screensaver background to B, move B's
       clock elsewhere, back to A → A's clock spot is back. Dev settings restored afterwards.
@@ -142,6 +142,10 @@ Contract first, then code:
       settings copy. Commit.
 
 Notes:
+- Done 2026-11-01. 1.4 was checked with the mock bridge in a browser (A's embers tuning and clock come
+  back after visiting B; "same as desktop" label); the real-desktop pass is still for the user.
+- "Use as default" and Reset are in the drawer's Look card; wallpaper tiles show their effect as a
+  small badge. The screensaver tab shows the monitor scope control while its background is "Same as desktop".
 
 ## Phase 2 — Light and dark wallpapers (needs Phase 1)
 

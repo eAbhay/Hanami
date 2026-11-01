@@ -7,7 +7,7 @@ import { createPowerTab } from "./tabs/power.js";
 import { createScreensaverTab } from "./tabs/screensaver.js";
 import { createGeneralTab } from "./tabs/general.js";
 import { createTransferTab } from "./tabs/transfer.js";
-import { FALLBACK_EFFECT } from "./defaults.js";
+import { FALLBACK_EFFECT, DEFAULT_CLOCK } from "./defaults.js";
 import { statusPill, createTuningDrawer } from "./components/index.js";
 import { loadEffects } from "./effects-module.js";
 
@@ -49,40 +49,66 @@ const ctx = {
     return selectedMonitor ?? "*";
   },
 
-  /** Full EffectConfig for a preset: contract fallback < the preset's defaults < the user's overrides. */
-  effectFor(preset) {
-    return { ...FALLBACK_EFFECT, ...(presetDefaults[preset] ?? {}), ...(state?.settings.effects?.[preset] ?? {}), preset };
+  /** Full EffectConfig for a preset: contract fallback < the preset's defaults < the effect defaults
+   *  (settings.effects) < `tuning`, a look's own overrides for it. */
+  effectFor(preset, tuning = null) {
+    return { ...FALLBACK_EFFECT, ...(presetDefaults[preset] ?? {}), ...(state?.settings.effects?.[preset] ?? {}), ...(tuning ?? {}), preset };
   },
 
-  /** Effective {wallpaperId, effectPreset, effect} for a key (falls back to "*"). */
+  /** A wallpaper's look; the built-in default for a wallpaper that has none yet (nothing is stored for it). */
+  lookFor(wallpaperId) {
+    const l = state?.settings.looks?.[wallpaperId] ?? {};
+    return {
+      desktop: { effectPreset: l.desktop?.effectPreset ?? FALLBACK_EFFECT.preset, tuning: l.desktop?.tuning ?? {} },
+      screensaver: {
+        effectPreset: l.screensaver?.effectPreset ?? null,   // null = same as desktop
+        tuning: l.screensaver?.tuning ?? {},
+        clock: { ...DEFAULT_CLOCK, ...(l.screensaver?.clock ?? {}) },
+      },
+    };
+  },
+
+  /** The tuning overrides a look keeps for `preset` on `target`. A screensaver effect that is "same as
+   *  desktop" shares the desktop's tuning. */
+  lookTuning(wallpaperId, preset, target = "desktop") {
+    const look = ctx.lookFor(wallpaperId);
+    const own = target === "screensaver" && look.screensaver.effectPreset !== null;
+    return (own ? look.screensaver.tuning : look.desktop.tuning)[preset] ?? null;
+  },
+
+  /** Effective {wallpaperId} for a key (falls back to "*"). */
   assignmentFor(key) {
     const a = state?.settings.assignments ?? {};
-    const x = a[key] ?? a["*"] ?? { wallpaperId: null, effectPreset: FALLBACK_EFFECT.preset };
-    const effectPreset = x.effectPreset ?? FALLBACK_EFFECT.preset;
-    return { wallpaperId: x.wallpaperId ?? null, effectPreset, effect: ctx.effectFor(effectPreset) };
+    const x = a[key] ?? a["*"] ?? { wallpaperId: null };
+    return { wallpaperId: x.wallpaperId ?? null };
   },
 
-  /** Edits for the current scope. `effect.preset` picks the effect for that key; any other effect
-   *  keys are tuning of the (new) preset, shared by every place that uses it. When creating a new
-   *  per-monitor override we send the full assignment (copied from "*"), so the result never
-   *  depends on how the host fills in missing fields. */
-  async assign({ wallpaperId, effect }, key = ctx.scopeKey()) {
-    const cur = ctx.assignmentFor(key);
-    const { preset, ...tuning } = effect ?? {};
-    const params = { monitorKey: key };
-    const isNewOverride = key !== "*" && !state.settings.assignments[key];
-    if (isNewOverride) {
-      const wid = wallpaperId ?? cur.wallpaperId;
-      if (wid) params.wallpaperId = wid;
-      params.effectPreset = preset ?? cur.effectPreset;
-    } else {
-      if (wallpaperId !== undefined) params.wallpaperId = wallpaperId;
-      if (preset) params.effectPreset = preset;
-    }
-    let result;
-    if (Object.keys(params).length > 1) result = await ctx.mutate("setAssignment", params);
-    if (Object.keys(tuning).length) result = await ctx.mutate("setEffectTuning", { preset: preset ?? cur.effectPreset, tuning });
-    return result;
+  /** The effect a wallpaper shows on the desktop: {preset, ...EffectConfig}. */
+  desktopEffect(wallpaperId) {
+    const d = ctx.lookFor(wallpaperId).desktop;
+    return ctx.effectFor(d.effectPreset, d.tuning[d.effectPreset]);
+  },
+
+  /** The wallpaper the screensaver shows for a key: its own, or that monitor's desktop wallpaper. */
+  screensaverBackground(key = ctx.scopeKey()) {
+    return state?.settings.screensaver.wallpaperId ?? ctx.assignmentFor(key).wallpaperId;
+  },
+
+  /** The effect a wallpaper shows as a screensaver: its own, or (null) the desktop one with shared tuning. */
+  screensaverEffect(wallpaperId) {
+    const look = ctx.lookFor(wallpaperId);
+    const own = look.screensaver.effectPreset;
+    return own ? ctx.effectFor(own, look.screensaver.tuning[own]) : ctx.desktopEffect(wallpaperId);
+  },
+
+  /** Shows a wallpaper on the current scope's desktop. The host copies the look of the one it replaces. */
+  async assign(wallpaperId, key = ctx.scopeKey()) {
+    return ctx.mutate("setAssignment", { monitorKey: key, wallpaperId });
+  },
+
+  /** Edits a wallpaper's look: {desktop?: {effectPreset?}, screensaver?: {effectPreset?: id | null, clock?}}. */
+  setLook(wallpaperId, patch) {
+    return ctx.mutate("setLook", { wallpaperId, ...patch });
   },
 
   /** Scope switching: "*" = same on all monitors, otherwise a monitorKey. */

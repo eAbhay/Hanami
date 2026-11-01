@@ -38,6 +38,7 @@ public sealed class HanamiHost
         _store = new SettingsStore(_paths.ConfigPath);
         _library = new Library(_paths.LibraryDir);
         if (!File.Exists(_paths.ConfigPath)) _store.Save();
+        _store.PruneLooks(_library.Exists);
         SyncStartupRegistration();
 
         var browserArgs = "--autoplay-policy=no-user-gesture-required";
@@ -220,32 +221,27 @@ public sealed class HanamiHost
             case "updateSettings":
             {
                 var before = _store.Current.StartWithWindows;
+                var previousBackground = _store.Current.Screensaver.WallpaperId ?? _store.Current.Assignments["*"].WallpaperId;
                 _store.Patch(p as JsonObject ?? new JsonObject());
+                _store.EnsureScreensaverLook(previousBackground);
                 if (_store.Current.StartWithWindows != before) SyncStartupRegistration();
                 await AfterSettingsChangedAsync();
                 return BuildState();
             }
 
             case "setAssignment":
-            {
-                var key = (string?)p?["monitorKey"] ?? "*";
-                var entry = new JsonObject();
-                if (p?["wallpaperId"] is { } wid) entry["wallpaperId"] = wid.DeepClone();
-                if (p?["effectPreset"] is { } preset) entry["effectPreset"] = preset.DeepClone();
-                if (key != "*" && !_store.Current.Assignments.ContainsKey(key))
-                {
-                    // First override for this monitor starts from the shared assignment.
-                    var seed = (JsonObject)Json.ToNode(_store.Current.Assignments["*"])!;
-                    Json.DeepMerge(seed, entry);
-                    entry = seed;
-                }
-                _store.Patch(new JsonObject { ["assignments"] = new JsonObject { [key] = entry } });
+                _store.SetAssignment((string?)p?["monitorKey"] ?? "*", (string?)p?["wallpaperId"]);
                 await AfterSettingsChangedAsync();
                 return BuildState();
-            }
+
+            case "setLook":
+                _store.SetLook(Required(p, "wallpaperId"), LookPatch(p));
+                await AfterSettingsChangedAsync();
+                return BuildState();
 
             case "setEffectTuning":
-                _store.SetEffectTuning(Required(p, "preset"), p?["tuning"] as JsonObject);
+                _store.SetEffectTuning(Required(p, "preset"), p?["tuning"] as JsonObject,
+                    (string?)p?["wallpaperId"], (string?)p?["target"] ?? "desktop");
                 await AfterSettingsChangedAsync();
                 return BuildState();
 
@@ -306,6 +302,15 @@ public sealed class HanamiHost
         }
     }
 
+    /// <summary>The look part of a setLook request: everything except the wallpaper id.</summary>
+    private static JsonObject LookPatch(JsonNode? p)
+    {
+        var patch = new JsonObject();
+        foreach (var key in new[] { "desktop", "screensaver" })
+            if (p?[key] is JsonObject part) patch[key] = part.DeepClone();
+        return patch;
+    }
+
     private async Task AfterSettingsChangedAsync()
     {
         _wallpapers.PushConfigAll();
@@ -359,6 +364,8 @@ public sealed class HanamiHost
             _wallpapers.PushConfigAll();
             await Task.Delay(900);
         }
+        if (_store.Current.Screensaver.WallpaperId == id) _store.Patch(new JsonObject { ["screensaver"] = new JsonObject { ["wallpaperId"] = null } });
+        _store.RemoveLook(id);
         for (var attempt = 0; ; attempt++)
         {
             try { _library.Delete(id); break; }
@@ -402,8 +409,10 @@ public sealed class HanamiHost
 
     private void DeleteFont(string id)
     {
-        if (_store.Current.Screensaver.Clock.Font == $"{FontLibrary.LibraryPrefix}{id}")
-            _store.Patch(new JsonObject { ["screensaver"] = new JsonObject { ["clock"] = new JsonObject { ["font"] = null } } });
+        var used = $"{FontLibrary.LibraryPrefix}{id}";
+        foreach (var (wallpaperId, look) in _store.Current.Looks.ToList())
+            if (look.Screensaver.Clock.Font == used)
+                _store.SetLook(wallpaperId, new JsonObject { ["screensaver"] = new JsonObject { ["clock"] = new JsonObject { ["font"] = null } } });
         new FontLibrary(_library).Delete(id);
         BroadcastState();
     }
@@ -423,7 +432,8 @@ public sealed class HanamiHost
 
         var progress = ThrottledProgress("export");
         var settings = includeSettings ? _store.Current : null;
-        await Task.Run(() => PackService.ExportAsync(_library, settings, ids, dlg.FileName, AppPaths.Version, progress));
+        var looks = _store.Current.Looks;
+        await Task.Run(() => PackService.ExportAsync(_library, settings, ids, dlg.FileName, AppPaths.Version, progress, looks));
         return new JsonObject { ["path"] = dlg.FileName };
     }
 
@@ -440,12 +450,19 @@ public sealed class HanamiHost
             settings.Paused = _store.Current.Paused;
             foreach (var a in settings.Assignments.Values)
                 if (a.WallpaperId is { } wid && !_library.Exists(wid)) a.WallpaperId = "builtin:twilight";
-            if (settings.Screensaver.Clock.Font is { } font && font.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal)
-                && !new FontLibrary(_library).Exists(font[FontLibrary.LibraryPrefix.Length..]))
-                settings.Screensaver.Clock.Font = null;
+            var fonts = new FontLibrary(_library);
+            foreach (var look in settings.Looks.Values)
+                if (look.Screensaver.Clock.Font is { } font && font.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal)
+                    && !fonts.Exists(font[FontLibrary.LibraryPrefix.Length..]))
+                    look.Screensaver.Clock.Font = null;
             _store.Replace(settings);
+            _store.PruneLooks(_library.Exists);
             SyncStartupRegistration();
         }
+        // A wallpaper's own look comes with it, unless this PC already has one for it.
+        foreach (var (id, look) in result.Looks)
+            if (!_store.Current.Looks.ContainsKey(id) && _library.Exists(id))
+                _store.SetLook(id, (JsonObject)Json.ToNode(look)!);
         await AfterSettingsChangedAsync();
         return new JsonObject { ["imported"] = result.Wallpapers, ["skipped"] = result.Skipped, ["settings"] = result.Settings };
     }

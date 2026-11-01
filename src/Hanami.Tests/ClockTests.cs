@@ -15,6 +15,8 @@ public sealed class ClockTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { }
     }
 
+    private const string Id = "builtin:twilight";   // the default desktop wallpaper, whose look the clock tests edit
+
     private string SettingsPath => Path.Combine(_dir, "config", "settings.json");
 
     private string MakeFont(string name, int bytes = 64)
@@ -27,7 +29,7 @@ public sealed class ClockTests : IDisposable
     [Fact]
     public void Defaults_AreTodaysSpot()
     {
-        var c = SettingsStore.Load(SettingsPath).Screensaver.Clock;
+        var c = SettingsStore.Load(SettingsPath).ScreensaverClockFor("*");
         Assert.Equal(0.5, c.X);
         Assert.Equal(0.31, c.Y);
         Assert.Equal(1, c.Size);
@@ -40,28 +42,28 @@ public sealed class ClockTests : IDisposable
     public void Normalize_ClampsPositionAndSize_AndDropsBadValues()
     {
         var store = new SettingsStore(SettingsPath);
-        store.Patch(JsonNode.Parse("""
+        store.SetLook(Id, JsonNode.Parse("""
             {"screensaver":{"clock":{"x":-3,"y":7,"size":9,"dateFont":"comic","font":"file:///c:/evil.ttf"}}}
             """)!.AsObject());
-        var c = store.Current.Screensaver.Clock;
+        var c = store.Current.ScreensaverClockFor("*");
         Assert.Equal(0, c.X);
         Assert.Equal(1, c.Y);
         Assert.Equal(1.6, c.Size);
         Assert.Equal("system", c.DateFont);
         Assert.Null(c.Font);
 
-        store.Patch(JsonNode.Parse("""{"screensaver":{"clock":{"size":0.1}}}""")!.AsObject());
-        Assert.Equal(0.5, store.Current.Screensaver.Clock.Size);
+        store.SetLook(Id, JsonNode.Parse("""{"screensaver":{"clock":{"size":0.1}}}""")!.AsObject());
+        Assert.Equal(0.5, store.Current.ScreensaverClockFor("*").Size);
     }
 
     [Fact]
     public void Clock_SurvivesSaveAndReload()
     {
         var store = new SettingsStore(SettingsPath);
-        store.Patch(JsonNode.Parse("""
+        store.SetLook(Id, JsonNode.Parse("""
             {"screensaver":{"clock":{"x":0.2,"y":0.8,"size":0.7,"font":"system:Segoe Script","dateFont":"same","showDate":false}}}
             """)!.AsObject());
-        var c = new SettingsStore(SettingsPath).Current.Screensaver.Clock;
+        var c = new SettingsStore(SettingsPath).Current.ScreensaverClockFor("*");
         Assert.Equal((0.2, 0.8, 0.7), (c.X, c.Y, c.Size));
         Assert.Equal("system:Segoe Script", c.Font);
         Assert.Equal("same", c.DateFont);
@@ -130,10 +132,10 @@ public sealed class ClockTests : IDisposable
     public void ResettingAFontThroughPatch_ClearsIt()
     {
         var store = new SettingsStore(SettingsPath);
-        store.Patch(JsonNode.Parse("""{"screensaver":{"clock":{"font":"library:a.ttf"}}}""")!.AsObject());
-        Assert.Equal("library:a.ttf", store.Current.Screensaver.Clock.Font);
-        store.Patch(JsonNode.Parse("""{"screensaver":{"clock":{"font":null}}}""")!.AsObject());
-        Assert.Null(store.Current.Screensaver.Clock.Font);
+        store.SetLook(Id, JsonNode.Parse("""{"screensaver":{"clock":{"font":"library:a.ttf"}}}""")!.AsObject());
+        Assert.Equal("library:a.ttf", store.Current.ScreensaverClockFor("*").Font);
+        store.SetLook(Id, JsonNode.Parse("""{"screensaver":{"clock":{"font":null}}}""")!.AsObject());
+        Assert.Null(store.Current.ScreensaverClockFor("*").Font);
     }
 
     [Fact]
@@ -143,16 +145,16 @@ public sealed class ClockTests : IDisposable
         var info = new FontLibrary(source).Import(MakeFont("Lobster.ttf", 321));
         var other = new FontLibrary(source).Import(MakeFont("Other.ttf"));
         var settings = new AppSettings();
-        settings.Screensaver.Clock.Font = "library:" + info.Id;
+        settings.Looks["builtin:twilight"] = new LookSettings { Screensaver = { Clock = { Font = "library:" + info.Id } } };
 
         var pack = Path.Combine(_dir, "p" + PackService.Extension);
-        await PackService.ExportAsync(source, settings, ["settings"], pack, "test", null, TestContext.Current.CancellationToken);
+        await PackService.ExportAsync(source, settings, ["settings"], pack, "test", null, null, TestContext.Current.CancellationToken);
 
         var target = new Library(Path.Combine(_dir, "B"));
         var (_, imported) = await PackService.ImportAsync(target, pack, null, TestContext.Current.CancellationToken);
 
         var targetFonts = new FontLibrary(target);
-        Assert.Equal("library:" + info.Id, imported!.Screensaver.Clock.Font);
+        Assert.Equal("library:" + info.Id, imported!.ScreensaverClockFor("*").Font);
         Assert.True(targetFonts.Exists(info.Id));
         Assert.Equal(321, new FileInfo(targetFonts.PathOf(info.Id)).Length);
         Assert.False(targetFonts.Exists(other.Id));   // only the selected font travels

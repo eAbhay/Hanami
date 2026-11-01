@@ -1,9 +1,11 @@
 // Screensaver tab — what the screensaver shows. When it runs lives on the Power tab.
 import { h, svg } from "../util.js";
+import { scopeSelector } from "../scope.js";
 import { pageHeader, card, wallpaperPicker, effectPicker, createClockCard } from "../components/index.js";
 
 export function createScreensaverTab(ctx) {
   const save = (patch) => ctx.mutate("updateSettings", { screensaver: patch }).catch(() => {});
+  const backgroundId = () => ctx.screensaverBackground();
 
   // ---------------------------------------------------------------- header + status
   const previewBtn = h("button.btn", { type: "button", onclick: preview }, svg("eye"), h("span", "Preview"));
@@ -28,12 +30,23 @@ export function createScreensaverTab(ctx) {
   const effects = effectPicker({
     allowSameAsDesktop: true,
     ariaLabel: "Screensaver effect",
-    onSelect: (preset) => save({ effectPreset: preset }),
-    onTune: (preset) => {
-      const cfg = ctx.state.settings.screensaver;
-      ctx.openTuning(preset, { wallpaperId: cfg.wallpaperId ?? ctx.assignmentFor(ctx.scopeKey()).wallpaperId });
+    onSelect: (preset) => { const id = backgroundId(); if (id) return ctx.setLook(id, { screensaver: { effectPreset: preset } }).catch(() => {}); },
+    onTune: async (preset) => {
+      const id = backgroundId();
+      if (!id) return;
+      // Tuning the effect that "same as desktop" shows edits the desktop's (shared) sliders; any other
+      // effect has to become the screensaver's own first, so its sliders have somewhere to live.
+      const look = ctx.lookFor(id);
+      if (look.screensaver.effectPreset === null && look.desktop.effectPreset !== preset) {
+        try { await ctx.setLook(id, { screensaver: { effectPreset: preset } }); } catch { return; }
+      }
+      ctx.openTuning(preset, { wallpaperId: id, target: "screensaver" });
     },
   });
+  const effectNote = h("span.card-meta", "Same as desktop follows the wallpaper's effect");
+
+  // With "Same as desktop" and several monitors: which monitor's wallpaper is being edited.
+  const scope = scopeSelector(ctx, { verb: "Edits apply" });
 
   const clockCard = createClockCard(ctx);
 
@@ -43,8 +56,9 @@ export function createScreensaverTab(ctx) {
   const el = h("section",
     pageHeader("Screensaver", "Your live wallpaper, fullscreen, while you're away from your desk.", previewBtn),
     status,
+    scope,
     card("Background", "Same as desktop follows each monitor", backgrounds.el),
-    card("Effect", "Same as desktop follows each monitor's effect", effects),
+    card("Effect", effectNote, effects),
     clockCard.el,
     toPower);
 
@@ -58,7 +72,13 @@ export function createScreensaverTab(ctx) {
     statusDot.dataset.tone = st.active ? "active" : !cfg.enabled || s.power.onBattery ? "off" : "ready";
 
     backgrounds.update(s, cfg.wallpaperId ?? null);
-    effects.set(cfg.effectPreset ?? null);
+    scope.update(s);
+    if (cfg.wallpaperId != null) scope.hidden = true;   // an own background has one look on every monitor
+    const id = backgroundId();
+    const look = ctx.lookFor(id);
+    effects.set(look.screensaver.effectPreset);
+    effects.setSameDetail(look.desktop.effectPreset);
+    effectNote.textContent = ctx.wallpaper(id) ? `Saved with ${ctx.wallpaper(id).name}` : "Same as desktop follows the wallpaper's effect";
     clockCard.update(s);
   }
 

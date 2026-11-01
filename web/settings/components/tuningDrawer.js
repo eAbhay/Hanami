@@ -1,6 +1,7 @@
 // "<Effect> settings" drawer: a live preview running the real engine, the sliders, cursor
 // interaction and click burst. A right-side drawer, a bottom sheet on narrow windows. Edits go to
-// setEffectTuning (shared by every place that shows that effect), debounced 150 ms.
+// setEffectTuning for the look it was opened from (a wallpaper's desktop or screensaver tuning),
+// debounced 150 ms.
 import { h, svg, slider, segmented, toggle, debounce } from "../util.js";
 import { loadEffects } from "../effects-module.js";
 import { FALLBACK_EFFECT } from "../defaults.js";
@@ -19,7 +20,8 @@ const windFmt = (v) => (Math.abs(v) < 0.025 ? "Calm" : v < 0 ? `← ${Math.abs(v
 export function createTuningDrawer(ctx) {
   let preset = null;        // the effect being edited; null = closed
   let name = "";
-  let wallpaperId = null;   // what the preview sits over
+  let wallpaperId = null;   // whose look is edited; also what the preview sits over
+  let target = "desktop";   // which of its looks: "desktop" | "screensaver"
   let current = { ...FALLBACK_EFFECT };
   let pending = {};         // edits the host hasn't acknowledged yet
   let engine = null;
@@ -28,9 +30,9 @@ export function createTuningDrawer(ctx) {
   let hasFlicker = false;   // only effects whose PRESETS entry says flicker: true use the slider
 
   const send = debounce(() => {
-    const patch = pending, target = preset;
-    if (!target || !Object.keys(patch).length) return;
-    ctx.mutate("setEffectTuning", { preset: target, tuning: patch })
+    const patch = pending, forPreset = preset;
+    if (!forPreset || !Object.keys(patch).length) return;
+    ctx.mutate("setEffectTuning", { preset: forPreset, tuning: patch, wallpaperId, target })
       .then(() => { for (const k of Object.keys(patch)) if (pending[k] === patch[k]) delete pending[k]; update(ctx.state); })
       .catch(() => { pending = {}; update(ctx.state); });
   }, 150);
@@ -60,15 +62,25 @@ export function createTuningDrawer(ctx) {
     "repel", (v) => change({ interaction: v }, true), { ariaLabel: "Cursor interaction" });
   const interactionHint = h("p.field-hint");
   const burst = toggle(false, (v) => change({ clickBurst: v }, true), "Click burst");
-  const resetBtn = h("button.btn.subtle.small", { type: "button", title: "Reset this effect's settings to its defaults", onclick: reset },
-    svg("reset"), h("span", "Reset to defaults"));
+  const resetBtn = h("button.btn.subtle.small", { type: "button", title: "Drop this wallpaper's tuning of the effect and go back to the effect's defaults", onclick: reset },
+    svg("reset"), h("span", "Reset"));
+  const defaultBtn = h("button.btn.subtle.small", { type: "button", onclick: makeDefault });
 
   function reset() {
     pending = {};
-    current = { ...FALLBACK_EFFECT, ...(mod?.PRESET_DEFAULTS?.[preset] ?? {}), preset };
+    current = ctx.effectFor(preset);   // the effect defaults, without this look's own tuning
     engine?.setConfig({ ...current });
     syncControls(current);
-    ctx.mutate("setEffectTuning", { preset, tuning: null }).catch(() => {});
+    ctx.mutate("setEffectTuning", { preset, tuning: null, wallpaperId, target }).catch(() => {});
+  }
+
+  /** The current values become the effect's defaults: what wallpapers that haven't tuned it start from. */
+  function makeDefault() {
+    send.flush();
+    const { preset: _, ...values } = current;
+    ctx.mutate("setEffectTuning", { preset, tuning: values })
+      .then(() => ctx.toast(`Saved as the default for ${name}`, "success", 2200))
+      .catch(() => {});
   }
 
   function syncControls(e) {
@@ -146,7 +158,7 @@ export function createTuningDrawer(ctx) {
     h("header.drawer-head", title, closeBtn),
     h("div.drawer-body",
       preview,
-      card("Look", resetBtn, h("div.slider-grid", sliders.density, sliders.speed, sliders.size, sliders.opacity, sliders.flicker, sliders.wind)),
+      card("Look", h("span.drawer-actions", defaultBtn, resetBtn), h("div.slider-grid", sliders.density, sliders.speed, sliders.size, sliders.opacity, sliders.flicker, sliders.wind)),
       card("Cursor interaction", null,
         interaction,
         interactionHint,
@@ -169,18 +181,19 @@ export function createTuningDrawer(ctx) {
   });
 
   /** Opens the drawer for an effect. wallpaperId = what the preview sits over; from = element to refocus on close. */
-  function open(id, { wallpaperId: wid = null, from = document.activeElement } = {}) {
-    if (preset === id && !root.hidden) return;
+  function open(id, { wallpaperId: wid = null, target: tg = "desktop", from = document.activeElement } = {}) {
+    if (preset === id && wallpaperId === wid && target === tg && !root.hidden) return;
     send.flush();
     preset = id;
     wallpaperId = wid;
+    target = tg;
     opener = from;
     pending = {};
-    current = ctx.effectFor(id);
+    current = tuned();
     name = (mod?.PRESETS ?? []).find((p) => p.id === id)?.name ?? id;
     hasFlicker = !!(mod?.PRESETS ?? []).find((p) => p.id === id)?.flicker;
     title.textContent = `${name} settings`;
-    note.textContent = `Used wherever ${name} is selected.`;
+    paintNote();
     previewLabel.textContent = name;
     preview.classList.remove("touched");
     syncControls(current);
@@ -190,6 +203,19 @@ export function createTuningDrawer(ctx) {
     root.classList.add("open");
     startEngine();
     closeBtn.focus({ preventScroll: true });
+  }
+
+  /** The effect as this look has it: defaults < effect defaults < the look's own tuning. */
+  const tuned = () => ctx.effectFor(preset, ctx.lookTuning(wallpaperId, preset, target));
+
+  function paintNote() {
+    const w = ctx.wallpaper(wallpaperId)?.name ?? "this wallpaper";
+    const shared = target === "screensaver" && ctx.lookFor(wallpaperId).screensaver.effectPreset === null;
+    note.textContent = shared
+      ? `Shared by ${w}'s desktop and screensaver.`
+      : `Saved for ${w} · ${target === "screensaver" ? "screensaver" : "desktop"}.`;
+    defaultBtn.replaceChildren(svg("check"), h("span", `Use as default for ${name}`));
+    defaultBtn.title = `Wallpapers that haven't tuned ${name} start from these values`;
   }
 
   function close() {
@@ -205,7 +231,8 @@ export function createTuningDrawer(ctx) {
 
   function update(s) {
     if (!preset || !s) return;
-    const next = { ...ctx.effectFor(preset), ...pending };
+    const next = { ...tuned(), ...pending };
+    paintNote();
     const diff = {};
     for (const k of Object.keys(next)) if (next[k] !== current[k]) diff[k] = next[k];
     current = next;

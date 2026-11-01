@@ -9,6 +9,12 @@ system tray as a single self-contained `.exe`.
   and can burst when you click the desktop (off by default). Each effect has its own settings
   (density, speed, size, opacity up to 200%, flicker for fireflies, sparkles and embers, wind,
   cursor interaction, click burst): click the gear on an effect's tile.
+- **Every wallpaper remembers its own look.** Its effect and slider tuning, and (as a screensaver
+  background) its clock position, size, font and effect, are saved with the wallpaper, so
+  switching wallpapers back and forth brings each one's settings back. The screensaver effect can
+  be *Same as desktop* (one set of settings for both) or its own. A wallpaper you pick for the
+  first time starts from a copy of the look of the one it replaces. *Use as default for <effect>*
+  in the effect drawer sets what wallpapers that haven't tuned it start from.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that

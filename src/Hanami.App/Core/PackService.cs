@@ -5,11 +5,15 @@ namespace Hanami.Core;
 
 public sealed record ExportItem(string Id, string Kind, string Name, long SizeBytes, string? Thumbnail);
 
-public sealed record PackResult(int Wallpapers, int Skipped, bool Settings);
+public sealed record PackResult(int Wallpapers, int Skipped, bool Settings)
+{
+    /// <summary>Looks the pack carried for its wallpapers (the caller decides which to keep).</summary>
+    public Dictionary<string, LookSettings> Looks { get; init; } = new();
+}
 
 /// <summary>
 /// A .hanamipack is a zip holding pack.json, optionally settings.json, and
-/// wallpapers/&lt;id&gt;/… copied verbatim from the library. Media is stored uncompressed
+/// wallpapers/&lt;id&gt;/… copied verbatim from the library, and looks/&lt;id&gt;.json (a wallpaper's own look). Media is stored uncompressed
 /// (it is already compressed), so packing a few GB is mostly a straight copy.
 /// </summary>
 public static class PackService
@@ -28,7 +32,8 @@ public static class PackService
     }
 
     public static async Task ExportAsync(Library library, AppSettings? settings, IReadOnlyCollection<string> ids,
-        string destination, string appVersion, IProgress<(long done, long total, string label)>? progress, CancellationToken ct = default)
+        string destination, string appVersion, IProgress<(long done, long total, string label)>? progress,
+        IReadOnlyDictionary<string, LookSettings>? looks = null, CancellationToken ct = default)
     {
         var dirs = ids.Where(id => !Library.IsBuiltin(id) && id != "settings")
             .Select(id => (id, dir: library.DirOf(id)))
@@ -49,12 +54,18 @@ public static class PackService
                 await WriteTextAsync(zip, "pack.json", JsonSerializer.Serialize(info, Json.FileOptions));
                 if (settings is not null)
                     await WriteTextAsync(zip, "settings.json", JsonSerializer.Serialize(settings, Json.FileOptions));
-                if (settings?.Screensaver.Clock.Font is { } font && font.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal))
-                {
-                    var fonts = new FontLibrary(library);
-                    var fontId = font[FontLibrary.LibraryPrefix.Length..];
+                var packLooks = (looks ?? new Dictionary<string, LookSettings>())
+                    .Where(kv => dirs.Any(d => d.id == kv.Key)).ToList();
+                foreach (var (id, look) in packLooks)
+                    await WriteTextAsync(zip, $"looks/{id}.json", JsonSerializer.Serialize(look, Json.FileOptions));
+                var fonts = new FontLibrary(library);
+                var usedFonts = packLooks.Select(kv => kv.Value)
+                    .Concat(settings?.Looks.Values ?? Enumerable.Empty<LookSettings>())
+                    .Select(l => l.Screensaver.Clock.Font)
+                    .Where(f => f is not null && f.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal))
+                    .Select(f => f![FontLibrary.LibraryPrefix.Length..]).Distinct();
+                foreach (var fontId in usedFonts)
                     if (fonts.Exists(fontId)) zip.CreateEntryFromFile(fonts.PathOf(fontId), $"fonts/{fontId}", CompressionLevel.NoCompression);
-                }
 
                 var buffer = new byte[1 << 20];
                 foreach (var (id, file) in files)
@@ -97,6 +108,20 @@ public static class PackService
         {
             using var reader = new StreamReader(settingsEntry.Open());
             settings = SettingsStore.Normalize(JsonSerializer.Deserialize<AppSettings>(await reader.ReadToEndAsync(ct), Json.Options));
+        }
+
+        var looks = new Dictionary<string, LookSettings>();
+        foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("looks/", StringComparison.Ordinal) && e.FullName.EndsWith(".json", StringComparison.Ordinal)))
+        {
+            var id = entry.FullName["looks/".Length..^".json".Length];
+            if (id.Length == 0 || id.Contains('/')) continue;
+            try
+            {
+                using var reader = new StreamReader(entry.Open());
+                var look = JsonSerializer.Deserialize<LookSettings>(await reader.ReadToEndAsync(ct), Json.Options);
+                if (look is not null) looks[id] = look;
+            }
+            catch (JsonException) { }
         }
 
         var fontLib = new FontLibrary(library);
@@ -159,7 +184,7 @@ public static class PackService
             }
         }
         progress?.Report((total, total, "Done"));
-        return (new PackResult(imported, skipped, settings is not null), settings);
+        return (new PackResult(imported, skipped, settings is not null) { Looks = looks }, settings);
     }
 
     private static async Task WriteTextAsync(ZipArchive zip, string name, string text)

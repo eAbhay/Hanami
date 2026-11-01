@@ -27,13 +27,12 @@ public sealed class StorageTests : IDisposable
     {
         var path = Path.Combine(_dir, "config", "settings.json");
         var store = new SettingsStore(path);
-        store.Patch(JsonNode.Parse("""{"power":{"onBattery":"full"},"assignments":{"*":{"effectPreset":"snow"}}}""")!.AsObject());
+        store.Patch(JsonNode.Parse("""{"power":{"onBattery":"full"},"assignments":{"*":{"wallpaperId":"builtin:night"}}}""")!.AsObject());
 
         var reloaded = new SettingsStore(path).Current;
         Assert.Equal(Mode.Full, reloaded.Power.OnBattery);
         Assert.Equal(Mode.Paused, reloaded.Power.LowBattery);              // untouched sibling survives
-        Assert.Equal("snow", reloaded.Assignments["*"].EffectPreset);
-        Assert.Equal("builtin:twilight", reloaded.Assignments["*"].WallpaperId);
+        Assert.Equal("builtin:night", reloaded.Assignments["*"].WallpaperId);
     }
 
     [Fact]
@@ -103,12 +102,13 @@ public sealed class StorageTests : IDisposable
 
         var settings = new AppSettings();
         settings.Assignments["*"].WallpaperId = keep.Id;
+        settings.SettingsVersion = AppSettings.CurrentVersion;
         settings.Power.OnBattery = Mode.Reduced;
         settings.Effects["snow"] = new JsonObject { ["density"] = 2.0 };
-        settings.Screensaver.EffectPreset = "embers";
+        settings.Looks[keep.Id] = new LookSettings { Screensaver = { EffectPreset = "embers" } };
 
         var pack = Path.Combine(_dir, "out" + PackService.Extension);
-        await PackService.ExportAsync(source, settings, [keep.Id, "settings"], pack, "test", null);
+        await PackService.ExportAsync(source, settings, [keep.Id, "settings"], pack, "test", null, settings.Looks);
 
         var target = new Library(Path.Combine(_dir, "B"));
         var (result, imported) = await PackService.ImportAsync(target, pack, null);
@@ -121,7 +121,8 @@ public sealed class StorageTests : IDisposable
         Assert.Equal(Mode.Reduced, imported!.Power.OnBattery);
         Assert.Equal(keep.Id, imported.Assignments["*"].WallpaperId);
         Assert.Equal(2.0, (double?)imported.Effects["snow"]["density"]);
-        Assert.Equal("embers", imported.Screensaver.EffectPreset);
+        Assert.Equal("embers", imported.Looks[keep.Id].Screensaver.EffectPreset);
+        Assert.Equal("embers", result.Looks[keep.Id].Screensaver.EffectPreset);
 
         // Importing again keeps what is there instead of duplicating it.
         var (again, _) = await PackService.ImportAsync(target, pack, null);
@@ -140,7 +141,7 @@ public sealed class StorageTests : IDisposable
                 w.Write("""{"effects":{"sakura":{"clickBurst":true,"speed":2}}}""");
         }
         var (_, imported) = await PackService.ImportAsync(new Library(Path.Combine(_dir, "L")), pack, null);
-        Assert.Equal(2, imported!.SettingsVersion);
+        Assert.Equal(AppSettings.CurrentVersion, imported!.SettingsVersion);
         Assert.False(imported.Effects["sakura"].ContainsKey("clickBurst"));
         Assert.Equal(2.0, (double?)imported.Effects["sakura"]["speed"]);
     }

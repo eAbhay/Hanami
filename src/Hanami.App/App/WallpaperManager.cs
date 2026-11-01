@@ -126,8 +126,8 @@ public sealed class WallpaperManager : IDisposable
     private void PushConfig(WallpaperView view)
     {
         var s = _settings();
-        var a = s.AssignmentFor(view.Monitor.Key);
-        var wallpaper = _library.Resolve(a.WallpaperId);
+        var wallpaperId = s.DesktopWallpaperFor(view.Monitor.Key);
+        var wallpaper = _library.Resolve(wallpaperId);
         view.SendConfig(wallpaper, s.DesktopEffectFor(view.Monitor.Key), ModeResolver.FpsCap(s, Power));
     }
 

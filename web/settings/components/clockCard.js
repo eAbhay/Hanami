@@ -1,10 +1,11 @@
 // Screensaver "Clock" card: a monitor-shaped placement preview (drag the clock, or use the anchor
 // buttons / arrow keys), a size slider, a font picker (bundled · imported · installed) and the date
-// options. Edits go to updateSettings({screensaver:{clock}}) debounced 150 ms. Contract: docs/CONTRACTS.md.
+// options. The clock belongs to the wallpaper the screensaver shows (its look); edits go to
+// setLook({wallpaperId, screensaver:{clock}}) debounced 150 ms. Contract: docs/CONTRACTS.md.
 import { h, svg, slider, toggle, debounce } from "../util.js";
 import { card, row } from "./layout.js";
+import { DEFAULT_CLOCK } from "../defaults.js";
 
-const DEFAULT_CLOCK = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true };
 const BUNDLED_FAMILY = "Hanami Clock Preview";   // Tilt Warp, declared in style.css
 const SNAP = 0.02;                               // drag snaps to the centre lines within 2%
 const ANCHORS = [                                // [label, x, y]
@@ -18,14 +19,15 @@ const q = (s) => `"${String(s).replace(/["\\\x00-\x1f]/g, "")}"`;
 export function createClockCard(ctx) {
   let clock = { ...DEFAULT_CLOCK };
   let pending = {};
+  let wallpaperId = null;   // whose look the clock edits
   let fonts = { bundled: [], system: [], imported: [] };
   let fontsLoaded = false;
   const faces = new Map();   // imported font id → CSS family name (once its FontFace is added)
 
   const send = debounce(() => {
-    const patch = pending;
-    if (!Object.keys(patch).length) return;
-    ctx.mutate("updateSettings", { screensaver: { clock: patch } })
+    const patch = pending, wid = wallpaperId;
+    if (!wid || !Object.keys(patch).length) return;
+    ctx.mutate("setLook", { wallpaperId: wid, screensaver: { clock: patch } })
       .then(() => { for (const k of Object.keys(patch)) if (pending[k] === patch[k]) delete pending[k]; })
       .catch(() => { pending = {}; sync(); });
   }, 150);
@@ -232,7 +234,8 @@ export function createClockCard(ctx) {
     }
   }
 
-  const el = card("Clock", "Shown on the screensaver",
+  const saved = h("span.card-meta", "Shown on the screensaver");
+  const el = card("Clock", saved,
     h("div.clock-layout",
       h("div.clock-place",
         stage,
@@ -249,9 +252,7 @@ export function createClockCard(ctx) {
 
   let lastWallpaper = null;
   function paintBackground(s) {
-    const cfg = s.settings.screensaver;
-    const id = cfg.wallpaperId ?? ctx.assignmentFor(ctx.scopeKey()).wallpaperId;
-    const w = ctx.wallpaper(id);
+    const w = ctx.wallpaper(wallpaperId);
     let sig = "scene:twilight";
     if (w?.builtin || w?.type === "builtin") sig = `scene:${w.id.split(":")[1]}`;
     else if (w?.thumbnail) sig = `img:${w.thumbnail}`;
@@ -264,9 +265,10 @@ export function createClockCard(ctx) {
   }
 
   function update(s) {
-    const c = s.settings.screensaver?.clock;
-    if (!c) { el.hidden = true; return; }   // host without clock settings
-    el.hidden = false;
+    const id = ctx.screensaverBackground();
+    if (id !== wallpaperId) { send.flush(); pending = {}; wallpaperId = id; }   // another wallpaper has its own clock
+    const c = ctx.lookFor(id).screensaver.clock;
+    saved.textContent = ctx.wallpaper(id) ? `Saved with ${ctx.wallpaper(id).name}` : "Shown on the screensaver";
     if (!fontsLoaded) { fontsLoaded = "pending"; loadFonts(); }
     clock = { ...DEFAULT_CLOCK, ...c, ...pending };
     paintBackground(s);

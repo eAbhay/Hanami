@@ -385,6 +385,7 @@ h1, h2 { margin: 0; font-family: var(--font-display); }
 .badge-builtin { background: rgba(125, 99, 214, 0.75); }
 .badge-video { background: rgba(224, 99, 143, 0.78); }
 .badge-image { background: rgba(40, 30, 55, 0.55); }
+.badge-fx { top: auto; bottom: 8px; background: rgba(20, 12, 30, 0.55); font-weight: 500; }
 .applied-mark {
   position: absolute; right: 8px; top: 8px; width: 24px; height: 24px; border-radius: 50%;
   display: grid; place-items: center; color: #fff; background: var(--accent);
@@ -924,3 +925,5 @@ code.path {
 .font-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .font-select { flex: 1 1 160px; min-width: 0; padding: 0 8px; }
 @media (max-width: 760px) { .clock-layout { grid-template-columns: 1fr; } }
+
+.drawer-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

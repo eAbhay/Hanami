@@ -144,8 +144,9 @@ Events: host posts `{event: "<name>", data}`.
 |---|---|---|
 | `getState` | – | `State` |
 | `updateSettings` | `Partial<Settings>` (deep-merged) | `State` |
-| `setAssignment` | `{monitorKey: string \| "*", wallpaperId?: string, effectPreset?: PresetId}` | `State` |
-| `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null}` (merged into that effect's overrides; `null` = reset it to its defaults) | `State` |
+| `setAssignment` | `{monitorKey: string \| "*", wallpaperId: string \| null}` — a wallpaper without a look yet starts from a copy of the look of the wallpaper it replaces on that monitor | `State` |
+| `setLook` | `{wallpaperId, desktop?: {effectPreset?: PresetId}, screensaver?: {effectPreset?: PresetId \| null, clock?: Partial<ClockSettings>}}` — merged into that wallpaper's look (created if missing); `screensaver.effectPreset: null` = same as desktop | `State` |
+| `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null, wallpaperId?: string, target?: "desktop" \| "screensaver"}` — with `wallpaperId` it edits that look's tuning of the preset (`target` `screensaver` while the screensaver effect is "same as desktop" edits the desktop tuning, since they are shared); without it the effect defaults. `tuning: null` resets that level | `State` |
 | `importMedia` | – (host opens a file dialog, multi-select, copies files into the library) | `{imported: WallpaperInfo[]}` or `{cancelled: true}` |
 | `renameWallpaper` | `{id, name}` | `State` |
 | `deleteWallpaper` | `{id}` (never builtin) | `State` |
@@ -172,18 +173,40 @@ Events: `stateChanged` (data: `State`), `progress` (data: `{task: "import"\|"exp
 ```ts
 type ExportItem = { id: string; kind: "wallpaper" | "settings"; name: string; sizeBytes: number;
                     thumbnail?: string | null };
+// A wallpaper item carries that wallpaper's look (looks/<id>.json in the pack) even when settings are not
+// included; importing restores it unless this PC already has a look for that wallpaper.
 
 type Settings = {
-  settingsVersion: number;                          // 2. Missing = 1; one-time migrations run on load
+  settingsVersion: number;                          // 3. Missing = 1; one-time migrations run on load
   // v1 → v2: drop clickBurst from every effects[preset] override (it became off by default and old
   // files stored whole effect objects, so the stored value was the old default, not a choice)
+  // v2 → v3: the effect (assignments[key].effectPreset) and the screensaver's effect and clock moved into
+  // per-wallpaper looks. For every assignment {W, P}: looks[W].desktop.effectPreset = P; the old
+  // screensaver effect and clock go into the screensaver look of every wallpaper currently used as
+  // the screensaver background. Nothing visible changes (the global effects tuning still applies).
+  // The legacy fields are read once and never written back.
   sameOnAllMonitors: boolean;                       // default true
-  assignments: Record<string, { wallpaperId: string | null; effectPreset: PresetId }>;
+  assignments: Record<string, { wallpaperId: string | null }>;
   // key "*" = default for every monitor; other keys = monitorKey overrides (used when !sameOnAllMonitors)
   effects: Partial<Record<PresetId, Partial<EffectTuning>>>;
-  // The user's tuning overrides per effect, shared by every place that shows that effect (any
-  // monitor, desktop and screensaver). Missing keys fall back to PRESET_DEFAULTS. Files from before
-  // this shape (assignments[key].effect = a whole EffectConfig) are migrated on load.
+  // The effect defaults: the user's tuning per effect, the starting point for wallpapers that haven't
+  // tuned that effect themselves ("Use as default for <Effect>" in the drawer writes here). Missing
+  // keys fall back to PRESET_DEFAULTS. Files from before this shape (assignments[key].effect = a
+  // whole EffectConfig) are migrated on load.
+  looks: Record<string /* wallpaperId */, {
+    desktop: { effectPreset: PresetId;                       // default "sakura"
+               tuning: Partial<Record<PresetId, Partial<EffectTuning>>> };   // this wallpaper's own sliders, per preset
+    screensaver: { effectPreset: PresetId | null;            // null = same as desktop, sharing its tuning
+                   tuning: Partial<Record<PresetId, Partial<EffectTuning>>>;  // used only with an own effect
+                   clock: ClockSettings };
+  }>;
+  // Every wallpaper remembers its own look, so switching wallpapers (or screensaver backgrounds) back
+  // and forth brings each one's effect, tuning and clock back. Tuning layers, lowest first:
+  // PRESET_DEFAULTS[preset] → effects[preset] → the look's own tuning[preset]. A wallpaper selected
+  // for the first time copies the look of the wallpaper it replaces on that monitor (desktop) or the
+  // previous screensaver background's screensaver look. A wallpaper with no stored look shows the
+  // built-in default (sakura, "same as desktop", default clock). Deleting a wallpaper deletes its
+  // look; ids of unknown wallpapers are dropped on load. The same wallpaper on two monitors shares one look.
   power: {
     onAC: Mode;                 // default "full"
     onBattery: Mode;            // default "paused"
@@ -197,21 +220,21 @@ type Settings = {
   screensaver: {
     enabled: boolean;           // default true
     idleMinutes: number;        // 1 – 120, default 2
-    wallpaperId: string | null; // null = same wallpaper as each monitor's desktop
-    effectPreset: PresetId | null; // null = same effect as each monitor's desktop; its tuning is effects[preset]
+    wallpaperId: string | null; // null = same wallpaper as each monitor's desktop (and its look)
     requireSignIn: boolean;     // default false — lock Windows when the screensaver ends
     stopAfterHours: number;     // 0 = never (default); after this, hide it and let Windows' timers take over
-    clock: {                    // the screensaver clock, same on every monitor
-      x: number; y: number;     // centre of the TIME as a fraction of the monitor, 0–1; default 0.5, 0.31
-      size: number;             // 0.5 – 1.6, default 1
-      font: string | null;      // null = bundled Tilt Warp · "system:<family>" = an installed Windows font ·
-                                // "library:<file>" = an imported font in Library/fonts/ (a missing one shows Tilt Warp)
-      dateFont: "system" | "same";   // "same" = the date uses the clock's font; default "system" (Segoe UI)
-      showDate: boolean;        // default true
-    };
   };
   startWithWindows: boolean;    // default true
   paused: boolean;              // manual pause from tray/UI, default false
+};
+
+type ClockSettings = {          // the screensaver clock of one wallpaper (looks[id].screensaver.clock)
+  x: number; y: number;         // centre of the TIME as a fraction of the monitor, 0–1; default 0.5, 0.31
+  size: number;                 // 0.5 – 1.6, default 1
+  font: string | null;          // null = bundled Tilt Warp · "system:<family>" = an installed Windows font ·
+                                // "library:<file>" = an imported font in Library/fonts/ (a missing one shows Tilt Warp)
+  dateFont: "system" | "same";  // "same" = the date uses the clock's font; default "system" (Segoe UI)
+  showDate: boolean;            // default true
 };
 
 type MonitorInfo = { key: string; name: string; isPrimary: boolean;
@@ -239,6 +262,10 @@ type State = {
 Effective mode per monitor = the most restrictive (`paused` < `reduced` < `full`) of:
 manual pause, maximized/fullscreen rule for that monitor, battery rule (`lowBattery` when
 on battery and at/below threshold, else `onBattery`; `onAC` when plugged in), energy-saver rule.
+The host composes what a page shows: `config.effect` = preset + the layered tuning of the look of the
+wallpaper shown there (desktop look on the desktop; on the screensaver, the screensaver background's
+screensaver effect, or its desktop effect and tuning when "same as desktop"), `config.clock` = that
+wallpaper's clock.
 A paused wallpaper is never hidden (it keeps its frozen frame, so Win+D shows no flash of the
 stock wallpaper); only the screensaver hides the desktop wallpapers (hidden + suspended).
 **Idle freeze:** while the user is idle within 5 s of the earlier of the screensaver start
