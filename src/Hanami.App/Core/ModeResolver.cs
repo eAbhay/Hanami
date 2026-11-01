@@ -12,7 +12,8 @@ public readonly record struct ResolvedMode(Mode Mode, string Reason, bool Hidden
 /// </summary>
 public static class ModeResolver
 {
-    public static ResolvedMode Resolve(AppSettings settings, PowerState power, Coverage coverage, bool sessionLocked)
+    public static ResolvedMode Resolve(AppSettings settings, PowerState power, Coverage coverage, bool sessionLocked,
+        bool screensaverShowing = false)
     {
         var mode = Mode.Full;
         var reason = "Running";
@@ -22,6 +23,8 @@ public static class ModeResolver
             if (proposed < mode) { mode = proposed; reason = why; }
         }
 
+        // The screensaver covers every monitor and renders its own copy; the desktop one sleeps.
+        if (screensaverShowing) return new ResolvedMode(Mode.Paused, "Screensaver showing", Hidden: true);
         if (sessionLocked) Apply(Mode.Paused, "Screen locked");
         if (settings.Paused) Apply(Mode.Paused, "Paused");
         if (coverage.Fullscreen) Apply(settings.Power.WhenFullscreen, "Fullscreen app");

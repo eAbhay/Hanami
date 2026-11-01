@@ -82,6 +82,16 @@ public class ModeResolverTests
     }
 
     [Fact]
+    public void ScreensaverShowing_HidesDesktopWallpaper()
+    {
+        var s = new AppSettings();
+        s.Power.WhenFullscreen = Mode.Full;
+        var r = ModeResolver.Resolve(s, Plugged, Clear, false, screensaverShowing: true);
+        Assert.Equal(Mode.Paused, r.Mode);
+        Assert.True(r.Hidden);
+    }
+
+    [Fact]
     public void FpsCap_DependsOnPowerSource()
     {
         var s = new AppSettings();

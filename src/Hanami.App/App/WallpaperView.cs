@@ -35,21 +35,37 @@ public sealed class WallpaperView : IDisposable
         _window = window;
     }
 
-    public static async Task<WallpaperView> CreateAsync(CoreWebView2Environment env, DesktopHost desktop, MonitorInfo monitor, AppPaths paths)
+    /// <summary>A wallpaper living behind the desktop icons.</summary>
+    public static Task<WallpaperView> CreateAsync(CoreWebView2Environment env, DesktopHost desktop, MonitorInfo monitor, AppPaths paths)
     {
-        var p = new HwndSourceParameters($"Hanami wallpaper {monitor.Key}")
+        var source = NewWindow($"Hanami wallpaper {monitor.Key}", monitor, Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE, visible: false);
+        desktop.Attach(source.Handle, monitor.Bounds);
+        return InitAsync(env, source, monitor, paths, "");
+    }
+
+    /// <summary>A topmost fullscreen window over everything on the monitor, for the idle screensaver.</summary>
+    public static Task<WallpaperView> CreateScreensaverAsync(CoreWebView2Environment env, MonitorInfo monitor, AppPaths paths)
+    {
+        var source = NewWindow($"Hanami screensaver {monitor.Key}", monitor, Win32.WS_EX_TOOLWINDOW, visible: true);
+        var b = monitor.Bounds;
+        Win32.SetWindowPos(source.Handle, Win32.HWND_TOPMOST, b.Left, b.Top, b.Width, b.Height, Win32.SWP_SHOWWINDOW);
+        return InitAsync(env, source, monitor, paths, "&screensaver=1");
+    }
+
+    private static HwndSource NewWindow(string name, MonitorInfo monitor, uint exStyle, bool visible) =>
+        new(new HwndSourceParameters(name)
         {
-            WindowStyle = unchecked((int)(Win32.WS_POPUP | Win32.WS_CLIPCHILDREN)),
-            ExtendedWindowStyle = unchecked((int)(Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE)),
+            WindowStyle = unchecked((int)(Win32.WS_POPUP | Win32.WS_CLIPCHILDREN | (visible ? Win32.WS_VISIBLE : 0))),
+            ExtendedWindowStyle = unchecked((int)exStyle),
             PositionX = monitor.Bounds.Left,
             PositionY = monitor.Bounds.Top,
             Width = monitor.Bounds.Width,
             Height = monitor.Bounds.Height,
-        };
-        var source = new HwndSource(p);
-        var view = new WallpaperView(monitor, source);
-        desktop.Attach(source.Handle, monitor.Bounds);
+        });
 
+    private static async Task<WallpaperView> InitAsync(CoreWebView2Environment env, HwndSource source, MonitorInfo monitor, AppPaths paths, string extraQuery)
+    {
+        var view = new WallpaperView(monitor, source);
         var controller = await env.CreateCoreWebView2ControllerAsync(source.Handle);
         view._controller = controller;
         controller.DefaultBackgroundColor = System.Drawing.Color.Black;
@@ -61,7 +77,7 @@ public sealed class WallpaperView : IDisposable
         ConfigureCore(core, paths);
         core.WebMessageReceived += view.OnWebMessage;
         core.ProcessFailed += (_, e) => Log.Warn($"Wallpaper {monitor.Key} web process failed: {e.ProcessFailedKind}");
-        core.Navigate($"{AppOrigin}/wallpaper/index.html?monitor={Uri.EscapeDataString(monitor.Key)}");
+        core.Navigate($"{AppOrigin}/wallpaper/index.html?monitor={Uri.EscapeDataString(monitor.Key)}{extraQuery}");
         return view;
     }
 

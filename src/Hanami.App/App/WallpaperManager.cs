@@ -31,6 +31,8 @@ public sealed class WallpaperManager : IDisposable
 
     public PowerState Power { get; private set; }
     public bool SessionLocked { get; set; }
+    /// <summary>While the screensaver covers the screens, the desktop wallpapers are hidden and suspended.</summary>
+    public bool ScreensaverShowing { get; set; }
     public Dictionary<string, ResolvedMode> Modes { get; } = new();
     public IReadOnlyList<MonitorInfo> CurrentMonitors => _monitors;
 
@@ -135,7 +137,7 @@ public sealed class WallpaperManager : IDisposable
         foreach (var view in _views.Values)
         {
             var cov = coverage.GetValueOrDefault(view.Monitor.Handle);
-            var resolved = ModeResolver.Resolve(s, Power, cov, SessionLocked);
+            var resolved = ModeResolver.Resolve(s, Power, cov, SessionLocked, ScreensaverShowing);
             if (!Modes.TryGetValue(view.Monitor.Key, out var prev) || prev != resolved)
             {
                 Modes[view.Monitor.Key] = resolved;

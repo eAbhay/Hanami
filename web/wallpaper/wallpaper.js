@@ -12,6 +12,8 @@ import { EffectsEngine, DEFAULT_EFFECT, PRESETS } from "../shared/effects.js";
 import { createScene, SCENES } from "./scenes.js";
 
 const host = window.chrome?.webview ?? null;
+// The idle screensaver loads this same page in a topmost window (…&screensaver=1): no cursor.
+if (new URLSearchParams(location.search).has("screensaver")) document.documentElement.classList.add("screensaver");
 const bgRoot = document.getElementById("bg");
 const fxCanvas = document.getElementById("fx");
 

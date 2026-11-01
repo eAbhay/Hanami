@@ -1,0 +1,41 @@
+namespace Hanami.Core;
+
+public sealed class ScreensaverSettings
+{
+    public bool Enabled { get; set; } = true;
+    public int IdleMinutes { get; set; } = 2;
+    /// <summary>null = each monitor shows its own desktop wallpaper and effect.</summary>
+    public string? WallpaperId { get; set; }
+    public bool RequireSignIn { get; set; }
+    /// <summary>0 = never stop on its own.</summary>
+    public double StopAfterHours { get; set; }
+}
+
+public readonly record struct ScreensaverInputs(
+    bool OnBattery, bool SessionLocked, bool FullscreenApp, bool OtherAppKeepsDisplayOn, TimeSpan Idle);
+
+/// <summary>When the idle screensaver may start, and the status line the settings UI shows.</summary>
+public static class ScreensaverPolicy
+{
+    public static (bool Start, string Status) Evaluate(ScreensaverSettings s, ScreensaverInputs i)
+    {
+        if (!s.Enabled) return (false, "Off");
+        if (i.OnBattery) return (false, "Off on battery — Windows' own screen and sleep timers apply");
+        if (i.SessionLocked) return (false, "Waiting — Windows is locked");
+        if (i.FullscreenApp) return (false, "Waiting — a fullscreen app is open");
+        if (i.OtherAppKeepsDisplayOn) return (false, "Waiting — another app is keeping the screen on");
+        if (i.Idle >= TimeSpan.FromMinutes(s.IdleMinutes)) return (true, "Showing");
+        return (false, $"Starts after {s.IdleMinutes} min idle");
+    }
+
+    /// <summary>Whether a showing screensaver must end for a reason other than user input.</summary>
+    public static string? EndReason(ScreensaverSettings s, bool onBattery, bool sessionLocked, TimeSpan shownFor, bool preview)
+    {
+        if (sessionLocked) return "Windows locked";
+        if (preview) return null;
+        if (!s.Enabled) return "Turned off";
+        if (onBattery) return "Unplugged";
+        if (s.StopAfterHours > 0 && shownFor >= TimeSpan.FromHours(s.StopAfterHours)) return $"Stopped after {s.StopAfterHours:0.#} h";
+        return null;
+    }
+}

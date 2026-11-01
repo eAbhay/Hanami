@@ -40,7 +40,7 @@ export function createTransferTab(ctx) {
       h("label.export-row.settings-row",
         settingsCb,
         h("div.export-thumb.settings-thumb", svg("gear")),
-        h("div.export-name", h("div", "Include settings"), h("div.export-sub", "Monitor assignments, effects, power rules and frame rates")),
+        h("div.export-name", h("div", "Include settings"), h("div.export-sub", "Monitor assignments, effects, power rules, frame rates and screensaver")),
         settingsSize),
       h("div.export-foot", totalEl, exportBtn),
       exportProgress));

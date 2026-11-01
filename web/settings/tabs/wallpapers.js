@@ -2,8 +2,8 @@
 import { h, svg, formatBytes, formatDuration, resLabel, dialog, progressBar, debounce } from "../util.js";
 import { scopeSelector } from "../scope.js";
 import { ensureThumbnails, thumbnailFailed } from "../thumbs.js";
+import { wallpaperThumb as thumbFor, TYPE_LABEL } from "../wallthumb.js";
 
-const TYPE_LABEL = { video: "Video", image: "Image", builtin: "Built-in" };
 const SCENE_BLURB = { twilight: "Violet dusk fading to amber", dawn: "Pink sunrise, golden haze", night: "Deep blue sky, quiet stars" };
 
 export function createWallpapersTab(ctx) {
@@ -92,20 +92,6 @@ export function createWallpapersTab(ctx) {
   }
 
   // ------------------------------------------------------------------ card rendering
-  function thumbFor(w) {
-    if (w.builtin || w.type === "builtin") {
-      const scene = w.id.split(":")[1] ?? "twilight";
-      return h(`div.thumb.scene.scene-${scene}`, h("span.scene-glow"));
-    }
-    if (w.thumbnail) {
-      const img = h("img", { src: w.thumbnail, alt: "", loading: "lazy", decoding: "async", draggable: false });
-      img.addEventListener("error", () => img.replaceWith(h("div.thumb-fallback", svg(w.type === "video" ? "play" : "image"))), { once: true });
-      return h("div.thumb", img);
-    }
-    if (thumbnailFailed(w.id) || !w.src) return h("div.thumb", h("div.thumb-fallback", svg(w.type === "video" ? "play" : "image"), h("span", "No preview")));
-    return h("div.thumb.loading", h("div.thumb-fallback", h("span.spinner"), h("span", "Making preview…")));
-  }
-
   function metaFor(w) {
     if (w.builtin || w.type === "builtin") return SCENE_BLURB[w.id.split(":")[1]] ?? "Animated scene";
     return [w.type === "video" ? formatDuration(w.durationSec) : "", resLabel(w.width, w.height)].filter(Boolean).join(" · ") || TYPE_LABEL[w.type];

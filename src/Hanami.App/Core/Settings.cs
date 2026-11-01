@@ -15,6 +15,7 @@ public sealed class AppSettings
 
     public PowerSettings Power { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
+    public ScreensaverSettings Screensaver { get; set; } = new();
     public bool StartWithWindows { get; set; } = true;
     public bool Paused { get; set; }
 
@@ -123,6 +124,9 @@ public sealed class SettingsStore
         }
         s.Power ??= new();
         s.Performance ??= new();
+        s.Screensaver ??= new();
+        s.Screensaver.IdleMinutes = Math.Clamp(s.Screensaver.IdleMinutes, 1, 120);
+        s.Screensaver.StopAfterHours = Math.Clamp(s.Screensaver.StopAfterHours, 0, 48);
         s.Power.LowBatteryThreshold = Math.Clamp(s.Power.LowBatteryThreshold, 0, 100);
         s.Performance.FpsCap = Math.Clamp(s.Performance.FpsCap, 5, 240);
         s.Performance.BatteryFpsCap = Math.Clamp(s.Performance.BatteryFpsCap, 5, 240);

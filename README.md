@@ -11,6 +11,10 @@ system tray as a single self-contained `.exe`.
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that
   to keep it running. A wallpaper fully covered by a window is suspended, so it uses no CPU.
+- **Live screensaver** (plugged in only). After a set idle time (default 2 minutes) it covers
+  every monitor with the live wallpaper and keeps the screen on. Any input ends it. On battery,
+  or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
+  changes Windows power settings, and closing the lid always follows your Windows lid setting.
 - **Library.** Imported videos and images are copied into the app's own `Library` folder, so
   deleting the original download doesn't break the wallpaper.
 - **Export / import.** A `.hanamipack` file moves any selection of the library, plus your

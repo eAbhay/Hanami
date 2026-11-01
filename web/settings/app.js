@@ -5,6 +5,7 @@ import { LOGO } from "./icons.js";
 import { createWallpapersTab } from "./tabs/wallpapers.js";
 import { createEffectsTab } from "./tabs/effects.js";
 import { createPowerTab } from "./tabs/power.js";
+import { createScreensaverTab } from "./tabs/screensaver.js";
 import { createGeneralTab } from "./tabs/general.js";
 import { createTransferTab } from "./tabs/transfer.js";
 import { FALLBACK_EFFECT } from "./defaults.js";
@@ -14,6 +15,7 @@ const TABS = [
   { id: "wallpapers", label: "Wallpapers", icon: "image", create: createWallpapersTab },
   { id: "effects", label: "Effects", icon: "sparkles", create: createEffectsTab },
   { id: "power", label: "Power", icon: "gauge", create: createPowerTab },
+  { id: "screensaver", label: "Screensaver", icon: "screensaver", create: createScreensaverTab },
   { id: "general", label: "General", icon: "gear", create: createGeneralTab },
   { id: "transfer", label: "Export / Import", icon: "transfer", create: createTransferTab },
 ];

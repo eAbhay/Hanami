@@ -27,6 +27,8 @@ html, body {
 
 #fx { pointer-events: none; }
 
+.screensaver, .screensaver body, .screensaver * { cursor: none !important; }
+
 /* ── dev panel (only created when running outside the host) ── */
 #dev {
   position: fixed;

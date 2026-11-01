@@ -19,6 +19,7 @@ public sealed class HanamiHost
     private Library _library = null!;
     private CoreWebView2Environment _env = null!;
     private WallpaperManager _wallpapers = null!;
+    private ScreensaverManager _screensaver = null!;
     private TrayIcon _tray = null!;
     private SettingsWindow? _settingsWindow;
     private DispatcherTimer? _displayDebounce;
@@ -50,6 +51,10 @@ public sealed class HanamiHost
         _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, _library);
         _wallpapers.StatusChanged += OnStatusChanged;
         await _wallpapers.StartAsync();
+        _screensaver = new ScreensaverManager(_env, _paths, () => _store.Current, _library,
+            () => _wallpapers.Power, () => _wallpapers.SessionLocked);
+        _screensaver.Changed += OnScreensaverChanged;
+        _screensaver.Start();
         OnStatusChanged();
 
         SystemEvents.DisplaySettingsChanged += (_, _) => _ui.BeginInvoke(ScheduleRebuild);
@@ -81,6 +86,7 @@ public sealed class HanamiHost
         _quitting = true;
         Log.Info("Quitting");
         _settingsWindow?.Close();
+        _screensaver?.Dispose();
         _wallpapers?.Dispose();
         _tray?.Dispose();
         Application.Current.Shutdown();
@@ -109,12 +115,31 @@ public sealed class HanamiHost
         };
         if (locked == _wallpapers.SessionLocked) return;
         _wallpapers.SessionLocked = locked;
+        if (locked) _screensaver.End("Windows locked");
         await _wallpapers.ApplyModesAsync();
     }
 
     private void OnPowerModeChanged(PowerModes mode)
     {
-        if (mode == PowerModes.Resume) ScheduleRebuild();
+        if (mode == PowerModes.Suspend)
+        {
+            _screensaver.End("going to sleep");
+        }
+        else if (mode == PowerModes.Resume)
+        {
+            _screensaver.ResetIdle();
+            ScheduleRebuild();
+        }
+    }
+
+    private async void OnScreensaverChanged()
+    {
+        if (_wallpapers.ScreensaverShowing != _screensaver.Showing)
+        {
+            _wallpapers.ScreensaverShowing = _screensaver.Showing;
+            await _wallpapers.ApplyModesAsync();
+        }
+        BroadcastState();
     }
 
     private void OnStatusChanged()
@@ -169,7 +194,20 @@ public sealed class HanamiHost
             ["energySaver"] = _wallpapers.Power.EnergySaver,
         },
         ["wallpapers"] = Json.ToNode(_library.List()),
+        ["screensaver"] = ScreensaverState(),
     };
+
+    private JsonObject ScreensaverState()
+    {
+        var (displayOff, sleep) = Native.Win32.PluggedInTimeouts();
+        return new JsonObject
+        {
+            ["active"] = _screensaver.Showing,
+            ["status"] = _screensaver.Showing ? "Showing" : _screensaver.Status,
+            ["windowsDisplayOffMinutes"] = displayOff,
+            ["windowsSleepMinutes"] = sleep,
+        };
+    }
 
     private async Task<JsonNode?> DispatchAsync(string method, JsonNode? p)
     {
@@ -238,6 +276,10 @@ public sealed class HanamiHost
 
             case "importPack":
                 return await ImportPackAsync();
+
+            case "previewScreensaver":
+                await _screensaver.PreviewAsync();
+                return new JsonObject { ["ok"] = true };
 
             case "quit":
                 _ = _ui.BeginInvoke(Quit);

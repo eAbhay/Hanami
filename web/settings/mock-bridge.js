@@ -5,6 +5,7 @@
 //   hanamiMock.setPower({ onBattery: true, batteryPercent: 64, energySaver: false })
 //   hanamiMock.setWindowState("\\\\.\\DISPLAY2", "fullscreen" | "maximized" | null)
 //   hanamiMock.failNext("setAssignment", "Something went wrong")
+//   hanamiMock.setWindowsTimers(displayOffMin | null, sleepMin | null)
 //   hanamiMock.state   (live state object)
 
 const DEFAULT_EFFECT = {
@@ -150,6 +151,7 @@ function initialState() {
         energySaver: "reduced", whenMaximized: "paused", whenFullscreen: "paused",
       },
       performance: { fpsCap: 60, batteryFpsCap: 30 },
+      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, stopAfterHours: 0 },
       startWithWindows: true,
       paused: false,
     },
@@ -160,6 +162,8 @@ function initialState() {
     modes: {},
     power: { onBattery: false, batteryPercent: 82, energySaver: false },
     wallpapers: [...builtins, ...lib],
+    // Windows' plugged-in timers (the real host reads them from the active power plan).
+    screensaver: { active: false, status: "", windowsDisplayOffMinutes: 10, windowsSleepMinutes: 30 },
   };
 }
 
@@ -195,7 +199,16 @@ export function createMockHost(post) {
   }
   computeModes();
 
-  const snapshot = () => { computeModes(); return clone(state); };
+  let previewTimer = 0;
+  function computeScreensaver() {
+    const cfg = state.settings.screensaver, ss = state.screensaver;
+    if (ss.active) ss.status = "Showing";
+    else if (!cfg.enabled) ss.status = "Off";
+    else if (state.power.onBattery) ss.status = "Off on battery";
+    else ss.status = `Starts after ${cfg.idleMinutes} min idle`;
+  }
+
+  const snapshot = () => { computeModes(); computeScreensaver(); return clone(state); };
   const emit = (event, data) => setTimeout(() => post({ event, data: clone(data) }), 0);
   const emitState = () => emit("stateChanged", snapshot());
   const findWp = (id) => state.wallpapers.find((w) => w.id === id);
@@ -229,6 +242,8 @@ export function createMockHost(post) {
     updateSettings: (patch) => {
       if (!isObj(patch)) throw new Error("updateSettings expects an object");
       deepMerge(state.settings, patch);
+      const ss = state.settings.screensaver;
+      ss.idleMinutes = Math.min(120, Math.max(1, Math.round(ss.idleMinutes)));
       emitState();
       return snapshot();
     },
@@ -275,6 +290,7 @@ export function createMockHost(post) {
       if (w.builtin) throw new Error("Built-in wallpapers can't be deleted");
       state.wallpapers = state.wallpapers.filter((x) => x.id !== id);
       for (const a of Object.values(state.settings.assignments)) if (a.wallpaperId === id) a.wallpaperId = null;
+      if (state.settings.screensaver.wallpaperId === id) state.settings.screensaver.wallpaperId = null;
       emitState();
       return snapshot();
     },
@@ -327,6 +343,15 @@ export function createMockHost(post) {
       return { imported: picks.length };
     },
 
+    previewScreensaver: () => {
+      // Real host: shows it now, ending on input. Mock: "show" it for a few seconds.
+      state.screensaver.active = true;
+      emitState();
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => { state.screensaver.active = false; emitState(); }, 4000);
+      return { ok: true };
+    },
+
     quit: () => { setTimeout(() => console.info("[mock] host would quit now"), 0); return undefined; },
   };
 
@@ -346,7 +371,12 @@ export function createMockHost(post) {
 
   window.hanamiMock = {
     state,
-    setPower(p) { Object.assign(state.power, p); emitState(); },
+    setPower(p) {
+      Object.assign(state.power, p);
+      if (state.power.onBattery) state.screensaver.active = false;   // unplugging ends it
+      emitState();
+    },
+    setWindowsTimers(displayOff, sleep) { Object.assign(state.screensaver, { windowsDisplayOffMinutes: displayOff, windowsSleepMinutes: sleep }); emitState(); },
     setWindowState(key, s) { windowState[key] = s; emitState(); },
     failNext(method, message = "Simulated host error") { failures.set(method, message); },
   };

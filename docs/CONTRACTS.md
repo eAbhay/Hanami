@@ -141,6 +141,7 @@ Events: host posts `{event: "<name>", data}`.
 | `getExportItems` | – | `ExportItem[]` |
 | `exportPack` | `{ids: string[], includeSettings: boolean}` (host opens save dialog) | `{path}` or `{cancelled: true}` |
 | `importPack` | – (host opens open dialog) | `{imported: number}` or `{cancelled: true}` |
+| `previewScreensaver` | – (shows the screensaver now, ignoring idle time and power source; ends on input as usual) | `{ok: true}` |
 | `quit` | – | – |
 
 Events: `stateChanged` (data: `State`), `progress` (data: `{task: "import"\|"export"\|"importPack", done: number, total: number, label: string}`; `done === total` means finished).
@@ -163,6 +164,13 @@ type Settings = {
     whenFullscreen: Mode;       // default "paused"   (a fullscreen app/game on that monitor)
   };
   performance: { fpsCap: number; batteryFpsCap: number };   // defaults 60 / 30
+  screensaver: {
+    enabled: boolean;           // default true
+    idleMinutes: number;        // 1 – 120, default 2
+    wallpaperId: string | null; // null = same wallpaper + effect as each monitor's desktop
+    requireSignIn: boolean;     // default false — lock Windows when the screensaver ends
+    stopAfterHours: number;     // 0 = never (default); after this, hide it and let Windows' timers take over
+  };
   startWithWindows: boolean;    // default true
   paused: boolean;              // manual pause from tray/UI, default false
 };
@@ -179,6 +187,13 @@ type State = {
   modes: Record<string, { mode: Mode; reason: string }>;   // effective mode per monitorKey
   power: { onBattery: boolean; batteryPercent: number | null; energySaver: boolean };
   wallpapers: WallpaperInfo[];                              // builtins first
+  screensaver: {
+    active: boolean;            // showing right now
+    status: string;             // human-readable, e.g. "Starts after 2 min idle", "Off on battery",
+                                // "Another app is keeping the screen on", "Showing"
+    windowsDisplayOffMinutes: number | null;  // Windows' plugged-in "turn off screen after" (null = never)
+    windowsSleepMinutes: number | null;       // Windows' plugged-in "sleep after" (null = never)
+  };
 };
 ```
 
@@ -186,6 +201,20 @@ Effective mode per monitor = the most restrictive (`paused` < `reduced` < `full`
 manual pause, maximized/fullscreen rule for that monitor, battery rule (`lowBattery` when
 on battery and at/below threshold, else `onBattery`; `onAC` when plugged in), energy-saver rule.
 A monitor that is fully covered is additionally hidden + suspended by the host (zero CPU).
+
+### Screensaver behaviour
+
+Plugged in only. After `idleMinutes` without keyboard/mouse input the host covers every monitor
+with a topmost fullscreen window showing the wallpaper page (`…/wallpaper/index.html?monitor=<key>&screensaver=1`,
+always in `full` mode, cursor hidden) and holds a Windows display-required + system-required
+power request, so the screen stays on and the PC does not idle-sleep. Any key, click, wheel or
+mouse movement beyond a few pixels ends it (and locks Windows first if `requireSignIn`).
+It does not start (status explains why) when: disabled, on battery, session locked, a fullscreen
+app is running, or another app already holds a display request (video playback, calls).
+It ends on unplug, lock, sleep, or after `stopAfterHours`. The idle count restarts after waking.
+The power request belongs to the Hanami process, so quitting Hanami restores Windows' own
+screen-off and sleep timers; Hanami never changes Windows power settings. Lid close always
+follows Windows (apps cannot block it).
 
 The settings UI must run standalone in a browser (`web/settings/index.html`) using
 `web/settings/mock-bridge.js` when `window.chrome?.webview` is missing.
