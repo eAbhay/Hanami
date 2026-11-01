@@ -1,7 +1,7 @@
 // Screensaver tab — what the screensaver shows. When it runs lives on the Power tab.
 import { h, svg } from "../util.js";
 import { scopeSelector } from "../scope.js";
-import { pageHeader, card, wallpaperPicker, effectPicker, createClockCard } from "../components/index.js";
+import { pageHeader, card, wallpaperPicker, effectPicker, createClockCard, slotSwitch } from "../components/index.js";
 
 export function createScreensaverTab(ctx) {
   const save = (patch) => ctx.mutate("updateSettings", { screensaver: patch }).catch(() => {});
@@ -25,8 +25,24 @@ export function createScreensaverTab(ctx) {
   // ---------------------------------------------------------------- background + effect
   const backgrounds = wallpaperPicker(ctx, {
     allowSameAsDesktop: true,
-    onSelect: (w) => { const id = w?.id ?? null; if ((ctx.state.settings.screensaver.wallpaperId ?? null) !== id) return save({ wallpaperId: id }); },
+    onSelect: pickBackground,
   });
+  const slots = slotSwitch(ctx);
+  const emptyDark = h("p.field-hint.slot-hint");
+
+  /** Light slot: the screensaver's background (null = the desktop's). Dark slot: its dark one (null = the light one);
+   *  picking one while the light background is "same as desktop" pins that desktop wallpaper as the light one. */
+  function pickBackground(w) {
+    const cfg = ctx.state.settings.screensaver;
+    const id = w?.id ?? null;
+    if (ctx.slot === "dark") {
+      if ((cfg.darkWallpaperId ?? null) === id) return;
+      if (id === null) return save({ darkWallpaperId: null });
+      return save({ wallpaperId: cfg.wallpaperId ?? ctx.assignmentFor(ctx.scopeKey()).light, darkWallpaperId: id });
+    }
+    if ((cfg.wallpaperId ?? null) === id) return;
+    return save(id === null ? { wallpaperId: null, darkWallpaperId: null } : { wallpaperId: id });
+  }
   const effects = effectPicker({
     allowSameAsDesktop: true,
     ariaLabel: "Screensaver effect",
@@ -57,7 +73,7 @@ export function createScreensaverTab(ctx) {
     pageHeader("Screensaver", "Your live wallpaper, fullscreen, while you're away from your desk.", previewBtn),
     status,
     scope,
-    card("Background", "Same as desktop follows each monitor", backgrounds.el),
+    card("Background", slots, emptyDark, backgrounds.el),
     card("Effect", effectNote, effects),
     clockCard.el,
     toPower);
@@ -71,7 +87,15 @@ export function createScreensaverTab(ctx) {
     activeBadge.hidden = !st.active;
     statusDot.dataset.tone = st.active ? "active" : !cfg.enabled || s.power.onBattery ? "off" : "ready";
 
-    backgrounds.update(s, cfg.wallpaperId ?? null);
+    slots.update();
+    const dark = ctx.slot === "dark";
+    backgrounds.setSameLabel(dark && cfg.wallpaperId != null ? "Same as light" : "Same as desktop");
+    emptyDark.hidden = !dark;
+    emptyDark.textContent = cfg.wallpaperId == null
+      ? "Follows the desktop's dark wallpaper until you pick one"
+      : "Uses the light background until you pick one";
+    backgrounds.update(s, dark ? cfg.darkWallpaperId ?? null : cfg.wallpaperId ?? null,
+      ctx.split ? { light: cfg.wallpaperId ?? null, dark: cfg.darkWallpaperId ?? null } : null);
     scope.update(s);
     if (cfg.wallpaperId != null) scope.hidden = true;   // an own background has one look on every monitor
     const id = backgroundId();

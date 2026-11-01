@@ -5,3 +5,4 @@ export { wallpaperPicker } from "./wallpaperPicker.js";
 export { effectPicker } from "./effectPicker.js";
 export { createTuningDrawer } from "./tuningDrawer.js";
 export { createClockCard } from "./clockCard.js";
+export { slotSwitch } from "./slotSwitch.js";

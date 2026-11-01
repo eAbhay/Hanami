@@ -8,8 +8,10 @@ public sealed class TrayIcon : IDisposable
     private readonly WinForms.NotifyIcon _icon;
     private readonly WinForms.ToolStripMenuItem _pause;
     private readonly WinForms.ToolStripMenuItem _status;
+    private readonly WinForms.ToolStripMenuItem _theme;
+    private readonly WinForms.ToolStripSeparator _themeSep = new();
 
-    public TrayIcon(Action openSettings, Action togglePause, Action quit)
+    public TrayIcon(Action openSettings, Action togglePause, Action<string> setThemeMode, Action quit)
     {
         using var stream = typeof(TrayIcon).Assembly.GetManifestResourceStream("hanami.ico")!;
         _status = new WinForms.ToolStripMenuItem("Running") { Enabled = false };
@@ -19,7 +21,12 @@ public sealed class TrayIcon : IDisposable
         menu.Items.Add(_status);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add(_pause);
-        menu.Items.Add(new WinForms.ToolStripSeparator());
+        _theme = new WinForms.ToolStripMenuItem("Theme") { Visible = false };
+        foreach (var (mode, label) in new[] { ("system", "Follow Windows"), ("light", "Light"), ("dark", "Dark") })
+            _theme.DropDownItems.Add(new WinForms.ToolStripMenuItem(label, null, (_, _) => setThemeMode(mode)) { Tag = mode });
+        _themeSep.Visible = false;
+        menu.Items.Add(_theme);
+        menu.Items.Add(_themeSep);
         menu.Items.Add(new WinForms.ToolStripMenuItem("Quit Hanami", null, (_, _) => quit()));
 
         _icon = new WinForms.NotifyIcon
@@ -30,6 +37,13 @@ public sealed class TrayIcon : IDisposable
             Visible = true,
         };
         _icon.MouseClick += (_, e) => { if (e.Button == WinForms.MouseButtons.Left) openSettings(); };
+    }
+
+    /// <summary>The Theme submenu exists only while light/dark wallpapers are on.</summary>
+    public void UpdateTheme(bool split, string mode)
+    {
+        _theme.Visible = _themeSep.Visible = split;
+        foreach (WinForms.ToolStripMenuItem item in _theme.DropDownItems) item.Checked = (string?)item.Tag == mode;
     }
 
     public void Update(bool paused, string status)

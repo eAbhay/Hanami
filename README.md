@@ -15,6 +15,10 @@ system tray as a single self-contained `.exe`.
   be *Same as desktop* (one set of settings for both) or its own. A wallpaper you pick for the
   first time starts from a copy of the look of the one it replaces. *Use as default for <effect>*
   in the effect drawer sets what wallpapers that haven't tuned it start from.
+- **Light and dark wallpapers (optional, off by default).** Turn it on in General and each slot
+  (every monitor's desktop, and the screensaver background) can hold a light and a dark wallpaper.
+  Hanami switches with Windows' light/dark setting, or you force Light or Dark from General or the
+  tray's Theme menu. Each wallpaper keeps its own look, so only the wallpaper changes.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that

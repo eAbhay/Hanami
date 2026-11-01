@@ -21,6 +21,7 @@ public sealed class ScreensaverManager : IDisposable
     private readonly CoreWebView2Environment _env;
     private readonly AppPaths _paths;
     private readonly Func<AppSettings> _settings;
+    private readonly Func<bool> _dark;
     private readonly Library _library;
     private readonly Func<PowerState> _power;
     private readonly Func<bool> _sessionLocked;
@@ -53,12 +54,13 @@ public sealed class ScreensaverManager : IDisposable
     /// <summary>Raised when Showing or Status changes.</summary>
     public event Action? Changed;
 
-    public ScreensaverManager(CoreWebView2Environment env, AppPaths paths, Func<AppSettings> settings, Library library,
+    public ScreensaverManager(CoreWebView2Environment env, AppPaths paths, Func<AppSettings> settings, Func<bool> dark, Library library,
         Func<PowerState> power, Func<bool> sessionLocked)
     {
         _env = env;
         _paths = paths;
         _settings = settings;
+        _dark = dark;
         _library = library;
         _power = power;
         _sessionLocked = sessionLocked;
@@ -70,6 +72,21 @@ public sealed class ScreensaverManager : IDisposable
     }
 
     public void Start() => _tick.Start();
+
+    private void SendConfig(WallpaperView view, AppSettings s, string monitorKey, int fps)
+    {
+        var dark = _dark();
+        view.SendConfig(_library.Resolve(s.ScreensaverWallpaperFor(monitorKey, dark)), s.ScreensaverEffectFor(monitorKey, dark), fps,
+            new FontLibrary(_library).ClockMessage(s.ScreensaverClockFor(monitorKey, dark)));
+    }
+
+    /// <summary>A setting or the theme changed while the screensaver shows: re-send each page its configuration.</summary>
+    public void PushConfigAll()
+    {
+        if (!_showing) return;
+        var s = _settings();
+        foreach (var view in _views) SendConfig(view, s, view.Monitor.Key, s.Performance.FpsCap);
+    }
 
     /// <summary>After waking from sleep the last input can be minutes old; count idle time from now.</summary>
     public void ResetIdle()
@@ -129,8 +146,7 @@ public sealed class ScreensaverManager : IDisposable
             foreach (var m in Monitors.Enumerate())
             {
                 var view = await WallpaperView.CreateScreensaverAsync(_env, m, _paths);
-                var wallpaper = _library.Resolve(s.ScreensaverWallpaperFor(m.Key));
-                view.SendConfig(wallpaper, s.ScreensaverEffectFor(m.Key), fps, new FontLibrary(_library).ClockMessage(s.ScreensaverClockFor(m.Key)));
+                SendConfig(view, s, m.Key, fps);
                 await view.SetModeAsync(new ResolvedMode(Mode.Full, "Screensaver", false));
                 view.MessageReceived += OnPageMessage;
                 _views.Add(view);

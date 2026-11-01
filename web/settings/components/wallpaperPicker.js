@@ -19,6 +19,8 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
   let applying = null;
   let sig = "";
 
+  let sameLabel = "Same as desktop";
+
   const choose = async (w) => {
     applying = w?.id ?? "";
     els.get(applying)?.classList.add("applying");
@@ -36,7 +38,7 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
   }
 
   function renderTiles(grid, s) {
-    const next = s.wallpapers.map((w) => `${w.id}|${w.name}|${w.thumbnail ?? ""}`).join(",");
+    const next = sameLabel + "|" + s.wallpapers.map((w) => `${w.id}|${w.name}|${w.thumbnail ?? ""}`).join(",");
     if (next === sig) return;
     sig = next;
     els.clear();
@@ -44,7 +46,7 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
     const tiles = list.map((w) => pickTile(w.id, w.name, thumbFor(w), w));
     if (allowSameAsDesktop) {
       const same = h("div.thumb.pick-same", svg("monitors"), h("span", "Each monitor's own"));
-      tiles.unshift(pickTile(null, "Same as desktop", same, null));
+      tiles.unshift(pickTile(null, sameLabel, same, null));
     }
     for (const t of tiles) els.set(t.dataset.id, t);
     grid.replaceChildren(...tiles);
@@ -197,10 +199,21 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
     render = (s) => renderTiles(el, s);
   }
 
-  function update(s, selectedId) {
+  /** Names the leading tile (pick mode): "Same as desktop", or "Same as light" for a dark slot. */
+  function setSameLabel(text) {
+    if (text === sameLabel) return;
+    sameLabel = text;
+    sig = "";
+  }
+
+  /** marks = {light, dark} wallpaper ids of the slot being edited (light/dark wallpapers on), else null. */
+  function update(s, selectedId, marks = null) {
     render(s);
     const sel = selectedId ?? "";
     for (const [id, c] of els) {
+      c.querySelector(".slot-mark")?.remove();
+      const glyphs = marks && id ? (id === marks.light ? "☀" : "") + (id === marks.dark ? "☾" : "") : "";
+      if (glyphs) (c.querySelector(".thumb-wrap") ?? c).append(h("span.slot-mark", { title: "Light / dark wallpaper of this slot" }, glyphs));
       const on = id === sel;
       c.classList.toggle(manage ? "applied" : "on", on);
       c.setAttribute(manage ? "aria-pressed" : "aria-checked", on ? "true" : "false");
@@ -208,5 +221,5 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
     }
   }
 
-  return { el, update, hide: closeMenu };
+  return { el, update, setSameLabel, hide: closeMenu };
 }

@@ -144,7 +144,7 @@ Events: host posts `{event: "<name>", data}`.
 |---|---|---|
 | `getState` | – | `State` |
 | `updateSettings` | `Partial<Settings>` (deep-merged) | `State` |
-| `setAssignment` | `{monitorKey: string \| "*", wallpaperId: string \| null}` — a wallpaper without a look yet starts from a copy of the look of the wallpaper it replaces on that monitor | `State` |
+| `setAssignment` | `{monitorKey: string \| "*", wallpaperId: string \| null, theme?: "light" \| "dark"}` (`theme` = which slot to write, default light; a first pick for the dark slot copies the look of that slot's light wallpaper) — a wallpaper without a look yet starts from a copy of the look of the wallpaper it replaces on that monitor | `State` |
 | `setLook` | `{wallpaperId, desktop?: {effectPreset?: PresetId}, screensaver?: {effectPreset?: PresetId \| null, clock?: Partial<ClockSettings>}}` — merged into that wallpaper's look (created if missing); `screensaver.effectPreset: null` = same as desktop | `State` |
 | `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null, wallpaperId?: string, target?: "desktop" \| "screensaver"}` — with `wallpaperId` it edits that look's tuning of the preset (`target` `screensaver` while the screensaver effect is "same as desktop" edits the desktop tuning, since they are shared); without it the effect defaults. `tuning: null` resets that level | `State` |
 | `importMedia` | – (host opens a file dialog, multi-select, copies files into the library) | `{imported: WallpaperInfo[]}` or `{cancelled: true}` |
@@ -186,8 +186,17 @@ type Settings = {
   // the screensaver background. Nothing visible changes (the global effects tuning still applies).
   // The legacy fields are read once and never written back.
   sameOnAllMonitors: boolean;                       // default true
-  assignments: Record<string, { wallpaperId: string | null }>;
-  // key "*" = default for every monitor; other keys = monitorKey overrides (used when !sameOnAllMonitors)
+  assignments: Record<string, { wallpaperId: string | null; darkWallpaperId: string | null }>;
+  // key "*" = default for every monitor; other keys = monitorKey overrides (used when !sameOnAllMonitors).
+  // darkWallpaperId is the slot's dark-mode wallpaper (null = use wallpaperId, so a slot is never empty);
+  // it only matters while theme.split is on.
+  theme: {
+    split: boolean;             // default false: one wallpaper per slot, the app looks as before
+    mode: "system" | "light" | "dark";   // default "system" = follow Windows' apps theme (Settings → Colors)
+  };
+  // Which wallpaper a slot shows = split && activeTheme == "dark" && darkWallpaperId != null ? darkWallpaperId
+  // : wallpaperId. The screensaver's "same as desktop" means the desktop wallpaper for the active theme.
+  // Everything else (effect, tuning, clock) is the shown wallpaper's look, so the theme only picks the wallpaper.
   effects: Partial<Record<PresetId, Partial<EffectTuning>>>;
   // The effect defaults: the user's tuning per effect, the starting point for wallpapers that haven't
   // tuned that effect themselves ("Use as default for <Effect>" in the drawer writes here). Missing
@@ -221,6 +230,7 @@ type Settings = {
     enabled: boolean;           // default true
     idleMinutes: number;        // 1 – 120, default 2
     wallpaperId: string | null; // null = same wallpaper as each monitor's desktop (and its look)
+    darkWallpaperId: string | null; // dark-mode background; null = use wallpaperId. Only with an own wallpaperId
     requireSignIn: boolean;     // default false — lock Windows when the screensaver ends
     stopAfterHours: number;     // 0 = never (default); after this, hide it and let Windows' timers take over
   };
@@ -249,6 +259,7 @@ type State = {
   modes: Record<string, { mode: Mode; reason: string }>;   // effective mode per monitorKey
   power: { onBattery: boolean; batteryPercent: number | null; energySaver: boolean };
   wallpapers: WallpaperInfo[];                              // builtins first
+  theme: { active: "light" | "dark"; windows: "light" | "dark" };   // the theme in use (mode applied) · Windows' own
   screensaver: {
     active: boolean;            // showing right now
     status: string;             // human-readable, e.g. "Starts after 2 min idle", "Off on battery",

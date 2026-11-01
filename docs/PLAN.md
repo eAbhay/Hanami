@@ -158,7 +158,7 @@ clock), the theme only decides *which wallpaper*; nothing else needs a light/dar
 the app looks exactly as it does now. Turning it on adds one small Light/Dark switch to the two
 Background cards, plus marks on the tiles. No second set of pickers, no new tab.
 
-- [ ] 2.1 `docs/CONTRACTS.md`:
+- [x] 2.1 `docs/CONTRACTS.md`:
   - `Settings.theme: { split: boolean (default false); mode: "system" | "light" | "dark"
     (default "system") }`. `split` off → one wallpaper per slot, as today.
   - `assignments[key]: { wallpaperId; darkWallpaperId: string | null }` and
@@ -168,7 +168,7 @@ Background cards, plus marks on the tiles. No second set of pickers, no new tab.
   - `State.theme: { active: "light" | "dark"; windows: "light" | "dark" }`.
   - Bridge: `setAssignment` gains `theme?: "light" | "dark"` (which slot to write, default light);
     `updateSettings` covers `theme` and the screensaver's dark slot.
-- [ ] 2.2 Host:
+- [x] 2.2 Host:
   - `Platform/ThemeWatch.cs`: read `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize`
     `AppsUseLightTheme` (apps theme; matches what users flip in Settings → Colors), and watch it via
     `SystemEvents.UserPreferenceChanged` (category General), re-reading the value; raise
@@ -184,7 +184,7 @@ Background cards, plus marks on the tiles. No second set of pickers, no new tab.
   - Tests (pure resolver): split off ignores dark slots; system mode follows the flag; forced
     modes; null dark slot falls back; "same as desktop" screensaver follows the active theme;
     delete clears the slot; packs keep `theme` and dark slots with settings.
-- [ ] 2.3 Settings UI:
+- [x] 2.3 Settings UI:
   - **General** tab: card "Light and dark" — toggle "Different wallpapers for light and dark
     mode" (hint: "Hanami switches with Windows' light/dark setting") and, when on, segmented
     **Follow Windows · Light · Dark** with a line "Windows is in dark mode right now".
@@ -197,13 +197,17 @@ Background cards, plus marks on the tiles. No second set of pickers, no new tab.
     card (the slot being edited), so editing dark mode's effect is just: Dark → change effect.
   - The settings window's own light/dark already follows Windows; leave it alone.
   - `mock-bridge.js`: `theme`, dark slots, a way to flip Windows' theme in the mock.
-- [ ] 2.4 Check: split on, light = a day scene, dark = a night scene; flip Windows' theme in
+- [x] 2.4 Check: split on, light = a day scene, dark = a night scene; flip Windows' theme in
       Settings → Personalization → Colors (**ask the user to flip it**, or set the registry value
       in a dev-only test and restore it) → wallpaper crossfades; forced Light/Dark from the tray;
       screensaver preview in both themes; split off → identical to before. Browser check at
       1000×680 and 820×560, light/dark. README. Commit.
 
 Notes:
+- Done 2026-11-01. 2.4 was checked with the mock bridge in a browser (split switch, slot marks, dark slot
+  selection) and unit tests for the resolver; flipping the real Windows theme is still for the user.
+- On the Screensaver tab, picking a dark background while the light one is "same as desktop" pins that
+  desktop wallpaper as the light background (an own dark slot needs an own light one).
 - Not included: switching at sunset/sunrise on a schedule. Windows has no built-in schedule; if
   the user wants one, "Follow Windows" already works with the free *Auto Dark Mode* app. A
   `mode: "schedule"` could be added later without changing the data shape.

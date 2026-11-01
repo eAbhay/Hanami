@@ -22,6 +22,7 @@ const TABS = [
 
 let state = null;
 let selectedMonitor = null;   // monitorKey shown when !sameOnAllMonitors
+let editSlot = "light";       // which light/dark slot the Wallpaper and Screensaver tabs edit (only when theme.split)
 let presetDefaults = {};      // PRESET_DEFAULTS from the effects engine, once it has loaded
 const listeners = new Set();
 
@@ -76,11 +77,19 @@ const ctx = {
     return (own ? look.screensaver.tuning : look.desktop.tuning)[preset] ?? null;
   },
 
-  /** Effective {wallpaperId} for a key (falls back to "*"). */
+  /** Light and dark wallpapers: on when settings.theme.split. `slot` is the one being edited. */
+  get split() { return !!state?.settings.theme?.split; },
+  get slot() { return ctx.split ? editSlot : "light"; },
+  setSlot(v) { editSlot = v; notify(); },
+
+  /** The slots of a key (falls back to "*"): `light`, `dark` (own, may be null), `own` = the edited slot's
+   *  own wallpaper, and `wallpaperId` = what that slot actually shows (an empty dark slot shows the light one). */
   assignmentFor(key) {
     const a = state?.settings.assignments ?? {};
     const x = a[key] ?? a["*"] ?? { wallpaperId: null };
-    return { wallpaperId: x.wallpaperId ?? null };
+    const light = x.wallpaperId ?? null, dark = x.darkWallpaperId ?? null;
+    const own = ctx.slot === "dark" ? dark : light;
+    return { light, dark, own, wallpaperId: own ?? light };
   },
 
   /** The effect a wallpaper shows on the desktop: {preset, ...EffectConfig}. */
@@ -91,7 +100,9 @@ const ctx = {
 
   /** The wallpaper the screensaver shows for a key: its own, or that monitor's desktop wallpaper. */
   screensaverBackground(key = ctx.scopeKey()) {
-    return state?.settings.screensaver.wallpaperId ?? ctx.assignmentFor(key).wallpaperId;
+    const cfg = state?.settings.screensaver;
+    if (cfg?.wallpaperId == null) return ctx.assignmentFor(key).wallpaperId;   // follows the desktop, in the edited slot
+    return ctx.slot === "dark" ? cfg.darkWallpaperId ?? cfg.wallpaperId : cfg.wallpaperId;
   },
 
   /** The effect a wallpaper shows as a screensaver: its own, or (null) the desktop one with shared tuning. */
@@ -103,7 +114,7 @@ const ctx = {
 
   /** Shows a wallpaper on the current scope's desktop. The host copies the look of the one it replaces. */
   async assign(wallpaperId, key = ctx.scopeKey()) {
-    return ctx.mutate("setAssignment", { monitorKey: key, wallpaperId });
+    return ctx.mutate("setAssignment", { monitorKey: key, wallpaperId, theme: ctx.slot });
   },
 
   /** Edits a wallpaper's look: {desktop?: {effectPreset?}, screensaver?: {effectPreset?: id | null, clock?}}. */
@@ -131,7 +142,9 @@ const ctx = {
 };
 
 function applyState(s) {
+  const first = state === null;
   state = s;
+  if (first && s.settings.theme?.split && s.theme) editSlot = s.theme.active;   // start on the theme Windows is in
   if (!selectedMonitor || !s.monitors.some((m) => m.key === selectedMonitor)) {
     selectedMonitor = (s.monitors.find((m) => m.isPrimary) ?? s.monitors[0])?.key ?? null;
   }

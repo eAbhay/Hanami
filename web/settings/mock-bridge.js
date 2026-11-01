@@ -6,6 +6,7 @@
 //   hanamiMock.setWindowState("\\\\.\\DISPLAY2", "fullscreen" | "maximized" | null)
 //   hanamiMock.failNext("setAssignment", "Something went wrong")
 //   hanamiMock.setWindowsTimers(displayOffMin | null, sleepMin | null)
+//   hanamiMock.setWindowsTheme("dark" | "light")
 //   hanamiMock.state   (live state object)
 
 const MON1 = "\\\\.\\DISPLAY1";
@@ -142,6 +143,7 @@ function initialState() {
       sameOnAllMonitors: true,
       assignments: { "*": { wallpaperId: "builtin:twilight" } },
       effects: {},   // effect defaults: per-effect overrides, e.g. { snow: { density: 2 } }
+      theme: { split: false, mode: "system" },   // light/dark wallpapers: off by default
       looks: {},     // per wallpaper: { desktop: { effectPreset, tuning }, screensaver: { effectPreset | absent, tuning, clock } }
       power: {
         onAC: "full", onBattery: "paused", lowBattery: "paused", lowBatteryThreshold: 20,
@@ -161,6 +163,7 @@ function initialState() {
     wallpapers: [...builtins, ...lib],
     // Windows' plugged-in timers (the real host reads them from the active power plan).
     screensaver: { active: false, status: "", windowsDisplayOffMinutes: 10, windowsSleepMinutes: 30 },
+    theme: { active: "light", windows: "light" },
   };
 }
 
@@ -209,7 +212,11 @@ export function createMockHost(post) {
     else ss.status = `Starts after ${cfg.idleMinutes} min idle`;
   }
 
-  const snapshot = () => { computeModes(); computeScreensaver(); return clone(state); };
+  function computeTheme() {
+    const m = state.settings.theme.mode;
+    state.theme.active = m === "system" ? state.theme.windows : m;
+  }
+  const snapshot = () => { computeModes(); computeScreensaver(); computeTheme(); return clone(state); };
   const emit = (event, data) => setTimeout(() => post({ event, data: clone(data) }), 0);
   const emitState = () => emit("stateChanged", snapshot());
   const findWp = (id) => state.wallpapers.find((w) => w.id === id);
@@ -257,13 +264,13 @@ export function createMockHost(post) {
       return snapshot();
     },
 
-    setAssignment: ({ monitorKey, wallpaperId } = {}) => {
+    setAssignment: ({ monitorKey, wallpaperId, theme } = {}) => {
       if (monitorKey !== "*" && !state.monitors.some((m) => m.key === monitorKey)) throw new Error(`Unknown monitor ${monitorKey}`);
       if (wallpaperId !== undefined && wallpaperId !== null && !findWp(wallpaperId)) throw new Error("That wallpaper no longer exists");
       const a = state.settings.assignments;
       const cur = a[monitorKey] ?? clone(a["*"]) ?? { wallpaperId: null };
       if (wallpaperId && !state.settings.looks[wallpaperId]) state.settings.looks[wallpaperId] = clone(lookOf(cur.wallpaperId));   // starts from the look it replaces
-      if (wallpaperId !== undefined) cur.wallpaperId = wallpaperId;
+      if (wallpaperId !== undefined) { if (theme === "dark") cur.darkWallpaperId = wallpaperId; else cur.wallpaperId = wallpaperId; }
       a[monitorKey] = cur;
       emitState();
       return snapshot();
@@ -330,7 +337,11 @@ export function createMockHost(post) {
       if (!w) throw new Error("Wallpaper not found");
       if (w.builtin) throw new Error("Built-in wallpapers can't be deleted");
       state.wallpapers = state.wallpapers.filter((x) => x.id !== id);
-      for (const a of Object.values(state.settings.assignments)) if (a.wallpaperId === id) a.wallpaperId = null;
+      for (const a of Object.values(state.settings.assignments)) {
+        if (a.wallpaperId === id) a.wallpaperId = null;
+        if (a.darkWallpaperId === id) delete a.darkWallpaperId;
+      }
+      if (state.settings.screensaver.darkWallpaperId === id) delete state.settings.screensaver.darkWallpaperId;
       if (state.settings.screensaver.wallpaperId === id) state.settings.screensaver.wallpaperId = null;
       delete state.settings.looks[id];
       emitState();
@@ -443,6 +454,8 @@ export function createMockHost(post) {
       if (state.power.onBattery) state.screensaver.active = false;   // unplugging ends it
       emitState();
     },
+    /** Flips Windows' light/dark setting in the mock. */
+    setWindowsTheme(t) { state.theme.windows = t === "dark" ? "dark" : "light"; emitState(); },
     setWindowsTimers(displayOff, sleep) { Object.assign(state.screensaver, { windowsDisplayOffMinutes: displayOff, windowsSleepMinutes: sleep }); emitState(); },
     setWindowState(key, s) { windowState[key] = s; emitState(); },
     failNext(method, message = "Simulated host error") { failures.set(method, message); },

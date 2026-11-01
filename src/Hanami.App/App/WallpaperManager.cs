@@ -16,6 +16,7 @@ public sealed class WallpaperManager : IDisposable
     private readonly CoreWebView2Environment _env;
     private readonly AppPaths _paths;
     private readonly Func<AppSettings> _settings;
+    private readonly Func<bool> _dark;
     private readonly Library _library;
     private readonly Dictionary<string, WallpaperView> _views = new();
     private readonly DispatcherTimer _inputTimer;
@@ -42,11 +43,12 @@ public sealed class WallpaperManager : IDisposable
     public event Action? StatusChanged;
     public event Action<string, JsonObject>? PageMessage;
 
-    public WallpaperManager(CoreWebView2Environment env, AppPaths paths, Func<AppSettings> settings, Library library)
+    public WallpaperManager(CoreWebView2Environment env, AppPaths paths, Func<AppSettings> settings, Func<bool> dark, Library library)
     {
         _env = env;
         _paths = paths;
         _settings = settings;
+        _dark = dark;
         _library = library;
         _inputTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(16) };
         _inputTimer.Tick += (_, _) => PumpInput();
@@ -126,9 +128,9 @@ public sealed class WallpaperManager : IDisposable
     private void PushConfig(WallpaperView view)
     {
         var s = _settings();
-        var wallpaperId = s.DesktopWallpaperFor(view.Monitor.Key);
-        var wallpaper = _library.Resolve(wallpaperId);
-        view.SendConfig(wallpaper, s.DesktopEffectFor(view.Monitor.Key), ModeResolver.FpsCap(s, Power));
+        var dark = _dark();
+        var wallpaper = _library.Resolve(s.DesktopWallpaperFor(view.Monitor.Key, dark));
+        view.SendConfig(wallpaper, s.DesktopEffectFor(view.Monitor.Key, dark), ModeResolver.FpsCap(s, Power));
     }
 
     public async Task ApplyModesAsync(Dictionary<IntPtr, Coverage>? coverage = null)

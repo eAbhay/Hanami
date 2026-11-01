@@ -1,7 +1,7 @@
 // Wallpaper tab — pick the background and the effect for each monitor (or all of them).
 import { h, svg, progressBar } from "../util.js";
 import { scopeSelector } from "../scope.js";
-import { pageHeader, card, wallpaperPicker, effectPicker } from "../components/index.js";
+import { pageHeader, card, wallpaperPicker, effectPicker, slotSwitch } from "../components/index.js";
 
 export function createWallpapersTab(ctx) {
   const scope = scopeSelector(ctx);
@@ -10,6 +10,8 @@ export function createWallpapersTab(ctx) {
 
   const backgrounds = wallpaperPicker(ctx, { manage: true, onSelect: apply, onImport: doImport });
   const currentId = () => ctx.assignmentFor(ctx.scopeKey()).wallpaperId;
+  const slots = slotSwitch(ctx);
+  const emptyDark = h("p.field-hint.slot-hint", "Uses the light wallpaper until you pick one");
   const effects = effectPicker({
     onSelect: (preset) => { const id = currentId(); if (id) return ctx.setLook(id, { desktop: { effectPreset: preset } }).catch(() => {}); },
     onTune: (preset) => ctx.openTuning(preset, { wallpaperId: currentId(), target: "desktop" }),
@@ -20,7 +22,7 @@ export function createWallpapersTab(ctx) {
     pageHeader("Wallpaper", "Pick a background and an effect. Click a card to apply it.", importBtn),
     scope,
     progress,
-    card("Background", null, backgrounds.el),
+    card("Background", slots, emptyDark, backgrounds.el),
     card("Effect", effectNote, effects));
 
   ctx.on("progress", (p) => {
@@ -47,7 +49,7 @@ export function createWallpapersTab(ctx) {
 
   async function apply(w) {
     const key = ctx.scopeKey();
-    if (ctx.assignmentFor(key).wallpaperId === w.id) return;
+    if (ctx.assignmentFor(key).own === w.id) return;
     await ctx.assign(w.id);
     ctx.toast(`${w.name} applied ${key === "*" ? "to all monitors" : `to ${ctx.monitorName(key)}`}`, "success", 2200);
   }
@@ -55,7 +57,9 @@ export function createWallpapersTab(ctx) {
   function update(s) {
     scope.update(s);
     const a = ctx.assignmentFor(ctx.scopeKey());
-    backgrounds.update(s, a.wallpaperId);
+    slots.update();
+    emptyDark.hidden = !(ctx.slot === "dark" && a.own == null);
+    backgrounds.update(s, a.own, ctx.split ? { light: a.light, dark: a.dark } : null);
     effects.set(ctx.lookFor(a.wallpaperId).desktop.effectPreset);
     const w = ctx.wallpaper(a.wallpaperId);
     effectNote.textContent = w ? `Saved with ${w.name} · gear tunes it` : "Use the gear to tune an effect";

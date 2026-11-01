@@ -927,3 +927,10 @@ code.path {
 @media (max-width: 760px) { .clock-layout { grid-template-columns: 1fr; } }
 
 .drawer-actions { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.slot-mark {
+  position: absolute; right: 8px; bottom: 8px; padding: 1px 7px; border-radius: 99px;
+  font-size: 12px; line-height: 18px; color: #fff; background: rgba(20, 12, 30, 0.6); backdrop-filter: blur(8px);
+}
+.slot-switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.slot-hint { margin: 0 0 10px; }

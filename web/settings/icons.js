@@ -1,6 +1,7 @@
 // Inline SVG icons (24×24, stroke-based, Fluent-ish). icon(name) → SVG markup string.
 
 const P = {
+  moon: '<path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2Z"/>',
   image: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m4 17 4.6-4.2a1.5 1.5 0 0 1 2 0L15 17m-1.7-1.6 1.8-1.7a1.5 1.5 0 0 1 2 0L20 16.5"/>',
   sparkles: '<path d="M10 3.5 11.6 8a2 2 0 0 0 1.2 1.2L17.5 11l-4.7 1.7a2 2 0 0 0-1.2 1.2L10 18.5l-1.6-4.6a2 2 0 0 0-1.2-1.2L2.5 11l4.7-1.8A2 2 0 0 0 8.4 8Z"/><path d="M18 3v4m-2-2h4M18.5 16v3m-1.5-1.5h3"/>',
   power: '<path d="M12 3.5v8"/><path d="M7.2 6.3a7.5 7.5 0 1 0 9.6 0"/>',

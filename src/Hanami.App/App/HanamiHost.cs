@@ -21,6 +21,7 @@ public sealed class HanamiHost
     private WallpaperManager _wallpapers = null!;
     private ScreensaverManager _screensaver = null!;
     private TrayIcon _tray = null!;
+    private ThemeWatch _theme = null!;
     private SettingsWindow? _settingsWindow;
     private DispatcherTimer? _displayDebounce;
     private bool _quitting;
@@ -48,11 +49,13 @@ public sealed class HanamiHost
         var options = new CoreWebView2EnvironmentOptions(browserArgs);
         _env = await CoreWebView2Environment.CreateAsync(null, AppPaths.WebViewDataDir, options);
 
-        _tray = new TrayIcon(OpenSettings, () => _ = SetPausedAsync(!_store.Current.Paused), Quit);
-        _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, _library);
+        _theme = new ThemeWatch();
+        _theme.Changed += () => _ui.BeginInvoke(OnThemeChanged);
+        _tray = new TrayIcon(OpenSettings, () => _ = SetPausedAsync(!_store.Current.Paused), SetThemeMode, Quit);
+        _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, IsDark, _library);
         _wallpapers.StatusChanged += OnStatusChanged;
         await _wallpapers.StartAsync();
-        _screensaver = new ScreensaverManager(_env, _paths, () => _store.Current, _library,
+        _screensaver = new ScreensaverManager(_env, _paths, () => _store.Current, IsDark, _library,
             () => _wallpapers.Power, () => _wallpapers.SessionLocked);
         _screensaver.Changed += OnScreensaverChanged;
         _screensaver.Start();
@@ -63,6 +66,22 @@ public sealed class HanamiHost
         SystemEvents.PowerModeChanged += (_, e) => _ui.BeginInvoke(() => OnPowerModeChanged(e.Mode));
 
         if (_openSettingsOnStart) OpenSettings();
+    }
+
+    /// <summary>The active theme: forced by the settings, else Windows' apps theme.</summary>
+    private bool IsDark() => _store.Current.Theme.IsDark(_theme.WindowsDark);
+
+    private void OnThemeChanged()
+    {
+        _wallpapers.PushConfigAll();
+        _screensaver.PushConfigAll();
+        OnStatusChanged();
+    }
+
+    private void SetThemeMode(string mode)
+    {
+        _store.Patch(new JsonObject { ["theme"] = new JsonObject { ["mode"] = mode } });
+        OnThemeChanged();
     }
 
     // ---- lifecycle -------------------------------------------------------------------------
@@ -87,6 +106,7 @@ public sealed class HanamiHost
         _quitting = true;
         Log.Info("Quitting");
         _settingsWindow?.Close();
+        _theme?.Dispose();
         _screensaver?.Dispose();
         _wallpapers?.Dispose();
         _tray?.Dispose();
@@ -148,6 +168,7 @@ public sealed class HanamiHost
     {
         var (_, reason) = SummaryMode();
         _tray.Update(_store.Current.Paused, reason);
+        _tray.UpdateTheme(_store.Current.Theme.Split, _store.Current.Theme.Mode);
         BroadcastState();
     }
 
@@ -197,6 +218,11 @@ public sealed class HanamiHost
         },
         ["wallpapers"] = Json.ToNode(_library.List()),
         ["screensaver"] = ScreensaverState(),
+        ["theme"] = new JsonObject
+        {
+            ["active"] = IsDark() ? ThemeSettings.Dark : ThemeSettings.Light,
+            ["windows"] = _theme.WindowsDark ? ThemeSettings.Dark : ThemeSettings.Light,
+        },
     };
 
     private JsonObject ScreensaverState()
@@ -230,7 +256,7 @@ public sealed class HanamiHost
             }
 
             case "setAssignment":
-                _store.SetAssignment((string?)p?["monitorKey"] ?? "*", (string?)p?["wallpaperId"]);
+                _store.SetAssignment((string?)p?["monitorKey"] ?? "*", (string?)p?["wallpaperId"], (string?)p?["theme"] == ThemeSettings.Dark);
                 await AfterSettingsChangedAsync();
                 return BuildState();
 
@@ -314,6 +340,7 @@ public sealed class HanamiHost
     private async Task AfterSettingsChangedAsync()
     {
         _wallpapers.PushConfigAll();
+        _screensaver.PushConfigAll();
         await _wallpapers.ApplyModesAsync();
         OnStatusChanged();
     }
@@ -358,6 +385,7 @@ public sealed class HanamiHost
         var patch = new JsonObject();
         foreach (var (key, a) in _store.Current.Assignments)
             if (a.WallpaperId == id) patch[key] = new JsonObject { ["wallpaperId"] = "builtin:twilight" };
+            else if (a.DarkWallpaperId == id) patch[key] = new JsonObject { ["darkWallpaperId"] = null };
         if (patch.Count > 0)
         {
             _store.Patch(new JsonObject { ["assignments"] = patch });
@@ -365,7 +393,7 @@ public sealed class HanamiHost
             await Task.Delay(900);
         }
         if (_store.Current.Screensaver.WallpaperId == id) _store.Patch(new JsonObject { ["screensaver"] = new JsonObject { ["wallpaperId"] = null } });
-        _store.RemoveLook(id);
+        _store.ForgetWallpaper(id);
         for (var attempt = 0; ; attempt++)
         {
             try { _library.Delete(id); break; }
@@ -449,7 +477,11 @@ public sealed class HanamiHost
             // Keep this PC's own run state; take everything else from the pack.
             settings.Paused = _store.Current.Paused;
             foreach (var a in settings.Assignments.Values)
+            {
                 if (a.WallpaperId is { } wid && !_library.Exists(wid)) a.WallpaperId = "builtin:twilight";
+                if (a.DarkWallpaperId is { } did && !_library.Exists(did)) a.DarkWallpaperId = null;
+            }
+            if (settings.Screensaver.DarkWallpaperId is { } sdid && !_library.Exists(sdid)) settings.Screensaver.DarkWallpaperId = null;
             var fonts = new FontLibrary(_library);
             foreach (var look in settings.Looks.Values)
                 if (look.Screensaver.Clock.Font is { } font && font.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal)

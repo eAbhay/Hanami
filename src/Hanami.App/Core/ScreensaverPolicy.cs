@@ -6,6 +6,8 @@ public sealed class ScreensaverSettings
     public int IdleMinutes { get; set; } = 2;
     /// <summary>null = each monitor shows its own desktop wallpaper and effect.</summary>
     public string? WallpaperId { get; set; }
+    /// <summary>The dark-mode background when light/dark wallpapers are on; null = use <see cref="WallpaperId"/>'s (or the desktop's).</summary>
+    public string? DarkWallpaperId { get; set; }
     /// <summary>Before settings version 3 the screensaver effect lived here; now in each wallpaper's look. Read only to migrate, never written back.</summary>
     [System.Text.Json.Serialization.JsonPropertyName("effectPreset")]
     public string? LegacyEffectPreset { get; set; }

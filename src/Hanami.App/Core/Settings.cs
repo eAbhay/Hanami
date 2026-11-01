@@ -30,6 +30,9 @@ public sealed class AppSettings
     /// <summary>Every wallpaper's own look (desktop effect + tuning, screensaver clock + effect), by wallpaper id.</summary>
     public Dictionary<string, LookSettings> Looks { get; set; } = new();
 
+    /// <summary>Optional light and dark wallpapers per slot. Off (<see cref="ThemeSettings.Split"/>) by default.</summary>
+    public ThemeSettings Theme { get; set; } = new();
+
     public PowerSettings Power { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
     public ScreensaverSettings Screensaver { get; set; } = new();
@@ -43,11 +46,21 @@ public sealed class AppSettings
     public LookSettings LookFor(string? wallpaperId) =>
         wallpaperId is not null && Looks.TryGetValue(wallpaperId, out var look) ? look : new LookSettings();
 
-    /// <summary>The wallpaper the desktop shows on a monitor.</summary>
-    public string? DesktopWallpaperFor(string monitorKey) => AssignmentFor(monitorKey).WallpaperId;
+    /// <summary>
+    /// The wallpaper the desktop shows on a monitor. With <see cref="ThemeSettings.Split"/> on and the
+    /// <paramref name="dark"/> theme active, the slot's dark wallpaper, falling back to its light one.
+    /// </summary>
+    public string? DesktopWallpaperFor(string monitorKey, bool dark = false)
+    {
+        var a = AssignmentFor(monitorKey);
+        return Theme.Split && dark && a.DarkWallpaperId is { } d ? d : a.WallpaperId;
+    }
 
-    /// <summary>The wallpaper the screensaver shows on a monitor: its own, or the desktop's when unset.</summary>
-    public string? ScreensaverWallpaperFor(string monitorKey) => Screensaver.WallpaperId ?? DesktopWallpaperFor(monitorKey);
+    /// <summary>The wallpaper the screensaver shows on a monitor: its own, or the desktop's (for the theme) when unset.</summary>
+    public string? ScreensaverWallpaperFor(string monitorKey, bool dark = false) =>
+        Screensaver.WallpaperId is { } own
+            ? (Theme.Split && dark && Screensaver.DarkWallpaperId is { } d ? d : own)
+            : DesktopWallpaperFor(monitorKey, dark);
 
     /// <summary>
     /// The EffectConfig sent to a page: the preset plus the user's overrides for it (may be partial).
@@ -64,9 +77,9 @@ public sealed class AppSettings
     }
 
     /// <summary>The effect the desktop shows on a monitor.</summary>
-    public JsonObject DesktopEffectFor(string monitorKey)
+    public JsonObject DesktopEffectFor(string monitorKey, bool dark = false)
     {
-        var d = LookFor(DesktopWallpaperFor(monitorKey)).Desktop;
+        var d = LookFor(DesktopWallpaperFor(monitorKey, dark)).Desktop;
         return ComposeEffect(d.EffectPreset, d.Tuning.GetValueOrDefault(d.EffectPreset));
     }
 
@@ -74,20 +87,23 @@ public sealed class AppSettings
     /// The effect the screensaver shows on a monitor: the screensaver background's own screensaver effect,
     /// or (when unset) its desktop effect with the same tuning.
     /// </summary>
-    public JsonObject ScreensaverEffectFor(string monitorKey)
+    public JsonObject ScreensaverEffectFor(string monitorKey, bool dark = false)
     {
-        var look = LookFor(ScreensaverWallpaperFor(monitorKey));
+        var look = LookFor(ScreensaverWallpaperFor(monitorKey, dark));
         if (look.Screensaver.EffectPreset is { } own) return ComposeEffect(own, look.Screensaver.Tuning.GetValueOrDefault(own));
         return ComposeEffect(look.Desktop.EffectPreset, look.Desktop.Tuning.GetValueOrDefault(look.Desktop.EffectPreset));
     }
 
     /// <summary>The clock the screensaver shows on a monitor (its background's own).</summary>
-    public ClockSettings ScreensaverClockFor(string monitorKey) => LookFor(ScreensaverWallpaperFor(monitorKey)).Screensaver.Clock;
+    public ClockSettings ScreensaverClockFor(string monitorKey, bool dark = false) => LookFor(ScreensaverWallpaperFor(monitorKey, dark)).Screensaver.Clock;
 }
 
 public sealed class Assignment
 {
     public string? WallpaperId { get; set; } = "builtin:twilight";
+
+    /// <summary>Shown instead of <see cref="WallpaperId"/> in dark mode when light/dark wallpapers are on; null = use the light one.</summary>
+    public string? DarkWallpaperId { get; set; }
 
     /// <summary>Before settings version 3 the effect lived here; it moved to <see cref="AppSettings.Looks"/>. Read only to migrate, never written back.</summary>
     [JsonPropertyName("effectPreset")]
@@ -121,6 +137,20 @@ public sealed class ScreensaverLook
     public string? EffectPreset { get; set; }
     public Dictionary<string, JsonObject> Tuning { get; set; } = new();
     public ClockSettings Clock { get; set; } = new();
+}
+
+/// <summary>Whether wallpaper slots hold a light and a dark wallpaper, and which one is showing.</summary>
+public sealed class ThemeSettings
+{
+    public const string System = "system", Light = "light", Dark = "dark";
+
+    public bool Split { get; set; }
+
+    /// <summary>"system" follows Windows' apps theme; "light" / "dark" force one.</summary>
+    public string Mode { get; set; } = System;
+
+    /// <summary>The active theme for a Windows theme: forced by <see cref="Mode"/>, else Windows'.</summary>
+    public bool IsDark(bool windowsDark) => Mode switch { Dark => true, Light => false, _ => windowsDark };
 }
 
 public sealed class PowerSettings
@@ -223,14 +253,19 @@ public sealed class SettingsStore
     /// Shows <paramref name="wallpaperId"/> on a monitor's desktop. A wallpaper without a look yet starts
     /// from a copy of the look of the wallpaper it replaces, so nothing suddenly changes.
     /// </summary>
-    public AppSettings SetAssignment(string monitorKey, string? wallpaperId)
+    public AppSettings SetAssignment(string monitorKey, string? wallpaperId, bool dark = false)
     {
         if (monitorKey != "*" && !Current.Assignments.ContainsKey(monitorKey))
-            Current.Assignments[monitorKey] = new Assignment { WallpaperId = Current.Assignments["*"].WallpaperId };
+        {
+            var shared = Current.Assignments["*"];
+            Current.Assignments[monitorKey] = new Assignment { WallpaperId = shared.WallpaperId, DarkWallpaperId = shared.DarkWallpaperId };
+        }
         var assignment = Current.Assignments[monitorKey];
+        // The light wallpaper of the slot is what a dark one replaces for the purpose of copying a look.
         if (wallpaperId is not null && !Current.Looks.ContainsKey(wallpaperId))
             Current.Looks[wallpaperId] = Current.LookFor(assignment.WallpaperId).Clone();
-        assignment.WallpaperId = wallpaperId;
+        if (dark) assignment.DarkWallpaperId = wallpaperId;
+        else assignment.WallpaperId = wallpaperId;
         Current = Normalize(Current);
         Save();
         return Current;
@@ -242,8 +277,19 @@ public sealed class SettingsStore
     /// </summary>
     public void EnsureScreensaverLook(string? previousId)
     {
-        if (Current.Screensaver.WallpaperId is not { } id || Current.Looks.ContainsKey(id)) return;
-        Current.Looks[id] = new LookSettings { Screensaver = Current.LookFor(previousId).Clone().Screensaver };
+        var changed = false;
+        if (Current.Screensaver.WallpaperId is { } id && !Current.Looks.ContainsKey(id))
+        {
+            Current.Looks[id] = new LookSettings { Screensaver = Current.LookFor(previousId).Clone().Screensaver };
+            changed = true;
+        }
+        // A dark screensaver background starts from the look of the light one (or of the desktop's).
+        if (Current.Screensaver.DarkWallpaperId is { } dark && !Current.Looks.ContainsKey(dark))
+        {
+            Current.Looks[dark] = Current.LookFor(Current.Screensaver.WallpaperId ?? Current.Assignments["*"].WallpaperId).Clone();
+            changed = true;
+        }
+        if (!changed) return;
         Current = Normalize(Current);
         Save();
     }
@@ -274,6 +320,16 @@ public sealed class SettingsStore
     public void RemoveLook(string wallpaperId)
     {
         if (Current.Looks.Remove(wallpaperId)) Save();
+    }
+
+    /// <summary>A wallpaper was deleted: its look goes, and any dark slot using it falls back to the light wallpaper.</summary>
+    public void ForgetWallpaper(string wallpaperId)
+    {
+        foreach (var a in Current.Assignments.Values)
+            if (a.DarkWallpaperId == wallpaperId) a.DarkWallpaperId = null;
+        if (Current.Screensaver.DarkWallpaperId == wallpaperId) Current.Screensaver.DarkWallpaperId = null;
+        Current.Looks.Remove(wallpaperId);
+        Save();
     }
 
     private LookSettings GetOrCreateLook(string wallpaperId)
@@ -347,6 +403,8 @@ public sealed class SettingsStore
         }
         s.Looks ??= new();
         s.Screensaver ??= new();
+        s.Theme ??= new();
+        if (s.Theme.Mode is not (ThemeSettings.System or ThemeSettings.Light or ThemeSettings.Dark)) s.Theme.Mode = ThemeSettings.System;
         if (s.SettingsVersion < 3) MigrateToLooks(s);
         foreach (var a in s.Assignments.Values) a.LegacyEffectPreset = null;
         s.Screensaver.LegacyEffectPreset = null;
