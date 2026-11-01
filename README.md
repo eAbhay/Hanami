@@ -19,6 +19,10 @@ system tray as a single self-contained `.exe`.
   (every monitor's desktop, and the screensaver background) can hold a light and a dark wallpaper.
   Hanami switches with Windows' light/dark setting, or you force Light or Dark from General or the
   tray's Theme menu. Each wallpaper keeps its own look, so only the wallpaper changes.
+- **Desktop pets (Shimeji packs).** Import Shimeji image sets (`shime1.png … shime46.png`, from a
+  folder or `.zip`) on the Pets tab and put up to 8 on the desktop. Pet packs are not included; find
+  one by searching for "<character> shimeji" and check its licence, which belongs to its author.
+  Hanami uses the packs' images only, with its own behaviour logic. They are carried by exported packs.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that

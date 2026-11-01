@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Threading;
 using Hanami.Core;
+using Hanami.Core.Pets;
 using Hanami.Platform;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
@@ -17,6 +18,7 @@ public sealed class HanamiHost
     private readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
     private SettingsStore _store = null!;
     private Library _library = null!;
+    private PetLibrary _petLibrary = null!;
     private CoreWebView2Environment _env = null!;
     private WallpaperManager _wallpapers = null!;
     private ScreensaverManager _screensaver = null!;
@@ -39,7 +41,9 @@ public sealed class HanamiHost
         _store = new SettingsStore(_paths.ConfigPath);
         _library = new Library(_paths.LibraryDir);
         if (!File.Exists(_paths.ConfigPath)) _store.Save();
+        _petLibrary = new PetLibrary(_library);
         _store.PruneLooks(_library.Exists);
+        _store.PrunePets(_petLibrary.Exists);
         SyncStartupRegistration();
 
         var browserArgs = "--autoplay-policy=no-user-gesture-required";
@@ -217,6 +221,7 @@ public sealed class HanamiHost
             ["energySaver"] = _wallpapers.Power.EnergySaver,
         },
         ["wallpapers"] = Json.ToNode(_library.List()),
+        ["petPacks"] = Json.ToNode(_petLibrary.List()),
         ["screensaver"] = ScreensaverState(),
         ["theme"] = new JsonObject
         {
@@ -281,6 +286,29 @@ public sealed class HanamiHost
 
             case "deleteWallpaper":
                 await DeleteWallpaperAsync(Required(p, "id"));
+                return BuildState();
+
+            case "importPet":
+                return await ImportPetAsync((string?)p?["source"] ?? "zip");
+
+            case "renamePet":
+                _petLibrary.Rename(Required(p, "id"), Required(p, "name"));
+                return BuildState();
+
+            case "deletePet":
+                _store.RemovePack(Required(p, "id"));
+                _petLibrary.Delete(Required(p, "id"));
+                await AfterSettingsChangedAsync();
+                return BuildState();
+
+            case "addPet":
+                _store.AddPet(Required(p, "packId"));
+                await AfterSettingsChangedAsync();
+                return BuildState();
+
+            case "removePet":
+                _store.RemovePet(Required(p, "id"));
+                await AfterSettingsChangedAsync();
                 return BuildState();
 
             case "saveThumbnail":
@@ -377,6 +405,45 @@ public sealed class HanamiHost
         Progress("import", totalBytes, totalBytes, "Done");
         BroadcastState();
         return new JsonObject { ["imported"] = imported };
+    }
+
+    /// <summary>Imports Shimeji image sets from a folder or from .zip files; fails with the reasons when none was usable.</summary>
+    private async Task<JsonNode> ImportPetAsync(string source)
+    {
+        Func<PetImportResult>? work = null;
+        if (source == "folder")
+        {
+            var dlg = new OpenFolderDialog { Title = "Choose a folder with a Shimeji image set (shime1.png …)" };
+            if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
+            var folder = dlg.FolderName;
+            work = () => PetPackReader.ImportFolder(_petLibrary, folder);
+        }
+        else
+        {
+            var dlg = new OpenFileDialog { Title = "Import a Shimeji .zip", Multiselect = true, Filter = "Zip files|*.zip" };
+            if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
+            var files = dlg.FileNames;
+            work = () =>
+            {
+                var all = new PetImportResult(new(), new());
+                foreach (var f in files)
+                {
+                    var r = PetPackReader.ImportZip(_petLibrary, f);
+                    all.Imported.AddRange(r.Imported);
+                    all.Rejected.AddRange(r.Rejected);
+                }
+                return all;
+            };
+        }
+        var result = await Task.Run(work);
+        foreach (var reason in result.Rejected) Log.Warn($"Pet import: {reason}");
+        if (result.Imported.Count == 0) throw new InvalidOperationException(string.Join(" ", result.Rejected));
+        BroadcastState();
+        return new JsonObject
+        {
+            ["imported"] = Json.ToNode(result.Imported.Select(_petLibrary.Info).ToList()),
+            ["rejected"] = Json.ToNode(result.Rejected),
+        };
     }
 
     private async Task DeleteWallpaperAsync(string id)
@@ -489,6 +556,7 @@ public sealed class HanamiHost
                     look.Screensaver.Clock.Font = null;
             _store.Replace(settings);
             _store.PruneLooks(_library.Exists);
+            _store.PrunePets(_petLibrary.Exists);
             SyncStartupRegistration();
         }
         // A wallpaper's own look comes with it, unless this PC already has one for it.
@@ -496,7 +564,7 @@ public sealed class HanamiHost
             if (!_store.Current.Looks.ContainsKey(id) && _library.Exists(id))
                 _store.SetLook(id, (JsonObject)Json.ToNode(look)!);
         await AfterSettingsChangedAsync();
-        return new JsonObject { ["imported"] = result.Wallpapers, ["skipped"] = result.Skipped, ["settings"] = result.Settings };
+        return new JsonObject { ["imported"] = result.Wallpapers, ["skipped"] = result.Skipped, ["settings"] = result.Settings, ["pets"] = result.Pets };
     }
 
     private IProgress<(long done, long total, string label)> ThrottledProgress(string task)

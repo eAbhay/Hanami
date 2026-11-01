@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using Hanami.Core.Pets;
 
 namespace Hanami.Core;
 
@@ -9,11 +10,13 @@ public sealed record PackResult(int Wallpapers, int Skipped, bool Settings)
 {
     /// <summary>Looks the pack carried for its wallpapers (the caller decides which to keep).</summary>
     public Dictionary<string, LookSettings> Looks { get; init; } = new();
+    /// <summary>Pet packs that were added to the library (those already there are not counted).</summary>
+    public int Pets { get; init; }
 }
 
 /// <summary>
 /// A .hanamipack is a zip holding pack.json, optionally settings.json, and
-/// wallpapers/&lt;id&gt;/… copied verbatim from the library, and looks/&lt;id&gt;.json (a wallpaper's own look). Media is stored uncompressed
+/// wallpapers/&lt;id&gt;/… and pets/&lt;id&gt;/… copied verbatim from the library, and looks/&lt;id&gt;.json (a wallpaper's own look). Media is stored uncompressed
 /// (it is already compressed), so packing a few GB is mostly a straight copy.
 /// </summary>
 public static class PackService
@@ -21,13 +24,14 @@ public static class PackService
     public const string Extension = ".hanamipack";
     private const int FormatVersion = 1;
 
-    private sealed record PackInfo(int Format, string AppVersion, DateTime CreatedAt, List<string> Wallpapers, bool Settings);
+    private sealed record PackInfo(int Format, string AppVersion, DateTime CreatedAt, List<string> Wallpapers, bool Settings, List<string>? Pets = null);
 
     public static List<ExportItem> Items(Library library)
     {
         var items = new List<ExportItem> { new("settings", "settings", "Settings (assignments, effects, power)", 0, null) };
         items.AddRange(library.List().Where(w => !w.Builtin)
             .Select(w => new ExportItem(w.Id, "wallpaper", w.Name, w.SizeBytes, w.Thumbnail)));
+        items.AddRange(new PetLibrary(library).List().Select(p => new ExportItem(p.Id, "pet", p.Name, p.SizeBytes, p.Preview)));
         return items;
     }
 
@@ -35,13 +39,17 @@ public static class PackService
         string destination, string appVersion, IProgress<(long done, long total, string label)>? progress,
         IReadOnlyDictionary<string, LookSettings>? looks = null, CancellationToken ct = default)
     {
-        var dirs = ids.Where(id => !Library.IsBuiltin(id) && id != "settings")
+        var petLib = new PetLibrary(library);
+        var petIds = ids.Where(id => PetLibrary.IsValidId(id) && petLib.Exists(id)).Distinct().ToList();
+        var dirs = ids.Where(id => !Library.IsBuiltin(id) && id != "settings" && !PetLibrary.IsValidId(id))
             .Select(id => (id, dir: library.DirOf(id)))
             .Where(x => Directory.Exists(x.dir))
             .ToList();
         var files = dirs.SelectMany(x => new DirectoryInfo(x.dir).EnumerateFiles("*", SearchOption.AllDirectories)
             .Select(f => (x.id, file: f))).ToList();
-        var total = Math.Max(1, files.Sum(f => f.file.Length));
+        var petFiles = petIds.SelectMany(id => new DirectoryInfo(petLib.DirOf(id)).EnumerateFiles("*", SearchOption.AllDirectories)
+            .Select(f => (id, file: f))).ToList();
+        var total = Math.Max(1, files.Sum(f => f.file.Length) + petFiles.Sum(f => f.file.Length));
         long done = 0;
 
         var tmp = destination + ".partial";
@@ -50,7 +58,7 @@ public static class PackService
             await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20, useAsync: true))
             using (var zip = new ZipArchive(fs, ZipArchiveMode.Create))
             {
-                var info = new PackInfo(FormatVersion, appVersion, DateTime.UtcNow, dirs.Select(d => d.id).ToList(), settings is not null);
+                var info = new PackInfo(FormatVersion, appVersion, DateTime.UtcNow, dirs.Select(d => d.id).ToList(), settings is not null, petIds);
                 await WriteTextAsync(zip, "pack.json", JsonSerializer.Serialize(info, Json.FileOptions));
                 if (settings is not null)
                     await WriteTextAsync(zip, "settings.json", JsonSerializer.Serialize(settings, Json.FileOptions));
@@ -68,6 +76,21 @@ public static class PackService
                     if (fonts.Exists(fontId)) zip.CreateEntryFromFile(fonts.PathOf(fontId), $"fonts/{fontId}", CompressionLevel.NoCompression);
 
                 var buffer = new byte[1 << 20];
+                foreach (var (id, file) in petFiles)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var rel = Path.GetRelativePath(petLib.DirOf(id), file.FullName).Replace('\\', '/');
+                    var entry = zip.CreateEntry($"pets/{id}/{rel}", file.Extension is ".json" ? CompressionLevel.Optimal : CompressionLevel.NoCompression);
+                    await using var input = file.OpenRead();
+                    await using var output = entry.Open();
+                    int read;
+                    while ((read = await input.ReadAsync(buffer, ct)) > 0)
+                    {
+                        await output.WriteAsync(buffer.AsMemory(0, read), ct);
+                        done += read;
+                        progress?.Report((done, total, file.Name));
+                    }
+                }
                 foreach (var (id, file) in files)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -133,6 +156,8 @@ public static class PackService
             entry.ExtractToFile(fontLib.PathOf(entry.Name));
         }
 
+        var petsAdded = await ImportPetsAsync(zip, new PetLibrary(library), ct);
+
         var entries = zip.Entries.Where(e => e.FullName.StartsWith("wallpapers/", StringComparison.Ordinal) && e.Name.Length > 0).ToList();
         var byId = entries.GroupBy(e => e.FullName.Split('/')[1]);
         var total = Math.Max(1, entries.Sum(e => e.Length));
@@ -184,7 +209,49 @@ public static class PackService
             }
         }
         progress?.Report((total, total, "Done"));
-        return (new PackResult(imported, skipped, settings is not null) { Looks = looks }, settings);
+        return (new PackResult(imported, skipped, settings is not null) { Looks = looks, Pets = petsAdded }, settings);
+    }
+
+    /// <summary>Unpacks pets/&lt;id&gt;/… into the pet library: ids that are already there are kept, and every pack is re-validated like a fresh import.</summary>
+    private static async Task<int> ImportPetsAsync(ZipArchive zip, PetLibrary pets, CancellationToken ct)
+    {
+        var added = 0;
+        var entries = zip.Entries.Where(e => e.FullName.StartsWith("pets/", StringComparison.Ordinal) && e.Name.Length > 0).Take(PetPackReader.MaxZipEntries);
+        foreach (var group in entries.GroupBy(e => e.FullName.Split('/')[1]))
+        {
+            ct.ThrowIfCancellationRequested();
+            var id = group.Key;
+            if (!PetLibrary.IsValidId(id) || Directory.Exists(pets.DirOf(id))) continue;
+            var staging = pets.DirOf(id) + ".importing";
+            try
+            {
+                foreach (var entry in group)
+                {
+                    // Only manifest.json and img/shime<N>.png, written to paths built here, never from the entry name.
+                    var rel = entry.FullName[$"pets/{id}/".Length..];
+                    string? target = rel == "manifest.json" ? Path.Combine(staging, "manifest.json")
+                        : rel.StartsWith("img/", StringComparison.Ordinal) && !rel[4..].Contains('/') && PetPackReader.FrameNumber(rel[4..]) is { } n
+                            ? Path.Combine(staging, "img", $"shime{n}.png") : null;
+                    if (target is null || entry.Length > PetPackReader.MaxPngBytes) continue;
+                    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                    await using var input = entry.Open();
+                    await using var output = File.Create(target);
+                    await input.CopyToAsync(output, ct);
+                }
+                if (PetLibrary.VerifyExtracted(staging) is { } problem)
+                {
+                    Log.Warn($"Pet pack {id} in the pack file was skipped: {problem}");
+                    continue;
+                }
+                Directory.Move(staging, pets.DirOf(id));
+                added++;
+            }
+            finally
+            {
+                try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); } catch { }
+            }
+        }
+        return added;
     }
 
     private static async Task WriteTextAsync(ZipArchive zip, string name, string text)

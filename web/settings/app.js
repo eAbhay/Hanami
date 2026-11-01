@@ -3,6 +3,7 @@ import { call, on, isMock } from "./bridge.js";
 import { h, svg, toast, toastError } from "./util.js";
 import { LOGO } from "./icons.js";
 import { createWallpapersTab } from "./tabs/wallpapers.js";
+import { createPetsTab } from "./tabs/pets.js";
 import { createPowerTab } from "./tabs/power.js";
 import { createScreensaverTab } from "./tabs/screensaver.js";
 import { createGeneralTab } from "./tabs/general.js";
@@ -15,6 +16,7 @@ import { loadEffects } from "./effects-module.js";
 const TABS = [
   { id: "wallpapers", label: "Wallpaper", icon: "image", create: createWallpapersTab },
   { id: "screensaver", label: "Screensaver", icon: "screensaver", create: createScreensaverTab },
+  { id: "pets", label: "Pets", icon: "sparkles", create: createPetsTab },
   { id: "power", label: "Power", icon: "gauge", create: createPowerTab },
   { id: "general", label: "General", icon: "gear", create: createGeneralTab },
   { id: "transfer", label: "Export / Import", icon: "transfer", create: createTransferTab },

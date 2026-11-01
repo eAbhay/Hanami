@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Hanami.Core.Pets;
 
 namespace Hanami.Core;
 
@@ -32,6 +33,9 @@ public sealed class AppSettings
 
     /// <summary>Optional light and dark wallpapers per slot. Off (<see cref="ThemeSettings.Split"/>) by default.</summary>
     public ThemeSettings Theme { get; set; } = new();
+
+    /// <summary>Desktop pets (Shimeji-style companions).</summary>
+    public PetSettings Pets { get; set; } = new();
 
     public PowerSettings Power { get; set; } = new();
     public PerformanceSettings Performance { get; set; } = new();
@@ -151,6 +155,28 @@ public sealed class ThemeSettings
 
     /// <summary>The active theme for a Windows theme: forced by <see cref="Mode"/>, else Windows'.</summary>
     public bool IsDark(bool windowsDark) => Mode switch { Dark => true, Light => false, _ => windowsDark };
+}
+
+/// <summary>Desktop pets: which ones are out and how they behave. See docs/CONTRACTS.md.</summary>
+public sealed class PetSettings
+{
+    public const int MaxPets = 8;
+    public static readonly string[] Activities = ["calm", "normal", "lively"];
+
+    public bool Enabled { get; set; } = true;
+    public List<PetItem> Items { get; set; } = new();
+    /// <summary>0.5 – 2.</summary>
+    public double Scale { get; set; } = 1;
+    public bool ClimbWindows { get; set; } = true;
+    /// <summary>"calm" | "normal" | "lively".</summary>
+    public string Activity { get; set; } = "normal";
+}
+
+/// <summary>One pet that is out: its own id (the same pack may be added more than once) and the pack it looks like.</summary>
+public sealed class PetItem
+{
+    public string Id { get; set; } = "";
+    public string PackId { get; set; } = "";
 }
 
 public sealed class PowerSettings
@@ -317,6 +343,36 @@ public sealed class SettingsStore
         Save();
     }
 
+    /// <summary>Puts another copy of an imported pet pack on the desktop (at most <see cref="PetSettings.MaxPets"/>).</summary>
+    public PetItem AddPet(string packId)
+    {
+        if (!PetLibrary.IsValidId(packId)) throw new ArgumentException("Unknown pet pack.");
+        if (Current.Pets.Items.Count >= PetSettings.MaxPets) throw new InvalidOperationException($"At most {PetSettings.MaxPets} pets can be out at once.");
+        var item = new PetItem { Id = NewPetId(), PackId = packId };
+        Current.Pets.Items.Add(item);
+        Save();
+        return item;
+    }
+
+    public void RemovePet(string id)
+    {
+        if (Current.Pets.Items.RemoveAll(p => p.Id == id) > 0) Save();
+    }
+
+    /// <summary>A pack was deleted (or never arrived): the pets using it go too.</summary>
+    public void RemovePack(string packId)
+    {
+        if (Current.Pets.Items.RemoveAll(p => p.PackId == packId) > 0) Save();
+    }
+
+    /// <summary>Drops pets whose pack is gone.</summary>
+    public void PrunePets(Func<string, bool> packExists)
+    {
+        if (Current.Pets.Items.RemoveAll(p => !packExists(p.PackId)) > 0) Save();
+    }
+
+    private static string NewPetId() => "p" + Guid.NewGuid().ToString("N")[..8];
+
     public void RemoveLook(string wallpaperId)
     {
         if (Current.Looks.Remove(wallpaperId)) Save();
@@ -404,6 +460,7 @@ public sealed class SettingsStore
         s.Looks ??= new();
         s.Screensaver ??= new();
         s.Theme ??= new();
+        NormalizePets(s.Pets ??= new());
         if (s.Theme.Mode is not (ThemeSettings.System or ThemeSettings.Light or ThemeSettings.Dark)) s.Theme.Mode = ThemeSettings.System;
         if (s.SettingsVersion < 3) MigrateToLooks(s);
         foreach (var a in s.Assignments.Values) a.LegacyEffectPreset = null;
@@ -429,6 +486,18 @@ public sealed class SettingsStore
         s.Performance.FpsCap = Math.Clamp(s.Performance.FpsCap, 5, 240);
         s.Performance.BatteryFpsCap = Math.Clamp(s.Performance.BatteryFpsCap, 5, 240);
         return s;
+    }
+
+    private static void NormalizePets(PetSettings p)
+    {
+        p.Items ??= new();
+        var seen = new HashSet<string>();
+        p.Items = p.Items.Where(i => i is not null && PetLibrary.IsValidId(i.PackId)).Take(PetSettings.MaxPets).ToList();
+        foreach (var item in p.Items)
+            if (string.IsNullOrWhiteSpace(item.Id) || item.Id.Length > 20 || !seen.Add(item.Id))
+                do item.Id = NewPetId(); while (!seen.Add(item.Id));
+        p.Scale = Finite(p.Scale, 1, 0.5, 2);
+        if (Array.IndexOf(PetSettings.Activities, p.Activity) < 0) p.Activity = "normal";
     }
 
     /// <summary>

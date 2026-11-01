@@ -214,7 +214,7 @@ Notes:
 
 ## Phase 3 — Pet packs: format, import, library, settings (no pets on screen yet)
 
-- [ ] 3.1 Get the frame meanings: fetch Shimeji-ee's default `conf/actions.xml`
+- [x] 3.1 Get the frame meanings: fetch Shimeji-ee's default `conf/actions.xml`
       (https://github.com/gil/shimeji-ee or https://github.com/chaoskagami/shimeji-ee, `conf/`)
       into the scratchpad. From it, write `ShimejiFrames.cs`: for each animation Hanami needs —
       Stand, Walk, Run, Sit (+ sit variants), Sprawl/Lie, Sleep (if present), Fall, Land/Bounce,
@@ -222,7 +222,7 @@ Notes:
       ClimbCeiling, Pinched/reaction, ChaseMouse — the list of `(frame number, duration in 1/25 s
       ticks, anchor x/y, velocity x/y)` exactly as the XML gives them. Note the source commit in a
       comment. Don't copy the XML into the repo.
-- [ ] 3.2 `CONTRACTS.md` first:
+- [x] 3.2 `CONTRACTS.md` first:
   - On disk: `Library/pets/<packId>/manifest.json` (`{id, name, createdAt, frameWidth,
     frameHeight, frames: number[]}` — which shime numbers exist) + `img/shime<N>.png`.
   - `Settings.pets: { enabled: boolean (default true); items: {id: string; packId: string}[];
@@ -233,7 +233,7 @@ Notes:
   - Bridge: `importPet` (dialog: pick a folder **or** .zip files) → `{imported: PetPackInfo[]}` |
     `{cancelled: true}`; `renamePet {id, name}`; `deletePet {id}` (also removes its items);
     `addPet {packId}` → State; `removePet {id}` → State. `updateSettings` covers the rest.
-- [ ] 3.3 `Core/Pets/PetPack.cs` + host import (follow `Library`'s style, reuse its helpers):
+- [x] 3.3 `Core/Pets/PetPack.cs` + host import (follow `Library`'s style, reuse its helpers):
   - Find the images: the chosen folder itself, its `img/`, or one level deeper (packs are often
     `Name/img/…` or `shimeji-ee/img/Name/…`; a zip may hold several characters → import each as its
     own pack, named after its folder).
@@ -246,17 +246,21 @@ Notes:
   - Tests: the folder layouts above, a zip with two characters, missing required frame, non-PNG
     named `.png`, `../` entry, oversize, mixed frame sizes, manifest round-trip, settings clamping
     (`scale`, cap of 8 items, items whose pack is gone are dropped on load).
-- [ ] 3.4 Export/Import packs: pet packs become export items (`kind: "pet"`); importing restores
+- [x] 3.4 Export/Import packs: pet packs become export items (`kind: "pet"`); importing restores
       them and their settings items. Test the round-trip.
-- [ ] 3.5 Settings UI, minimal: new tab **Pets** between Screensaver and Power. Header (action:
+- [x] 3.5 Settings UI, minimal: new tab **Pets** between Screensaver and Power. Header (action:
       Import pet) · card "Your pets": the items (preview = shime1, name, Remove) and an "Add a pet"
       picker over the imported packs · empty state explaining where packs come from (Shimeji packs —
       search for "<character> shimeji"; check each pack's terms). mock-bridge support.
-- [ ] 3.6 Check: import a real pack (**ask the user where theirs is** — import into the dev root,
+- [x] 3.6 Check: import a real pack (**ask the user where theirs is** — import into the dev root,
       never the real install), it appears with its preview; a broken folder gives a clear error.
       Commit.
 
 Notes:
+- Done 2026-11-01 (3.6 with generated test sets and the mock bridge; importing a real pack is still for the user).
+- Frame table: Shimeji-ee conf/actions.xml at commit 46bf9e0 (see ShimejiFrames.cs). Required frames are shime1–10.
+- A zip is capped at 2000 entries considered (200 per folder) instead of 200 in total, so a zip with several characters works.
+- The Pets tab has two import buttons (folder / .zip) because a Windows dialog can't pick either.
 
 ## Phase 4 — Pets on screen: ground life, drag and throw
 

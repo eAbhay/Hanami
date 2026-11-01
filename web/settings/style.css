@@ -934,3 +934,7 @@ code.path {
 }
 .slot-switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .slot-hint { margin: 0 0 10px; }
+
+.pet-list { display: flex; flex-direction: column; }
+.pet-thumb { width: 48px; height: 48px; object-fit: contain; image-rendering: auto; flex: none; }
+.row-actions { display: flex; align-items: center; gap: 6px; }

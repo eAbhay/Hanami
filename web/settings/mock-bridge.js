@@ -143,6 +143,7 @@ function initialState() {
       sameOnAllMonitors: true,
       assignments: { "*": { wallpaperId: "builtin:twilight" } },
       effects: {},   // effect defaults: per-effect overrides, e.g. { snow: { density: 2 } }
+      pets: { enabled: true, items: [], scale: 1, climbWindows: true, activity: "normal" },
       theme: { split: false, mode: "system" },   // light/dark wallpapers: off by default
       looks: {},     // per wallpaper: { desktop: { effectPreset, tuning }, screensaver: { effectPreset | absent, tuning, clock } }
       power: {
@@ -164,6 +165,7 @@ function initialState() {
     // Windows' plugged-in timers (the real host reads them from the active power plan).
     screensaver: { active: false, status: "", windowsDisplayOffMinutes: 10, windowsSleepMinutes: 30 },
     theme: { active: "light", windows: "light" },
+    petPacks: [],
   };
 }
 
@@ -304,6 +306,45 @@ export function createMockHost(post) {
       }
       if (tuning === null) delete bag[preset];
       else bag[preset] = { ...(bag[preset] ?? {}), ...tuning };
+      emitState();
+      return snapshot();
+    },
+
+    importPet: async ({ source } = {}) => {
+      await sleep(400);
+      const n = state.petPacks.length + 1;
+      const preview = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="34" r="22" fill="#f4a6c0"/><circle cx="24" cy="30" r="3"/><circle cx="40" cy="30" r="3"/></svg>`)}`;
+      const pack = { id: `pet-mock${n}`, name: source === "folder" ? `Folder pet ${n}` : `Zip pet ${n}`, preview, frames: 46, sizeBytes: 640_000 * n,
+        frameWidth: 128, frameHeight: 128, capabilities: { climb: true, ceiling: n % 2 === 1, sit: true, sleep: true } };
+      state.petPacks.push(pack);
+      emitState();
+      return { imported: [clone(pack)], rejected: [] };
+    },
+
+    renamePet: ({ id, name }) => {
+      const p = state.petPacks.find((x) => x.id === id);
+      if (!p) throw new Error("Pet pack not found");
+      if (String(name ?? "").trim()) p.name = String(name).trim();
+      emitState();
+      return snapshot();
+    },
+
+    deletePet: ({ id }) => {
+      state.petPacks = state.petPacks.filter((x) => x.id !== id);
+      state.settings.pets.items = state.settings.pets.items.filter((i) => i.packId !== id);
+      emitState();
+      return snapshot();
+    },
+
+    addPet: ({ packId }) => {
+      if (state.settings.pets.items.length >= 8) throw new Error("At most 8 pets can be out at once.");
+      state.settings.pets.items.push({ id: `p${randomId()}`, packId });
+      emitState();
+      return snapshot();
+    },
+
+    removePet: ({ id }) => {
+      state.settings.pets.items = state.settings.pets.items.filter((i) => i.id !== id);
       emitState();
       return snapshot();
     },
