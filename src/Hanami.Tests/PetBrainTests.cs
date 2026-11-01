@@ -231,6 +231,34 @@ public sealed class PetBrainTests
         Assert.Equal(Trace(4), Trace(4));
     }
 
+    // ---- monitors --------------------------------------------------------------------------------
+
+    [Fact]
+    public void Pet_WalksAcrossTwoMonitorsThatShareAFloor()
+    {
+        var world = World.Build([Screen, new PxRect(1920, 0, 1920 + 3840, 1040)]);   // a bigger monitor next door
+        var pet = Pet(4, activity: "lively", caps: new PetCapabilities(false, false, true, true));
+        pet.Spawn(1800, 900);
+        var crossed = false;
+        for (var i = 0; i < 25 * 60 * 10 && !crossed; i++) { pet.Step(world); crossed = pet.X > 2100; }
+        Assert.True(crossed);
+        Assert.Equal(1040, pet.Y);
+    }
+
+    [Fact]
+    public void Pet_OnAMonitorThatIsUnplugged_FallsAndRespawnsOnThePrimary()
+    {
+        var both = World.Build([Screen, new PxRect(1920, 0, 3840, 1040)]);
+        var pet = Pet(1);
+        pet.Spawn(3000, 100);
+        Run(pet, both, 200);
+        Assert.True(pet.X > 1920);
+        var one = Plain();
+        Run(pet, one, 400);
+        Assert.InRange(pet.X, 0, 1920);
+        Assert.Equal(1040, pet.Y);
+    }
+
     // ---- windows as terrain ----------------------------------------------------------------------
 
     private static World WithWindow(PxRect rect, long id = 1) => World.Build([Screen], [new WorldWindow(id, rect)]);

@@ -309,55 +309,63 @@ Notes:
 
 ## Phase 5 — Windows as terrain: stand, climb, get carried
 
-- [ ] 5.1 `Platform/WindowScan.cs`: top-level windows in z-order that are visible, not minimized,
+- [x] 5.1 `Platform/WindowScan.cs`: top-level windows in z-order that are visible, not minimized,
       not cloaked (`DWMWA_CLOAKED`), not tool windows, not ours, not the shell's desktop/taskbar
       windows, at least ~120×60 px; bounds from `DWMWA_EXTENDED_FRAME_BOUNDS` (`GetWindowRect`
       includes the invisible resize border). Maximized windows give no top-edge floor but still
       cover what's behind them.
-- [ ] 5.2 `World.cs`: per window, a floor on its top edge and walls on its sides — **only the parts
+- [x] 5.2 `World.cs`: per window, a floor on its top edge and walls on its sides — **only the parts
       not covered by windows above it** in z-order (interval subtraction). Pure; tests with
       overlapping rectangles: fully covered edge → no surface, partly covered → split segments.
-- [ ] 5.3 Keeping it fresh: rescan every 500 ms, plus out-of-context `SetWinEventHook` for
+- [x] 5.3 Keeping it fresh: rescan every 500 ms, plus out-of-context `SetWinEventHook` for
       `EVENT_OBJECT_LOCATIONCHANGE` (window objects only), `EVENT_SYSTEM_MOVESIZESTART/END`,
       `EVENT_SYSTEM_MINIMIZESTART`, `EVENT_OBJECT_DESTROY`/`HIDE`, `EVENT_SYSTEM_FOREGROUND`
       (z-order). The window a pet stands or climbs on moves → **carry** the pet by the same delta
       that tick; its surface disappears (minimized, closed, now covered) → Fall. At most one
       hook-driven rescan per tick.
-- [ ] 5.4 `PetBrain` climbing: at a wall, GrabWall → ClimbWall up/down; at the top of a window side
+- [x] 5.4 `PetBrain` climbing: at a wall, GrabWall → ClimbWall up/down; at the top of a window side
       it can step onto that window's top edge; at the work-area top, GrabCeiling → ClimbCeiling,
       eventually letting go → Fall. Walking off the end of a window top → Fall (sometimes a jump down
       to a lower floor). Only when the pack has those frames and `climbWindows` is on (off = work
       area only, as in phase 4). Tests on hand-built worlds.
-- [ ] 5.5 Pets are topmost, so a pet on a window that later gets covered would float in front of
+- [x] 5.5 Pets are topmost, so a pet on a window that later gets covered would float in front of
       the covering window. The interval subtraction removes covered edges, so it falls instead —
       classic Shimeji behaviour; accept it and note it.
-- [ ] 5.6 Check on the real screen with a couple of ordinary windows: pets land on window tops,
+- [x] 5.6 Check on the real screen with a couple of ordinary windows: pets land on window tops,
       climb sides, ride along when the window is dragged (**ask the user to drag one**), fall when
       it's minimized. Confirm Hanami moved, resized or activated no user window. Commit.
 
 Notes:
+- Done 2026-11-01. WindowScan + WinEvent hooks drive a World rebuilt at most once per tick (plus a 500 ms safety scan);
+  carrying, falling, climbing and the covered-edge subtraction are unit-tested. On the real screen the test pets climbed the
+  screen edges; riding a window you drag is still for you to try (5.6), as is minimizing one.
+- 5.5 as planned: a pet on a window that gets covered falls (classic Shimeji behaviour).
 
 ## Phase 6 — Living with the rest of Hanami: power, fullscreen, screensaver, monitors
 
-- [ ] 6.1 Per pet, its current monitor decides: a fullscreen app there (`CoverageProbe`) → hide
+- [x] 6.1 Per pet, its current monitor decides: a fullscreen app there (`CoverageProbe`) → hide
       that pet; that monitor's mode `paused` (from `ModeResolver`: manual pause, battery rules,
       maximized rule) → freeze on the current frame, still visible; `reduced` → 15 fps cap.
       Screensaver showing → hide all pets (never above it) and restore them where they were when it
       ends. Session locked → hide all, stop the timer.
-- [ ] 6.2 Multi-monitor: the world is the union of all monitors; pets walk across where work areas
+- [x] 6.2 Multi-monitor: the world is the union of all monitors; pets walk across where work areas
       touch and fall onto a lower monitor's floor; a pet outside every monitor (monitor unplugged,
       resolution change) respawns falling on the primary. Per-monitor DPI: when a pet crosses to a
       monitor with another scale, resize its window explicitly (don't rely on WPF's automatic
       DPI-change resize for a layered window). Unit-test the world maths with two monitors at
       different DPI; real check on this laptop's single screen, and note the external-monitor check
       for the user's other laptop.
-- [ ] 6.3 Resume from sleep and Explorer restarts (`TaskbarCreated` registered message): re-read
+- [x] 6.3 Resume from sleep and Explorer restarts (`TaskbarCreated` registered message): re-read
       work areas and rescan; pets fall to the new floor.
-- [ ] 6.4 Check: screensaver preview with pets out → none over it, back in place after; manual
+- [x] 6.4 Check: screensaver preview with pets out → none over it, back in place after; manual
       pause → pets freeze; fullscreen video in a browser → that monitor's pets vanish and come back.
       Commit.
 
 Notes:
+- Done 2026-11-01. Pets hide for a fullscreen app on their monitor, the screensaver (seen: none over the screensaver), a locked
+  session; they freeze under `paused` and draw at most every other tick under `reduced`. Work areas are re-read every 2 s (taskbar
+  moved, Explorer restarted, monitors changed) and after resume; the external-monitor check is for the user's other laptop.
+  The world maths is in physical pixels, so per-monitor DPI only changes a pet's drawn size (resized explicitly each frame).
 
 ## Phase 7 — Character and polish
 

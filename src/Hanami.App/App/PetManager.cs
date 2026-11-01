@@ -79,7 +79,7 @@ public sealed class PetManager : IDisposable
     private readonly uint _pid = (uint)Environment.ProcessId;
     private readonly Random _rng = new();
     private double _owed;                       // ms of simulation still to run
-    private long _lastMs, _lastScanMs, _lastCoverageMs, _tickCount;
+    private long _lastMs, _lastScanMs, _lastCoverageMs, _lastAreasMs, _tickCount;
     private List<MonitorInfo> _monitors = new();
     private World _world = World.Build([new PxRect(0, 0, 1920, 1040)]);
     private WindowChangeWatch? _watch;
@@ -242,6 +242,14 @@ public sealed class PetManager : IDisposable
         // Rescan: when a hook says something moved (at most once per tick), and every 500 ms as a safety net.
         if (_windowTerrain && ((_watch?.Changed ?? false) || now - _lastScanMs >= ScanEvery.TotalMilliseconds)) RebuildWorld();
         if (now - _lastCoverageMs >= 1000) { _lastCoverageMs = now; ReadCoverage(); }
+        // The taskbar moving or resizing, Explorer restarting, a monitor coming or going: the work areas change
+        // without a message we listen for, so look every couple of seconds and rebuild the world when they did.
+        if (now - _lastAreasMs >= 2000)
+        {
+            _lastAreasMs = now;
+            var fresh = Monitors.Enumerate();
+            if (!WindowScan.WorkAreas(fresh).SequenceEqual(WindowScan.WorkAreas(_monitors))) { _monitors = fresh; RebuildWorld(); }
+        }
 
         var steps = 0;
         while (_owed >= TickMs)
