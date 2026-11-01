@@ -77,7 +77,9 @@ The web pages also run in a normal browser with mocked host messages:
 To script the running app's pages, set `HANAMI_DEBUG_PORT=9333` before starting with `--dev`,
 then e.g. `node tools/cdp.mjs settings "await (await import('/settings/bridge.js')).call('getState')"`.
 
-Logs: `%LocalAppData%\Hanami\hanami.log`.
+Logs: `%LocalAppData%\Hanami\hanami.log`. How to verify changes in the running app (real-screen
+captures, synthetic input, power state): [docs/TESTING.md](docs/TESTING.md). Work in progress is
+tracked in [docs/PLAN.md](docs/PLAN.md).
 
 ## How it works
 
