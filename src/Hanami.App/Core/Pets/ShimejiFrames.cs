@@ -7,7 +7,8 @@ namespace Hanami.Core.Pets;
 /// <param name="AnchorY">As above; 128 = the bottom edge of a 128 px frame, 48 = a ceiling grip.</param>
 /// <param name="Vx">Movement per tick in pixels, for a pet facing LEFT (Shimeji frames face left; mirror for right).</param>
 /// <param name="Vy">Movement per tick in pixels (negative = up).</param>
-public readonly record struct Pose(int Frame, int Ticks, int AnchorX, int AnchorY, int Vx, int Vy);
+/// <param name="Mirror">The image faces the opposite way to the usual left, so it is mirrored when the pet faces left instead of right.</param>
+public readonly record struct Pose(int Frame, int Ticks, int AnchorX, int AnchorY, int Vx, int Vy, bool Mirror = false);
 
 /// <summary>
 /// What the numbered frames of a Shimeji image set (shime1.png … shime46.png) mean, and how long and how far

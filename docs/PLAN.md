@@ -385,6 +385,13 @@ Notes:
   the bridge method `callPet`. Checked in the browser on the mock bridge at 800 px (dark); the 1000-px and light-theme
   looks use the same shared styles.
 
+### Follow-up (2026-11-01): per-pack frame maps
+Found with a real pack (`uma.zip`, 176×186, frames in its own order): the fixed frame table played the wrong frames. Packs
+can now carry a frame map (`hanami-pet.json`, or the animations of the `conf/actions.xml` beside the images); pets read their
+animations, anchors, swing frames and capabilities from it (`PetAnimations`), with per-pose mirroring for frames drawn facing
+right. The imported `uma` pack in the dev root was mapped by hand from its contact sheet (walk 9–16, run 17–24, sit 25, sleep 34,
+wall 41/42/46, ceiling 43–45); the same JSON works as its `hanami-pet.json`.
+
 ## Phase 8 — Ship
 
 - [x] 8.1 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally

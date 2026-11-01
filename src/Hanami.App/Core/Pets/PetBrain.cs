@@ -5,7 +5,7 @@ public enum PetState { Stand, Walk, Run, Sit, Lie, Sleep, Fall, Land, Dragged, T
 public enum PetCommand { Sit, Sleep }
 
 /// <summary>How a pet behaves: from the pack (what its frames allow) and the settings.</summary>
-public sealed record PetProfile(PetCapabilities Caps, IReadOnlySet<int> Frames, double PixelScale, string Activity = "normal");
+public sealed record PetProfile(PetCapabilities Caps, IReadOnlySet<int> Frames, double PixelScale, string Activity = "normal", PetAnimations? Animations = null);
 
 /// <summary>
 /// One pet's state machine and physics, in physical screen pixels, stepped at a fixed 25 Hz
@@ -18,8 +18,10 @@ public sealed class PetBrain
     private readonly PetProfile _profile;
     private readonly Random _rng;
     private readonly double _ps;
+    private readonly PetAnimations _a;
+    private readonly Pose[] _reactPoses;
 
-    private Pose[] _anim = ShimejiFrames.Stand;
+    private Pose[] _anim = ShimejiFrames.Stand;   // replaced in the constructor
     private int _animIndex, _animTicks;
     private int _stateTicks;
     private Surface? _on;
@@ -45,16 +47,24 @@ public sealed class PetBrain
     /// <summary>The image to draw: the pose's frame, or shime1 when the pack lacks it.</summary>
     public int Frame => _profile.Frames.Contains(Pose.Frame) ? Pose.Frame : 1;
     public Surface? Surface => _on;
+    /// <summary>Whether to draw the frame mirrored: facing right, unless the pose's image faces the other way.</summary>
+    public bool Mirrored => (Facing > 0) ^ Pose.Mirror;
     public bool IsHeld => State == PetState.Dragged;
     /// <summary>0 → 1 while reacting to a click (hearts rise), −1 otherwise.</summary>
-    public double ReactProgress => State == PetState.React ? Math.Min(1, _reactTicks / (double)ReactPoses.Sum(p => p.Ticks)) : -1;
+    public double ReactProgress => State == PetState.React ? Math.Min(1, _reactTicks / (double)_reactPoses.Sum(p => p.Ticks)) : -1;
 
     public PetBrain(PetProfile profile, Random rng)
     {
         _profile = profile;
         _rng = rng;
         _ps = profile.PixelScale;
-        SetAnim(ShimejiFrames.Fall);
+        _a = profile.Animations ?? PetAnimations.Default;
+        var sw = _a.Swing;
+        var st = _a.Stand[0];   // held and reacting poses stand where the standing pose does
+        Pose At(int frame, int ticks) => new(frame, ticks, st.AnchorX, st.AnchorY, 0, 0, st.Mirror);
+        _reactPoses = [At(sw[0], 5), At(sw[1], 5), At(sw[2], 5), At(sw[3], 5), At(sw[4], 5), At(sw[2], 8)];
+        _anim = _a.Fall;
+        SetAnim(_a.Fall);
     }
 
     // ---- input from the mouse / app --------------------------------------------------------------
@@ -78,7 +88,7 @@ public sealed class PetBrain
         X = _lastX = cursorX; Y = cursorY;
         _on = null; _ownerRect = null; _smoothVx = 0; _holdTicks = 0; _calmTicks = 0; _dragTicks = 0; _dizzy = false;
         State = PetState.Dragged;
-        SetAnim(ShimejiFrames.Fall);
+        SetAnim(_a.Fall);
     }
 
     public void DragTo(double cursorX, double cursorY)
@@ -105,7 +115,7 @@ public sealed class PetBrain
             _reactTicks = 0;
             _calmTicks = 0;
             Vx = 0;
-            SetAnim(ReactPoses);
+            SetAnim(_reactPoses);
         }
     }
 
@@ -127,7 +137,7 @@ public sealed class PetBrain
             _smoothVx = _smoothVx * 0.7 + (X - _lastX) * 0.3;
             _lastX = X;
             if (Math.Abs(_smoothVx) < 0.5 * _ps) _holdTicks++; else _holdTicks = 0;
-            if (_holdTicks > 20 && _anim != ShimejiFrames.Resist) SetAnim(ShimejiFrames.Resist);
+            if (_holdTicks > 20 && _anim != _a.Resist) SetAnim(_a.Resist);
             else if (_holdTicks <= 20) SetAnim(Held(_smoothVx));
             AdvanceAnim();
             return;
@@ -193,7 +203,7 @@ public sealed class PetBrain
         State = state;
         Vx = vx; Vy = vy;
         _on = null; _ownerRect = null;
-        SetAnim(ShimejiFrames.Fall);
+        SetAnim(_a.Fall);
     }
 
     private void StepAir(World world)
@@ -217,7 +227,7 @@ public sealed class PetBrain
             Vx = Vy = 0;
             if (_dizzy && _profile.Caps.Sleep) { _dizzy = false; Enter(PetState.Lie, 75 + _rng.Next(75)); return; }
             _dizzy = false;
-            if (hard && _profile.Frames.Contains(18)) { State = PetState.Land; _stateTicks = 8; SetAnim(ShimejiFrames.Bounce); }
+            if (hard && Present(_a.Bounce)) { State = PetState.Land; _stateTicks = 8; SetAnim(_a.Bounce); }
             else Enter(PetState.Stand, 25 + _rng.Next(75));
             return;
         }
@@ -229,6 +239,9 @@ public sealed class PetBrain
 
     // ---- floor -----------------------------------------------------------------------------------
 
+    /// <summary>Whether the pack has every image this animation shows.</summary>
+    private bool Present(Pose[] poses) => poses.All(p => _profile.Frames.Contains(p.Frame));
+
     private void Enter(PetState state, int ticks)
     {
         State = state;
@@ -236,11 +249,12 @@ public sealed class PetBrain
         Vx = Vy = 0;
         SetAnim(state switch
         {
-            PetState.Walk => ShimejiFrames.Walk,
-            PetState.Run or PetState.Chase => ShimejiFrames.Run,
-            PetState.Sit => _rng.Next(4) == 0 && _profile.Caps.Sit ? ShimejiFrames.SitLookUp : ShimejiFrames.Sit,
-            PetState.Lie or PetState.Sleep => ShimejiFrames.Sprawl,
-            _ => ShimejiFrames.Stand,
+            PetState.Walk => _a.Walk,
+            PetState.Run or PetState.Chase => _a.Run,
+            PetState.Sit => _rng.Next(4) == 0 && Present(_a.SitLookUp) ? _a.SitLookUp : _a.Sit,
+            PetState.Lie => _a.Sprawl,
+            PetState.Sleep => _a.Sleep,
+            _ => _a.Stand,
         });
     }
 
@@ -288,7 +302,7 @@ public sealed class PetBrain
         var dx = _cursorX - X;
         if (Math.Abs(dx) < 60 * _ps) { Enter(_profile.Caps.Sit && _rng.Next(2) == 0 ? PetState.Sit : PetState.Stand, 75 + _rng.Next(125)); return; }
         Facing = dx < 0 ? -1 : 1;
-        SetAnim(Math.Abs(dx) > 300 * _ps ? ShimejiFrames.Run : ShimejiFrames.Walk);
+        SetAnim(Math.Abs(dx) > 300 * _ps ? _a.Run : _a.Walk);
         MoveOnFloor(world);
     }
 
@@ -327,7 +341,7 @@ public sealed class PetBrain
         _stateTicks = 12 + _rng.Next(25);
         _climbDir = _rng.NextDouble() < 0.7 ? -1 : +1;
         _climbTicks = 150 + _rng.Next(400);
-        SetAnim(ShimejiFrames.GrabWall);
+        SetAnim(_a.GrabWall);
     }
 
     private int _climbTicks;
@@ -342,7 +356,7 @@ public sealed class PetBrain
         // Usually climbs all the way to the end (about half a pixel per tick); sometimes lets go part-way.
         var distance = _climbDir < 0 ? Y - wall.From : wall.To - Y;
         _climbTicks = _rng.NextDouble() < 0.6 ? (int)(distance / (0.5 * _ps)) + 200 : 150 + _rng.Next(400);
-        SetAnim(_climbDir < 0 ? ShimejiFrames.ClimbWallUp : ShimejiFrames.ClimbWallDown);
+        SetAnim(_climbDir < 0 ? _a.ClimbWallUp : _a.ClimbWallDown);
     }
 
     private void StepClimbWall(World world)
@@ -378,9 +392,9 @@ public sealed class PetBrain
                 _stateTicks = 12 + _rng.Next(25);
                 _climbTicks = 150 + _rng.Next(300);
                 _climbDir = wall.Side;     // head away from the corner
-                SetAnim(ShimejiFrames.GrabCeiling);
+                SetAnim(_a.GrabCeiling);
             }
-            else { _climbDir = +1; State = PetState.GrabWall; _stateTicks = 10; SetAnim(ShimejiFrames.GrabWall); }
+            else { _climbDir = +1; State = PetState.GrabWall; _stateTicks = 10; SetAnim(_a.GrabWall); }
         }
         else if (_climbDir > 0 && Y >= wall.To)
         {
@@ -401,7 +415,7 @@ public sealed class PetBrain
         if (_on is not { Kind: SurfaceKind.Ceiling }) { StartFall(PetState.Fall, 0, 0); return; }
         Facing = _climbDir > 0 ? 1 : -1;
         State = PetState.ClimbCeiling;
-        SetAnim(ShimejiFrames.ClimbCeiling);
+        SetAnim(_a.ClimbCeiling);
     }
 
     private void StepClimbCeiling(World world)
@@ -422,29 +436,24 @@ public sealed class PetBrain
             State = PetState.GrabWall;
             _stateTicks = 10;
             _climbTicks = 150 + _rng.Next(300);
-            SetAnim(ShimejiFrames.GrabWall);
+            SetAnim(_a.GrabWall);
         }
         else Facing = -Facing;
     }
 
     // ---- reacting and being held -----------------------------------------------------------------
 
-    private static readonly Pose[] ReactPoses =
-    [
-        new(9, 5, 64, 128, 0, 0), new(7, 5, 64, 128, 0, 0), new(1, 5, 64, 128, 0, 0), new(8, 5, 64, 128, 0, 0), new(10, 5, 64, 128, 0, 0),
-        new(1, 8, 64, 128, 0, 0),
-    ];
-
     private void StepReact()
     {
         _reactTicks++;
-        if (_reactTicks >= ReactPoses.Sum(p => p.Ticks)) Enter(PetState.Stand, 40 + _rng.Next(60));
+        if (_reactTicks >= _reactPoses.Sum(p => p.Ticks)) Enter(PetState.Stand, 40 + _rng.Next(60));
     }
 
     private Pose[] Held(double smoothVx)
     {
-        var frame = ShimejiFrames.Pinched(-smoothVx * 4 / _ps, 0);   // the body trails behind the cursor's motion
-        return [new Pose(frame, 5, 64, 128, 0, 0)];
+        var frame = _a.Pinched(-smoothVx * 4 / _ps, 0);   // the body trails behind the cursor's motion
+        var st = _a.Stand[0];
+        return [new Pose(frame, 5, st.AnchorX, st.AnchorY, 0, 0, st.Mirror)];
     }
 
     // ---- animation -------------------------------------------------------------------------------

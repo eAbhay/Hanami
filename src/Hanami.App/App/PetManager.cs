@@ -18,6 +18,7 @@ internal sealed class PetFrames
     public required int Width { get; init; }
     public required int Height { get; init; }
     public required PetCapabilities Caps { get; init; }
+    public required PetAnimations Anims { get; init; }
 
     public static PetFrames? Load(PetLibrary library, string packId)
     {
@@ -40,7 +41,7 @@ internal sealed class PetFrames
             catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException) { }
         }
         if (!images.ContainsKey(1)) return null;
-        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = PetCapabilities.Of(images.Keys.ToList()) };
+        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.Animations().CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations() };
     }
 }
 
@@ -170,7 +171,7 @@ public sealed class PetManager : IDisposable
         var settings = _settings().Pets;
         pet.Ps = settings.Scale * ScaleAt(x ?? 0, y ?? 0);
         pet.Activity = settings.Activity;
-        pet.Brain = new PetBrain(new PetProfile(pet.Frames.Caps, pet.Frames.Set, pet.Ps, settings.Activity), new Random(_rng.Next()));
+        pet.Brain = new PetBrain(new PetProfile(pet.Frames.Caps, pet.Frames.Set, pet.Ps, settings.Activity, pet.Frames.Anims), new Random(_rng.Next()));
         var (sx, sy) = x is null ? _world.SpawnPoint(_rng) : (x.Value, y!.Value);
         pet.Brain.Spawn(sx, sy);
         pet.Hidden = false;
@@ -295,11 +296,12 @@ public sealed class PetManager : IDisposable
 
         var f = pet.Frames;
         var frame = f.Images[b.Frame];
-        var flip = b.Facing > 0;
-        var k = f.Width / 128.0;                                   // anchors are authored for 128 px frames
-        var ax = b.Pose.AnchorX * k;
+        var flip = b.Mirrored;
+        // Default-table anchors are authored for 128 px frames; a pack's own anchors are already in image pixels.
+        var (kx, ky) = f.Anims.ImagePixels ? (1.0, 1.0) : (f.Width / 128.0, f.Height / 128.0);
+        var ax = b.Pose.AnchorX * kx;
         if (flip) ax = f.Width - ax;
-        var ay = b.Pose.AnchorY * k;
+        var ay = b.Pose.AnchorY * ky;
         var x = (int)Math.Round(b.X - ax * pet.Ps);
         var y = (int)Math.Round(b.Y - ay * pet.Ps);
         pet.Window.Present(frame, flip, x, y, (int)Math.Round(f.Width * pet.Ps), (int)Math.Round(f.Height * pet.Ps), b.ReactProgress);

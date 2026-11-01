@@ -15,6 +15,10 @@ public sealed class PetPackManifest
     public int FrameHeight { get; set; }
     /// <summary>Which shime numbers exist.</summary>
     public List<int> Frames { get; set; } = new();
+    /// <summary>The pack's own frame map (from its actions.xml or hanami-pet.json); null = Shimeji-ee's default numbering.</summary>
+    public PetMapping? Mapping { get; set; }
+
+    public PetAnimations Animations() => PetAnimations.FromMapping(Mapping, FrameWidth, FrameHeight);
 }
 
 public sealed record PetCapabilities(bool Climb, bool Ceiling, bool Sit, bool Sleep)
@@ -55,7 +59,28 @@ public static class PetPackReader
         return m.Success && int.TryParse(m.Groups[1].Value, out var n) && n is >= 1 and <= ShimejiFrames.NumFrames ? n : null;
     }
 
-    private sealed record Candidate(string Name, Dictionary<int, byte[]> Frames);
+    private sealed record Candidate(string Name, Dictionary<int, byte[]> Frames, PetMapping? Mapping);
+
+    public const string MappingFile = "hanami-pet.json";
+    private const int MaxMappingBytes = 2 * 1024 * 1024;
+
+    /// <summary>A pack's frame map: its hanami-pet.json, else the animations in its own conf/actions.xml, else null (default).</summary>
+    private static PetMapping? ReadMapping(string? json, string? actionsXml)
+    {
+        if (json is not null)
+        {
+            try
+            {
+                var m = JsonSerializer.Deserialize<PetMapping>(json, Json.Options);
+                if (m is not null) return m;
+            }
+            catch (JsonException) { }
+        }
+        return actionsXml is null ? null : PetAnimations.MappingFromActionsXml(actionsXml);
+    }
+
+    private static string? ReadSmallText(string path) =>
+        File.Exists(path) && new FileInfo(path).Length <= MaxMappingBytes ? File.ReadAllText(path) : null;
 
     // ---- folders ---------------------------------------------------------------------------------
 
@@ -72,7 +97,9 @@ public static class PetPackReader
                 if (new FileInfo(file).Length > MaxPngBytes) { frames[n] = []; continue; }   // empty = oversize, rejected by Validate
                 frames[n] = File.ReadAllBytes(file);
             }
-            if (frames.Count > 0) found.Add(new Candidate(NameOfFolder(dir, folder), frames));
+            if (frames.Count > 0)
+                found.Add(new Candidate(NameOfFolder(dir, folder), frames,
+                    ReadMapping(ReadSmallText(Path.Combine(dir, MappingFile)), ReadSmallText(Path.Combine(dir, "conf", "actions.xml")))));
         }
         if (found.Count == 0) result.Rejected.Add($"No Shimeji images (shime1.png … shime{ShimejiFrames.NumFrames}.png) found in “{Path.GetFileName(folder.TrimEnd('\\', '/'))}”.");
         Adopt(library, found, result);
@@ -118,13 +145,25 @@ public static class PetPackReader
         var result = new PetImportResult(new(), new());
         var fallbackName = Path.GetFileNameWithoutExtension(zipPath);
         var groups = new Dictionary<string, Dictionary<int, byte[]>>(StringComparer.OrdinalIgnoreCase);
+        var texts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // hanami-pet.json and conf/actions.xml by path
         try
         {
             using var zip = ZipFile.OpenRead(zipPath);
             foreach (var entry in zip.Entries.Take(MaxZipEntries))
             {
-                if (entry.Name.Length == 0 || FrameNumber(entry.Name) is not { } n) continue;
+                if (entry.Name.Length == 0) continue;
                 var path = entry.FullName.Replace('\\', '/');
+                if (entry.Name.Equals(MappingFile, StringComparison.OrdinalIgnoreCase)
+                    || (entry.Name.Equals("actions.xml", StringComparison.OrdinalIgnoreCase) && path.Contains("/conf/", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (entry.Length <= MaxMappingBytes && !path.Split('/').Contains(".."))
+                    {
+                        using var tr = new StreamReader(entry.Open());
+                        texts[path] = tr.ReadToEnd();
+                    }
+                    continue;
+                }
+                if (FrameNumber(entry.Name) is not { } n) continue;
                 if (path.Split('/').Contains("..") || path.StartsWith('/') || path.Contains(':')) continue;   // never trust entry paths
                 var dir = path[..(path.LastIndexOf('/') + 1)].TrimEnd('/');
                 if (!groups.TryGetValue(dir, out var frames)) groups[dir] = frames = new();
@@ -142,7 +181,9 @@ public static class PetPackReader
             return result;
         }
 
-        var found = groups.Select(kv => new Candidate(NameOfZipFolder(kv.Key, fallbackName), kv.Value)).ToList();
+        string? Text(string dir, string rel) => texts.GetValueOrDefault(dir.Length == 0 ? rel : $"{dir}/{rel}");
+        var found = groups.Select(kv => new Candidate(NameOfZipFolder(kv.Key, fallbackName), kv.Value,
+            ReadMapping(Text(kv.Key, MappingFile), Text(kv.Key, "conf/actions.xml")))).ToList();
         if (found.Count == 0) result.Rejected.Add($"No Shimeji images (shime1.png … shime{ShimejiFrames.NumFrames}.png) found in “{Path.GetFileName(zipPath)}”.");
         Adopt(library, found, result);
         return result;
@@ -162,20 +203,20 @@ public static class PetPackReader
     {
         foreach (var c in found)
         {
-            var check = Validate(c.Frames);
+            var check = Validate(c.Frames, c.Mapping);
             if (check.Error is { } error) { result.Rejected.Add($"“{c.Name}”: {error}"); continue; }
-            result.Imported.Add(library.Add(c.Name, c.Frames, check.Width, check.Height));
+            result.Imported.Add(library.Add(c.Name, c.Frames, check.Width, check.Height, c.Mapping));
         }
     }
 
-    public sealed record Validation(string? Error, int Width, int Height);
+    public sealed record Validation(string? Error, int Width, int Height, PetAnimations? Animations = null);
 
-    /// <summary>Checks the required frames exist, every PNG decodes, and all frames share one size.</summary>
-    public static Validation Validate(IReadOnlyDictionary<int, byte[]> frames)
+    /// <summary>
+    /// Checks every PNG decodes and all frames share one size, then that the frames the pack's animations need to stand,
+    /// walk, fall and be dragged exist (the default numbering, or the pack's own <paramref name="mapping"/>).
+    /// </summary>
+    public static Validation Validate(IReadOnlyDictionary<int, byte[]> frames, PetMapping? mapping = null)
     {
-        var missing = ShimejiFrames.Required.Where(n => !frames.ContainsKey(n)).ToList();
-        if (missing.Count > 0)
-            return new($"missing required frame{(missing.Count == 1 ? "" : "s")} {string.Join(", ", missing.Select(n => $"shime{n}"))}", 0, 0);
         if (frames.Values.Sum(b => (long)b.Length) > MaxPackBytes)
             return new($"the images add up to more than {MaxPackBytes / 1024 / 1024} MB", 0, 0);
 
@@ -188,7 +229,13 @@ public static class PetPackReader
             if (width == 0) (width, height) = (w, h);
             else if ((w, h) != (width, height)) return new($"the frames aren't all the same size (shime{n}.png is {w}×{h}, others {width}×{height})", 0, 0);
         }
-        return new(null, width, height);
+        if (width == 0) return new("it has no images", 0, 0);
+
+        var animations = PetAnimations.FromMapping(mapping, width, height);
+        var missing = animations.RequiredFrames.Where(n => !frames.ContainsKey(n)).ToList();
+        if (missing.Count > 0)
+            return new($"missing required frame{(missing.Count == 1 ? "" : "s")} {string.Join(", ", missing.Select(n => $"shime{n}"))}", 0, 0);
+        return new(null, width, height, animations);
     }
 
     /// <summary>Whether <paramref name="bytes"/> is a PNG the system can decode, and its size.</summary>
@@ -255,13 +302,14 @@ public sealed class PetLibrary
 
     public PetPackInfo Info(PetPackManifest m)
     {
+        var caps = m.Animations().CapabilitiesFor(m.Frames);
         var size = new DirectoryInfo(DirOf(m.Id)).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
         return new PetPackInfo(m.Id, m.Name, $"{Library.Origin}/pets/{m.Id}/img/shime1.png", m.Frames.Count, size,
-            m.FrameWidth, m.FrameHeight, PetCapabilities.Of(m.Frames));
+            m.FrameWidth, m.FrameHeight, caps);
     }
 
     /// <summary>Stores a validated image set as a new pack.</summary>
-    public PetPackManifest Add(string name, IReadOnlyDictionary<int, byte[]> frames, int width, int height)
+    public PetPackManifest Add(string name, IReadOnlyDictionary<int, byte[]> frames, int width, int height, PetMapping? mapping = null)
     {
         var id = IdPrefix + Guid.NewGuid().ToString("N")[..8];
         var dir = DirOf(id);
@@ -273,7 +321,7 @@ public sealed class PetLibrary
             var manifest = new PetPackManifest
             {
                 Id = id, Name = CleanName(name), CreatedAt = DateTime.UtcNow, FrameWidth = width, FrameHeight = height,
-                Frames = frames.Keys.Order().ToList(),
+                Frames = frames.Keys.Order().ToList(), Mapping = mapping,
             };
             File.WriteAllText(Path.Combine(staging, "manifest.json"), JsonSerializer.Serialize(manifest, Json.FileOptions));
             Directory.Move(staging, dir);
@@ -319,7 +367,7 @@ public sealed class PetLibrary
                 if (PetPackReader.FrameNumber(Path.GetFileName(file)) is not { } n) continue;
                 frames[n] = new FileInfo(file).Length > PetPackReader.MaxPngBytes ? [] : File.ReadAllBytes(file);
             }
-            return PetPackReader.Validate(frames).Error;
+            return PetPackReader.Validate(frames, manifest.Mapping).Error;
         }
         catch (Exception ex) when (ex is JsonException or IOException) { return "is unreadable"; }
     }

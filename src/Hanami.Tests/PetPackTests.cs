@@ -206,6 +206,146 @@ public sealed class PetPackTests : IDisposable
         Assert.True(File.Exists(_pets.FramePath(basic.Id, 1)));
     }
 
+    // ---- a pack's own frame map ------------------------------------------------------------------
+
+    private const string CustomActions = """
+        <Mascot xmlns="http://www.group-finity.com/Mascot"><ActionList>
+          <Action Name="Stand" Type="Stay"><Animation><Pose Image="/shime20.png" ImageAnchor="16,30" Velocity="0,0" Duration="50"/></Animation></Action>
+          <Action Name="Walk" Type="Move"><Animation>
+            <Pose Image="/shime21.png" ImageAnchor="16,30" Velocity="-3,0" Duration="4"/>
+            <Pose Image="/shime22.png" ImageAnchor="16,30" Velocity="-3,0" Duration="4"/></Animation></Action>
+          <Action Name="Falling" Type="Embedded"><Animation><Pose Image="/shime23.png" ImageAnchor="16,30" Velocity="0,0" Duration="250"/></Animation></Action>
+          <Action Name="Pinched" Type="Embedded">
+            <Animation Condition="a"><Pose Image="/shime24.png" ImageAnchor="16,30" Velocity="0,0" Duration="5"/></Animation>
+            <Animation Condition="b"><Pose Image="/shime25.png" ImageAnchor="16,30" Velocity="0,0" Duration="5"/></Animation>
+            <Animation Condition="c"><Pose Image="/shime26.png" ImageAnchor="16,30" Velocity="0,0" Duration="5"/></Animation>
+            <Animation Condition="d"><Pose Image="/shime27.png" ImageAnchor="16,30" Velocity="0,0" Duration="5"/></Animation>
+            <Animation Condition="e"><Pose Image="/shime28.png" ImageAnchor="16,30" Velocity="0,0" Duration="5"/></Animation></Action>
+          <Action Name="Resisting" Type="Embedded"><Animation><Pose Image="/shime29.png" ImageAnchor="16,30" Velocity="0,0" Duration="5"/></Animation></Action>
+          <Action Name="Sprawl" Type="Stay"><Animation><Pose Image="/shime30.png" ImageAnchor="16,30" Velocity="0,0" Duration="250"/></Animation></Action>
+        </ActionList></Mascot>
+        """;
+
+    private static IEnumerable<int> CustomFrames => [20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
+
+    [Fact]
+    public void ActionsXml_IsReadForTheAnimationsHanamiUses()
+    {
+        var map = PetAnimations.MappingFromActionsXml(CustomActions)!;
+        Assert.True(map.ImagePixels);
+        Assert.Equal([21, 22], map.Animations!["walk"].Select(p => p.Frame));
+        Assert.Equal(-3, map.Animations["walk"][0].Vx);
+        Assert.Equal((16, 30), (map.Animations["stand"][0].AnchorX, map.Animations["stand"][0].AnchorY));
+        Assert.Equal([24, 25, 26, 27, 28], map.Swing);
+        Assert.False(map.Animations.ContainsKey("run"));          // not defined: stays default
+    }
+
+    [Fact]
+    public void ActionsXml_Unreadable_OrWithoutKnownActions_GivesNull()
+    {
+        Assert.Null(PetAnimations.MappingFromActionsXml("<not xml"));
+        Assert.Null(PetAnimations.MappingFromActionsXml("<Mascot><ActionList><Action Name=\"Dance\"/></ActionList></Mascot>"));
+        Assert.Null(PetAnimations.MappingFromActionsXml("""<!DOCTYPE x [<!ENTITY e SYSTEM "file:///c:/windows/win.ini">]><Mascot>&e;</Mascot>"""));
+    }
+
+    [Fact]
+    public void Mapping_ReplacesTheDefaultsItDefines_AndKeepsTheRest()
+    {
+        var anims = PetAnimations.FromMapping(PetAnimations.MappingFromActionsXml(CustomActions), 32, 32);
+        Assert.Equal([21, 22], anims.Walk.Select(p => p.Frame));
+        Assert.Equal([20], anims.Stand.Select(p => p.Frame));
+        Assert.Equal([30], anims.Sleep.Select(p => p.Frame));      // sleeping lies on the pack's sprawl pose
+        Assert.Equal(28, anims.Pinched(500, 0));                    // far right of the cursor
+        Assert.Equal(24, anims.Pinched(-500, 0));
+        // Not defined by the pack: the default animation, with its anchors rescaled to this 32 px frame (image pixels).
+        Assert.Equal(ShimejiFrames.Run.Select(p => p.Frame), anims.Run.Select(p => p.Frame));
+        Assert.Equal((16, 32), (anims.Run[0].AnchorX, anims.Run[0].AnchorY));
+        Assert.True(anims.ImagePixels);
+    }
+
+    [Fact]
+    public void NoMapping_IsTheDefaultTable()
+    {
+        Assert.Same(PetAnimations.Default, PetAnimations.FromMapping(null, 128, 128));
+        Assert.Same(PetAnimations.Default, PetAnimations.FromMapping(new PetMapping(), 128, 128));
+        Assert.False(PetAnimations.Default.ImagePixels);
+        Assert.Equal(ShimejiFrames.Required.Order(), PetAnimations.Default.RequiredFrames);
+    }
+
+    [Fact]
+    public void Capabilities_FollowTheMappedFrames()
+    {
+        var anims = PetAnimations.FromMapping(PetAnimations.MappingFromActionsXml(CustomActions), 32, 32);
+        var caps = anims.CapabilitiesFor(CustomFrames.ToList());
+        Assert.False(caps.Climb);        // default wall frames 12–14 aren't in this pack
+        Assert.False(caps.Sit);          // default sit frame 11 isn't either
+        Assert.True(caps.Sleep);         // sprawl is mapped to 30
+        Assert.Equal(new PetCapabilities(true, true, true, true), PetAnimations.Default.CapabilitiesFor(Enumerable.Range(1, 46).ToList()));
+    }
+
+    [Fact]
+    public void ImportFolder_UsesThePacksOwnActionsXml_AndRequiresItsFrames()
+    {
+        var folder = MakeSet(Path.Combine(_dir, "src", "Custom"), CustomFrames);
+        Directory.CreateDirectory(Path.Combine(folder, "conf"));
+        File.WriteAllText(Path.Combine(folder, "conf", "actions.xml"), CustomActions);
+
+        var pack = Assert.Single(PetPackReader.ImportFolder(_pets, folder).Imported);
+        Assert.Equal([21, 22], pack.Animations().Walk.Select(p => p.Frame));
+        Assert.Equal(new PetCapabilities(false, true, false, true), _pets.Info(pack).Capabilities);   // ceiling: default frames 23–25 happen to exist
+
+        // The same frames without the pack's script would be rejected: the default numbering needs shime1–10.
+        var bare = MakeSet(Path.Combine(_dir, "src", "Bare"), CustomFrames);
+        var result = PetPackReader.ImportFolder(_pets, bare);
+        Assert.Empty(result.Imported);
+        Assert.Contains("missing required", Assert.Single(result.Rejected));
+    }
+
+    [Fact]
+    public void ImportZip_UsesHanamiPetJson_BesideTheImages()
+    {
+        var mapping = """{"imagePixels":true,"animations":{"walk":[{"frame":9,"ticks":3,"anchorX":16,"anchorY":32,"vx":-2}],"stand":[{"frame":1,"ticks":50,"anchorX":16,"anchorY":32}]}}""";
+        var entries = AllRequired.Select(n => ($"Pack/Mia/shime{n}.png", Png())).ToList();
+        entries.Add(("Pack/Mia/hanami-pet.json", System.Text.Encoding.UTF8.GetBytes(mapping)));
+        entries.Add(("Pack/conf/actions.xml", System.Text.Encoding.UTF8.GetBytes(CustomActions)));   // not beside the images: ignored
+        var pack = Assert.Single(PetPackReader.ImportZip(_pets, Zip("map.zip", entries.ToArray())).Imported);
+        Assert.Equal([9], pack.Animations().Walk.Select(p => p.Frame));
+        Assert.Equal(-2, pack.Animations().Walk[0].Vx);
+    }
+
+    [Fact]
+    public async Task Manifest_KeepsTheMapping_AcrossReload_AndThroughAPack()
+    {
+        var folder = MakeSet(Path.Combine(_dir, "src", "Custom"), CustomFrames);
+        Directory.CreateDirectory(Path.Combine(folder, "conf"));
+        File.WriteAllText(Path.Combine(folder, "conf", "actions.xml"), CustomActions);
+        var pack = Assert.Single(PetPackReader.ImportFolder(_pets, folder).Imported);
+        Assert.Equal([21, 22], _pets.Read(pack.Id)!.Animations().Walk.Select(p => p.Frame));
+
+        var file = Path.Combine(_dir, "map" + PackService.Extension);
+        await PackService.ExportAsync(_library, null, [pack.Id], file, "test", null, null, TestContext.Current.CancellationToken);
+        var target = new Library(Path.Combine(_dir, "B"));
+        var (result, _) = await PackService.ImportAsync(target, file, null, TestContext.Current.CancellationToken);
+        Assert.Equal(1, result.Pets);
+        Assert.Equal([21, 22], new PetLibrary(target).Read(pack.Id)!.Animations().Walk.Select(p => p.Frame));
+    }
+
+    [Fact]
+    public void MirroredPoses_AreDrawnTheOtherWayRound()
+    {
+        var mapping = new PetMapping
+        {
+            ImagePixels = true,
+            Animations = new() { ["grabWall"] = [new PoseDef { Frame = 13, Ticks = 50, AnchorX = 83, AnchorY = 186, Mirror = true }] },
+        };
+        var anims = PetAnimations.FromMapping(mapping, 176, 186);
+        Assert.True(anims.GrabWall[0].Mirror);
+        Assert.False(anims.Stand[0].Mirror);
+        var all = Enumerable.Range(1, 46).ToHashSet();
+        var plain = new PetBrain(new PetProfile(new PetCapabilities(true, true, true, true), all, 1), new Random(1));
+        Assert.False(plain.Mirrored);          // facing left, default frames: drawn as they are
+    }
+
     [Fact]
     public void Rename_And_Delete()
     {
