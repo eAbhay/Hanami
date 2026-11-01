@@ -74,6 +74,17 @@ value under `HKCU:\Software\Microsoft\Windows\CurrentVersion\Run`, delete the te
 MessageBox buttons don't expose InvokePattern: click them with `SendMessage(BM_CLICK=0xF5)` on
 their `NativeWindowHandle`.
 
+### Uninstall
+
+Install to a throw-away folder (or write `HKCU\Software\Hanami\InstallDir` to a temp folder with a copy of `dist\Hanami.exe`
+in it and start that copy with `--startup`), check the Start menu shortcut and the `Uninstall\Hanami` key exist, then run
+`<folder>\Hanami.exe --uninstall`: click **Keep my data** (UIA, `tools\dev\uia.ps1`) or **Delete my data too** (then the
+confirm box's *Yes*), and dismiss the helper's final box (a Win32 `#32770` titled "Hanami": find its buttons with
+`FindWindowEx` and press them with `BM_CLICK`; match the caption without the `&`). Afterwards the exe and `app/` are gone,
+`config/` and `Library/` are gone only for *delete*, and the shortcut, `HKCU\Software\Hanami`, the Uninstall key and the Run
+value are gone. Careful: this writes the real `HKCU\Software\Hanami` key (and removes the browser cache and, for *delete*,
+the log folder), so only do it when no real install is registered.
+
 ## 7. Browser-only checks
 
 `python -m http.server 8766 --bind 127.0.0.1` from the repo root, then in the built-in browser:

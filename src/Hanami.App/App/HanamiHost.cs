@@ -46,6 +46,12 @@ public sealed class HanamiHost
         _store.PruneLooks(_library.Exists);
         _store.PrunePets(_petLibrary.Exists);
         SyncStartupRegistration();
+        if (!_paths.IsDev)
+        {
+            // Start menu shortcut and the Apps & features entry (with its Uninstall action); idempotent.
+            try { Registration.RegisterApp(_paths.ExePath, AppPaths.Version); }
+            catch (Exception ex) { Log.Warn($"App registration failed: {ex.Message}"); }
+        }
 
         var browserArgs = "--autoplay-policy=no-user-gesture-required";
         // Dev only: lets tools/devtools scripts drive the pages over the Chrome DevTools Protocol.
@@ -368,6 +374,12 @@ public sealed class HanamiHost
             case "previewScreensaver":
                 await _screensaver.PreviewAsync();
                 return new JsonObject { ["ok"] = true };
+
+            case "uninstall":
+                if (_paths.IsDev) throw new InvalidOperationException("Uninstall isn't available in the dev copy.");
+                if (!Uninstaller.PromptAndStart(_settingsWindow, _paths.InstallDir)) return new JsonObject { ["cancelled"] = true };
+                _ = _ui.BeginInvoke(Quit);   // the helper waits for this copy to exit, then removes it
+                return new JsonObject { ["started"] = true };
 
             case "quit":
                 _ = _ui.BeginInvoke(Quit);

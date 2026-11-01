@@ -170,6 +170,7 @@ Events: host posts `{event: "<name>", data}`.
 | `getFonts` | – | `{bundled: FontInfo[], system: string[], imported: FontInfo[]}` (`system` = installed family names, sorted; the bundled entry has `id: ""`) |
 | `importFont` | – (file dialog: .ttf .otf .woff .woff2; copied to `Library/fonts/<id>`) | `{imported: FontInfo}` or `{cancelled: true}` |
 | `deleteFont` | `{id}` (if it is the selected clock font, `clock.font` resets to null) | `State` |
+| `uninstall` | – (the host shows a native dialog: **Keep my data** / **Delete my data too** (asks again) / Cancel; unavailable in the dev copy) | `{started: true}` (the app then quits and a helper removes it) or `{cancelled: true}` |
 | `quit` | – | – |
 
 ```ts
@@ -390,6 +391,19 @@ at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames`
   power rules without the maximized/fullscreen rules: `paused` freezes them on their current frame (and they can't be
   picked up), `reduced` redraws at most every other tick. Pets never multiply; at most 8.
 - A pet is drawn at `pets.scale` × its monitor's DPI scale (resized explicitly when it crosses to another monitor).
+
+### Install registration and uninstall
+
+The installed copy registers itself on every start (idempotent): a Start menu shortcut (`Programs\Hanami.lnk`) and an
+Apps & features entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\Hanami`, `UninstallString` =
+`"<install>\Hanami.exe" --uninstall`), next to `HKCU\Software\Hanami\InstallDir` and the Run value. Uninstall is reachable
+from General → Uninstall, from that Apps & features entry (and the Start menu's right-click Uninstall), or by running
+`Hanami.exe --uninstall`. It asks whether to **keep** or **delete** the user's data, then starts a temp copy of the exe
+(`--uninstall-run keep|delete <installDir>`) and quits; the helper waits for the app to exit and removes the Start menu
+shortcut, the registry entries, the app (`Hanami.exe`, `app/`) and the browser cache (`%LocalAppData%\Hanami\WebView2`).
+Data = `<install>\Library` (wallpapers, fonts, pet packs) and `<install>\config`; with *keep* they stay (installing again
+into the same folder brings them back), with *delete* they go along with the log folder and the install folder if it ends up
+empty. Only those known items are ever deleted, never the whole folder.
 
 The settings UI must run standalone in a browser (`web/settings/index.html`) using
 `web/settings/mock-bridge.js` when `window.chrome?.webview` is missing.

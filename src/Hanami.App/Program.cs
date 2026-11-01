@@ -20,6 +20,15 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error("Unhandled exception", e.ExceptionObject as Exception);
         TaskScheduler.UnobservedTaskException += (_, e) => { Log.Error("Unobserved task exception", e.Exception); e.SetObserved(); };
 
+        // The uninstall helper (a temp copy of the exe) and the Apps & features entry's "Uninstall" run before anything else.
+        if (args.Contains(Uninstaller.HelperArg)) return Uninstaller.RunHelper(args);
+        if (args.Contains("--uninstall"))
+        {
+            var dir = Hanami.Platform.Registration.InstallDir ?? Path.GetDirectoryName(Environment.ProcessPath)!;
+            Uninstaller.PromptAndStart(null, dir);
+            return 0;
+        }
+
         AppPaths? paths;
         try { paths = Installer.Resolve(args); }
         catch (Exception ex)

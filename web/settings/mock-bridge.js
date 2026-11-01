@@ -476,6 +476,11 @@ export function createMockHost(post) {
       return { ok: true };
     },
 
+    uninstall: async () => {
+      await sleep(300);   // the real host asks "keep or delete my data?" in a native dialog
+      return { cancelled: true };
+    },
+
     quit: () => { setTimeout(() => console.info("[mock] host would quit now"), 0); return undefined; },
   };
 

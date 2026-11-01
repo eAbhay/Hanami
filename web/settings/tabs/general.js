@@ -24,6 +24,15 @@ export function createGeneralTab(ctx) {
     try { await ctx.call("openLibraryFolder"); } catch (err) { ctx.toastError(err); }
   } }, svg("folder"), h("span", "Open library folder"));
 
+  const uninstallBtn = h("button.btn.danger-outline", { type: "button", onclick: async () => {
+    uninstallBtn.disabled = true;
+    try {
+      const r = await ctx.call("uninstall");   // the host asks what to do with your data, in its own dialog
+      if (r?.started) document.body.append(h("div.quit-overlay", h("div", { html: LOGO }), h("div.quit-title", "Uninstalling Hanami…"), h("div.muted", "Hanami is closing and will be removed. You can close this window.")));
+    } catch (err) { ctx.toastError(err); }
+    finally { uninstallBtn.disabled = false; }
+  } }, svg("trash"), h("span", "Uninstall Hanami…"));
+
   const quitBtn = h("button.btn.danger-outline", { type: "button", onclick: async () => {
     const ok = await dialog({ title: "Quit Hanami?", body: "Your wallpapers will stop and the tray icon will close. Start Hanami again from the Start menu.", confirmLabel: "Quit", danger: true });
     if (!ok) return;
@@ -48,6 +57,8 @@ export function createGeneralTab(ctx) {
       pathRow("box", "Install folder", installPath),
       h("div.divider"),
       pathRow("folder", "Library folder", libraryPath, openLib)),
+    card("Uninstall", null,
+      row("trash", "Remove Hanami from this PC", "Removes the app, its Start menu shortcut and the start-with-Windows entry. You choose whether to keep or delete your wallpapers, pet packs and settings.", uninstallBtn)),
     h("div.card.pad.about",
       h("div.about-brand", h("span", { html: LOGO }), h("div", h("div.about-name", "Hanami"), h("div.muted", "Version ", version))),
       quitBtn));

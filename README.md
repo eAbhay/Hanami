@@ -44,6 +44,9 @@ system tray as a single self-contained `.exe`.
   key press or mouse click ends it; moving the mouse doesn't. On battery,
   or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
   changes Windows power settings, and closing the lid always follows your Windows lid setting.
+- **Uninstall.** General → *Uninstall Hanami…*, or Windows' own Settings → Apps (and the Start menu's right-click
+  Uninstall). It asks whether to **keep** or **delete** your wallpapers, pet packs and settings; keeping them lets a
+  later install into the same folder pick up where you left off.
 - **Library.** Imported videos and images are copied into the app's own `Library` folder, so
   deleting the original download doesn't break the wallpaper.
 - **Export / import.** A `.hanamipack` file moves any selection of the library, plus your
