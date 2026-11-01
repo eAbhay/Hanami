@@ -57,11 +57,28 @@ public class ModeResolverTests
     }
 
     [Fact]
-    public void CoveredAndPaused_IsHidden()
+    public void CoveredAndPaused_StaysVisible()
     {
         var r = ModeResolver.Resolve(new AppSettings(), Plugged, new Coverage(false, true), false);
         Assert.Equal(Mode.Paused, r.Mode);
-        Assert.True(r.Hidden);
+        Assert.False(r.Hidden);   // hiding would flash the stock wallpaper on Win+D
+    }
+
+    [Fact]
+    public void IdleFrozen_CapsAtReduced_AndStaysVisible()
+    {
+        var r = ModeResolver.Resolve(new AppSettings(), Plugged, Clear, false, idleFrozen: true);
+        Assert.Equal(Mode.Reduced, r.Mode);
+        Assert.Equal("Idle", r.Reason);
+        Assert.False(r.Hidden);
+    }
+
+    [Fact]
+    public void IdleFrozen_DoesNotOverridePaused()
+    {
+        var r = ModeResolver.Resolve(new AppSettings(), new PowerState(true, 70, false), Clear, false, idleFrozen: true);
+        Assert.Equal(Mode.Paused, r.Mode);
+        Assert.Equal("On battery", r.Reason);
     }
 
     [Fact]

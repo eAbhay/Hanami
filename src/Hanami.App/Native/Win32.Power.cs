@@ -29,6 +29,7 @@ public static partial class Win32
     [DllImport("powrprof.dll")] private static extern uint CallNtPowerInformation(int level, IntPtr inBuf, uint inLen, out uint outBuf, uint outLen);
     [DllImport("powrprof.dll")] private static extern uint PowerGetActiveScheme(IntPtr rootKey, out IntPtr activeScheme);
     [DllImport("powrprof.dll")] private static extern uint PowerReadACValueIndex(IntPtr rootKey, ref Guid scheme, ref Guid subgroup, ref Guid setting, out uint value);
+    [DllImport("powrprof.dll")] private static extern uint PowerReadDCValueIndex(IntPtr rootKey, ref Guid scheme, ref Guid subgroup, ref Guid setting, out uint value);
     [DllImport("kernel32.dll")] private static extern IntPtr LocalFree(IntPtr mem);
 
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -49,15 +50,17 @@ public static partial class Win32
         CallNtPowerInformation(SystemExecutionState, IntPtr.Zero, 0, out var state, sizeof(uint)) == 0
         && (state & ES_DISPLAY_REQUIRED) != 0;
 
-    /// <summary>Windows' plugged-in "turn off screen" and "sleep" timeouts in minutes (null = never / unknown).</summary>
-    public static (double? displayOff, double? sleep) PluggedInTimeouts()
+    /// <summary>Windows' "turn off screen" and "sleep" timeouts in minutes for the given power source (null = never / unknown).</summary>
+    public static (double? displayOff, double? sleep) DisplayTimeouts(bool onBattery)
     {
         if (PowerGetActiveScheme(IntPtr.Zero, out var schemePtr) != 0) return (null, null);
         try
         {
             var scheme = Marshal.PtrToStructure<Guid>(schemePtr);
             double? Read(Guid subgroup, Guid setting) =>
-                PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref setting, out var seconds) == 0 && seconds > 0
+                (onBattery
+                    ? PowerReadDCValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref setting, out var seconds)
+                    : PowerReadACValueIndex(IntPtr.Zero, ref scheme, ref subgroup, ref setting, out seconds)) == 0 && seconds > 0
                     ? Math.Round(seconds / 60.0, 1)
                     : null;
             return (Read(VideoSubgroup, VideoPowerdownTimeout), Read(SleepSubgroup, StandbyTimeout));

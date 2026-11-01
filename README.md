@@ -10,7 +10,9 @@ system tray as a single self-contained `.exe`.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that
-  to keep it running. A wallpaper fully covered by a window is suspended, so it uses no CPU.
+  to keep it running. A paused wallpaper keeps showing its frozen frame (even under a window), so
+  Win+D never flashes your normal wallpaper. Shortly before the screensaver or Windows turns the
+  screen off, a playing video freezes so it never keeps the screen on.
 - **Live screensaver** (plugged in only). After a set idle time (default 2 minutes) it covers
   every monitor with the live wallpaper and a glass clock and date, and keeps the screen on. A
   key press or mouse click ends it; moving the mouse doesn't. On battery,

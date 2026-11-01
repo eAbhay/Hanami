@@ -37,8 +37,17 @@ public sealed class ScreensaverManager : IDisposable
     private IntPtr _previousForeground;
     private uint _blockedUntilInputAfter;  // after an automatic end, wait for fresh input before showing again
     private bool _blocked;
+    private DateTime _frozenSince;
+
+    // Chromium needs a moment to drop its display request after the video freezes.
+    private static readonly TimeSpan FreezeSettle = TimeSpan.FromSeconds(2);
 
     public bool Showing => _showing;
+    /// <summary>
+    /// True once idle time passed <see cref="IdleFreezePolicy.FreezeAfter"/>, so the desktop video
+    /// has let go of its display request; stays true after an automatic end until real input.
+    /// </summary>
+    public bool IdleFrozen { get; private set; }
     public string Status { get; private set; } = "";
 
     /// <summary>Raised when Showing or Status changes.</summary>
@@ -93,11 +102,16 @@ public sealed class ScreensaverManager : IDisposable
         if (TickAfter(last, _inputBaseline)) _inputBaseline = last;
         var idle = TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - _inputBaseline));
 
+        var freezeAfter = IdleFreezePolicy.FreezeAfter(s, power.OnBattery, Win32.DisplayTimeouts(power.OnBattery).displayOff);
+        // After an automatic end Windows' own timers take over; keep the video frozen until input.
+        SetFrozen(_blocked || (freezeAfter is TimeSpan f && idle >= f));
+
         var monitors = Monitors.Enumerate();
         var fullscreen = CoverageProbe.Read(monitors, _pid).Values.Any(c => c.Fullscreen);
-        var inputs = new ScreensaverInputs(power.OnBattery, locked, fullscreen, Win32.AnyDisplayRequest(), idle);
+        var settling = IdleFrozen && DateTime.UtcNow - _frozenSince < FreezeSettle;
+        var inputs = new ScreensaverInputs(power.OnBattery, locked, fullscreen, !settling && Win32.AnyDisplayRequest(), idle);
         var (start, status) = ScreensaverPolicy.Evaluate(s, inputs);
-        if (start && _blocked) (start, status) = (false, $"Starts after {s.IdleMinutes} min idle");
+        if (start && (_blocked || settling)) (start, status) = (false, $"Starts after {s.IdleMinutes} min idle");
         SetStatus(start ? "Showing" : status);
         if (start) await ShowAsync(preview: false);
     }
@@ -191,6 +205,7 @@ public sealed class ScreensaverManager : IDisposable
 
         var last = Win32.LastInputTick();
         _inputBaseline = byInput ? last : (uint)Environment.TickCount;
+        SetFrozen(!byInput);
         // Ended without the user (stop-after limit, unplugged): don't pop straight back up while still idle.
         _blocked = !byInput;
         _blockedUntilInputAfter = last;
@@ -204,6 +219,14 @@ public sealed class ScreensaverManager : IDisposable
         // Something else topmost (a toast, the taskbar) may have come forward; stay above it.
         foreach (var v in _views)
             Win32.SetWindowPos(v.Hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+    }
+
+    private void SetFrozen(bool frozen)
+    {
+        if (frozen == IdleFrozen) return;
+        IdleFrozen = frozen;
+        if (frozen) _frozenSince = DateTime.UtcNow;
+        Changed?.Invoke();
     }
 
     private void SetStatus(string status)

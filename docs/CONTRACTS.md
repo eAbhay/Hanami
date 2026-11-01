@@ -201,7 +201,13 @@ type State = {
 Effective mode per monitor = the most restrictive (`paused` < `reduced` < `full`) of:
 manual pause, maximized/fullscreen rule for that monitor, battery rule (`lowBattery` when
 on battery and at/below threshold, else `onBattery`; `onAC` when plugged in), energy-saver rule.
-A monitor that is fully covered is additionally hidden + suspended by the host (zero CPU).
+A paused wallpaper is never hidden (it keeps its frozen frame, so Win+D shows no flash of the
+stock wallpaper); only the screensaver hides the desktop wallpapers (hidden + suspended).
+**Idle freeze:** while the user is idle within 5 s of the earlier of the screensaver start
+(enabled, plugged in) and Windows' display-off timeout for the current power source, every
+monitor is capped at `reduced` with reason `Idle` (video frozen, effects keep moving), because a
+playing `<video>` holds a Windows display-required request that blocks both. After the
+screensaver ends on its own (stop-after, unplug) the cap stays until the next real input.
 
 ### Screensaver behaviour
 

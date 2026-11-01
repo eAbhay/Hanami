@@ -134,9 +134,10 @@ public sealed class HanamiHost
 
     private async void OnScreensaverChanged()
     {
-        if (_wallpapers.ScreensaverShowing != _screensaver.Showing)
+        if (_wallpapers.ScreensaverShowing != _screensaver.Showing || _wallpapers.IdleFrozen != _screensaver.IdleFrozen)
         {
             _wallpapers.ScreensaverShowing = _screensaver.Showing;
+            _wallpapers.IdleFrozen = _screensaver.IdleFrozen;
             await _wallpapers.ApplyModesAsync();
         }
         BroadcastState();
@@ -199,7 +200,7 @@ public sealed class HanamiHost
 
     private JsonObject ScreensaverState()
     {
-        var (displayOff, sleep) = Native.Win32.PluggedInTimeouts();
+        var (displayOff, sleep) = Native.Win32.DisplayTimeouts(onBattery: false);
         return new JsonObject
         {
             ["active"] = _screensaver.Showing,

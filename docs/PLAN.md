@@ -32,32 +32,48 @@ itself never turns the screen off on the desktop (on battery too, if On battery 
 **Fix: freeze the desktop video shortly before any idle deadline**, so our own request disappears
 and the remaining requests (if any) really are other apps'.
 
-- [ ] 1.1 `Native/Win32.Power.cs`: add `OnBatteryTimeouts()` (same as `PluggedInTimeouts()` but
+- [x] 1.1 `Native/Win32.Power.cs`: add `OnBatteryTimeouts()` (same as `PluggedInTimeouts()` but
       `PowerReadDCValueIndex`), or generalise to `DisplayTimeouts(bool onBattery)` returning
       `(displayOff, sleep)` minutes.
-- [ ] 1.2 `Core/IdleFreezePolicy.cs` (pure): `TimeSpan? FreezeAfter(ScreensaverSettings s, bool onBattery,
+- [x] 1.2 `Core/IdleFreezePolicy.cs` (pure): `TimeSpan? FreezeAfter(ScreensaverSettings s, bool onBattery,
       double? displayOffMinutes)` = the earliest of (screensaver start, if enabled and plugged in) and
       (Windows display-off timeout for the current power source), minus a 5 s lead; null = never.
       Unit tests: AC with screensaver 1 min → 55 s; battery → Windows DC timeout − 5 s; disabled
       screensaver + no Windows timeout → null; never negative.
-- [ ] 1.3 `ScreensaverManager`: it already tracks idle every second. Expose `bool IdleFrozen`
+- [x] 1.3 `ScreensaverManager`: it already tracks idle every second. Expose `bool IdleFrozen`
       (true once idle ≥ FreezeAfter, false on the next real input) and raise `Changed` when it
       flips. Before starting the screensaver, require the freeze to have been in effect ≥ 2 s, then
       check `AnyDisplayRequest()` (measure how long Chromium takes to drop its request after pause;
       adjust the 2 s if needed and note it).
-- [ ] 1.4 `ModeResolver.Resolve(..., bool idleFrozen)`: when frozen, cap at `Mode.Reduced` with
+- [x] 1.4 `ModeResolver.Resolve(..., bool idleFrozen)`: when frozen, cap at `Mode.Reduced` with
       reason "Idle" (video and scenes freeze, particles keep moving — canvas animation takes no
       power request). Not hidden. Wire it through `WallpaperManager` like `ScreensaverShowing`.
       Unit test.
-- [ ] 1.5 After the screensaver ends for a non-input reason (stop-after, unplug) the freeze must
+- [x] 1.4b **Pause, never hide, behind windows** (user request): Win+D briefly shows the stock
+      wallpaper because a maximized/fullscreen-covered wallpaper is hidden + `TrySuspend`ed, and
+      resuming takes a moment. Fix: in `ModeResolver.Resolve` drop the `covered` hiding, so
+      `Hidden` is true only for the screensaver case (and the "Paused" comment above it goes);
+      in `WallpaperView.SetModeAsync` the hidden branch then only serves the screensaver. A paused
+      wallpaper stays visible and frozen (video holds its frame, no display request), so showing
+      the desktop is instant. Update the `ModeResolverTests` that expect `Hidden` when covered,
+      the "Hidden" text in CONTRACTS/README if any. Cost: the page stays resident (more RAM than
+      suspended) — acceptable. Verify with the user: Win+D with a maximized window → no flash.
+- [x] 1.5 After the screensaver ends for a non-input reason (stop-after, unplug) the freeze must
       stay until input, so Windows' own timers can turn the screen off.
-- [ ] 1.6 Verify (see TESTING.md §5): `devroot` settings `power.whenMaximized="full"`, a video
+- [x] 1.6 Verify (see TESTING.md §5): `devroot` settings `power.whenMaximized="full"`, a video
       wallpaper, `screensaver.idleMinutes=1`. **Ask the user to keep hands off for ~90 s.** Expect:
       `power-state.ps1` `0x2` while playing → log "Reduced (Idle)" at ~55 s → `0x0` → "Screensaver
       shown" at ~60 s → `input.ps1 -Key` ends it → back to Full on the next input. Restore settings.
-- [ ] 1.7 README (screensaver/power text if needed), CONTRACTS (mode reasons), commit.
+- [x] 1.7 README (screensaver/power text if needed), CONTRACTS (mode reasons), commit.
 
 Notes:
+- 1.1 became `DisplayTimeouts(bool onBattery)`; the only other caller (settings state) passes `false`.
+- Verified live (video wallpaper, `whenMaximized=full`, idle 1 min): `0x2` while playing → log
+  "Reduced (Idle)" → `0x0` → "Screensaver shown" about 5 s later (the freeze lead, which also covers
+  the 2 s settle) → `0x3` during the screensaver → a key tap ended it → back to Full/`0x2`.
+  The 2 s settle was enough; Chromium dropped its request well within it.
+- 1.4b is implemented and unit-tested but the Win+D no-flash check is the user's to do (CLAUDE.md
+  forbids Win+D for Claude).
 
 ## Phase 2 — Per-effect settings, flame embers, screensaver effect (data + host + engine)
 

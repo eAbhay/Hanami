@@ -13,7 +13,7 @@ public readonly record struct ResolvedMode(Mode Mode, string Reason, bool Hidden
 public static class ModeResolver
 {
     public static ResolvedMode Resolve(AppSettings settings, PowerState power, Coverage coverage, bool sessionLocked,
-        bool screensaverShowing = false)
+        bool screensaverShowing = false, bool idleFrozen = false)
     {
         var mode = Mode.Full;
         var reason = "Running";
@@ -43,11 +43,14 @@ public static class ModeResolver
 
         if (power.EnergySaver) Apply(settings.Power.EnergySaver, "Energy Saver");
 
-        // Nobody can see a covered wallpaper, so a paused one there is hidden and suspended
-        // outright. A wallpaper paused for any other reason keeps showing its frozen frame.
-        var covered = coverage.Fullscreen || coverage.Maximized;
-        var hidden = mode == Mode.Paused && covered && !sessionLocked;
-        return new ResolvedMode(mode, reason, hidden);
+        // Idle: the video freezes (it would hold a display request that blocks the screensaver and
+        // Windows' screen-off) but particles keep moving, which takes no power request.
+        if (idleFrozen) Apply(Mode.Reduced, "Idle");
+
+        // Only the screensaver hides the wallpaper. A paused wallpaper, covered or not, stays
+        // visible with its frozen frame, so Win+D never flashes the stock wallpaper while a
+        // suspended page wakes up.
+        return new ResolvedMode(mode, reason, Hidden: false);
     }
 
     public static int FpsCap(AppSettings settings, PowerState power) =>
