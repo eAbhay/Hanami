@@ -4,7 +4,8 @@ namespace Hanami.Core;
 public static class Log
 {
     private static readonly object Gate = new();
-    public static string FilePath { get; } =
+    /// <summary>Settable so tests can point the log at a temp file instead of the user's real one.</summary>
+    public static string FilePath { get; internal set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Hanami", "hanami.log");
 
     public static void Info(string msg) => Write("INFO", msg);

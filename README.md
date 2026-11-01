@@ -5,8 +5,9 @@ system tray as a single self-contained `.exe`.
 
 - **Video, image or built-in animated scenes** play behind your desktop icons, one per monitor.
 - **Interactive effects** draw over the wallpaper: sakura petals, snow, autumn leaves, fireflies,
-  rain, sparkles and flame embers. Each effect remembers its own settings. They react to the mouse (repel, attract, or a gust of wind) and burst when
-  you click the desktop.
+  rain, sparkles and flame embers. They react to the mouse (repel, attract, or a gust of wind)
+  and burst when you click the desktop. Each effect has its own settings (density, speed, size,
+  opacity, wind, cursor interaction, click burst): click the gear on an effect's tile.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that
@@ -35,7 +36,9 @@ system tray as a single self-contained `.exe`.
 2. Run `Hanami.exe`. On first run it asks where to install. The default is
    `%LocalAppData%\Programs\Hanami`. It copies itself there, creates `Library/` and
    `config/`, and optionally registers itself to start with Windows.
-3. Hanami lives in the tray. Click the 🌸 icon to open settings. The settings window shows in
+3. Hanami lives in the tray. Click the 🌸 icon to open settings (tabs: Wallpaper, Screensaver,
+   Power, General, Export / Import). Wallpaper and Screensaver choose *what shows*; Power
+   decides *when things run*, including the screensaver's timing. The settings window shows in
    the taskbar while it is open; closing it leaves Hanami running in the tray (tray menu → *Quit*
    to stop it).
 

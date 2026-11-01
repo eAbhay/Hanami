@@ -209,11 +209,15 @@ Notes:
 
 ## Phase 5 — Housekeeping and ship
 
-- [ ] 5.1 Unit tests currently write a "settings.json unreadable" warning into the user's real log.
+- [x] 5.1 Unit tests currently write a "settings.json unreadable" warning into the user's real log.
       Let tests redirect `Log` (e.g. internal settable `Log.FilePath` set from a test module
       initializer to a temp file).
-- [ ] 5.2 README: per-effect settings, embers, new tab layout, clock font credit.
-- [ ] 5.3 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
+- [x] 5.2 README: per-effect settings, embers, new tab layout, clock font credit.
+- [x] 5.3 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
       (`--dev --startup`, no debug port), commit, and tell the user `dist\Hanami.exe` is updated.
 
 Notes:
+- `Log.FilePath` has an internal setter; `src/Hanami.Tests/TestLog.cs` points it at a temp file from a module
+  initializer. Confirmed: a full test run adds nothing to the real `hanami.log`.
+- All five phases of this plan are done. `dist\Hanami.exe` (72.7 MB) was rebuilt and contains the new web files
+  and the Tilt Warp font. The dev copy is running again with `--dev --startup`.
