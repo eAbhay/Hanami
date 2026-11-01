@@ -142,3 +142,11 @@ web/wallpaper/     the page behind the icons
 web/settings/      the settings UI
 tools/             build, icon and demo-asset scripts, CDP helper
 ```
+
+## Licence
+
+Hanami is released under the [MIT licence](LICENSE).
+
+- The bundled clock font [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) is under the SIL Open Font License (`web/wallpaper/fonts/OFL.txt`).
+- Pet packs and wallpapers you import are not part of Hanami: they keep their authors' licences, so check the terms of each pack before sharing it.
+- Hanami reads Shimeji image sets but contains no code from Shimeji-ee; its frame table is a record of that project's default frame numbering.
