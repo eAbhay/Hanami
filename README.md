@@ -26,7 +26,13 @@ system tray as a single self-contained `.exe`.
 2. Run `Hanami.exe`. On first run it asks where to install. The default is
    `%LocalAppData%\Programs\Hanami`. It copies itself there, creates `Library/` and
    `config/`, and optionally registers itself to start with Windows.
-3. Hanami lives in the tray. Click the 🌸 icon to open settings.
+3. Hanami lives in the tray. Click the 🌸 icon to open settings. The settings window shows in
+   the taskbar while it is open; closing it leaves Hanami running in the tray (tray menu → *Quit*
+   to stop it).
+
+**Trying it without installing:** build the debug version and run it with `--dev` (see
+[Develop](#develop)). It uses the repo's `devroot/` folder and doesn't touch the registry or
+startup.
 
 **Updating:** run a newer `Hanami.exe` from anywhere. It offers to replace the installed copy,
 then restarts Hanami. Your settings and library are kept.

@@ -22,7 +22,8 @@ public sealed class SettingsWindow : Window
         Height = 700;
         MinWidth = 840;
         MinHeight = 580;
-        ShowInTaskbar = false;
+        // Visible in the taskbar while open; closing it leaves Hanami running in the tray.
+        ShowInTaskbar = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         Background = new SolidColorBrush(Color.FromRgb(0x1c, 0x1a, 0x22));
         Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/Assets/hanami.ico"));
