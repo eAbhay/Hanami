@@ -148,6 +148,9 @@ public sealed class WallpaperView : IDisposable
 
     public bool IsLive => !_hidden && _mode != Mode.Paused;
 
+    /// <summary>Gives the page keyboard focus (the screensaver listens for key presses itself).</summary>
+    public void FocusPage() => _controller?.MoveFocus(CoreWebView2MoveFocusReason.Programmatic);
+
     public void Post(JsonObject msg)
     {
         if (_disposed || _controller is null || !_ready) return;

@@ -10,10 +10,25 @@
 
 import { EffectsEngine, DEFAULT_EFFECT, PRESETS } from "../shared/effects.js";
 import { createScene, SCENES } from "./scenes.js";
+import { mountClock } from "./clock.js";
 
 const host = window.chrome?.webview ?? null;
-// The idle screensaver loads this same page in a topmost window (…&screensaver=1): no cursor.
-if (new URLSearchParams(location.search).has("screensaver")) document.documentElement.classList.add("screensaver");
+// The idle screensaver loads this same page in a topmost window (…&screensaver=1): no cursor,
+// a glass clock, and it asks the host to end only on a key press or mouse click — moving the
+// mouse is ignored.
+const isScreensaver = new URLSearchParams(location.search).has("screensaver");
+if (isScreensaver) {
+  document.documentElement.classList.add("screensaver");
+  mountClock(document.body);
+  const dismiss = (e, input) => {
+    e.preventDefault();
+    e.stopPropagation();
+    post({ type: "dismiss", input });
+  };
+  addEventListener("keydown", (e) => dismiss(e, "key"), true);
+  addEventListener("pointerdown", (e) => dismiss(e, "click"), true);
+  addEventListener("contextmenu", (e) => e.preventDefault(), true);
+}
 const bgRoot = document.getElementById("bg");
 const fxCanvas = document.getElementById("fx");
 

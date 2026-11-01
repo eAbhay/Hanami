@@ -29,6 +29,64 @@ html, body {
 
 .screensaver, .screensaver body, .screensaver * { cursor: none !important; }
 
+/* ── screensaver clock (clock.js) ── */
+#clock {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 16vh;          /* sits slightly above the middle */
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(1.5vh);
+  transition: opacity 1200ms ease, transform 1600ms cubic-bezier(.2, .7, .2, 1);
+}
+#clock.shown { opacity: 1; transform: none; }
+
+#clock .time-wrap {
+  position: relative;
+  width: 76vw;
+  height: 26vh;
+}
+#clock .frost,
+#clock .glass {
+  position: absolute;
+  inset: 0;
+}
+#clock .frost {
+  clip-path: url(#clock-clip);
+  backdrop-filter: blur(18px) saturate(1.5) brightness(1.08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5) brightness(1.08);
+}
+#clock .glass { overflow: visible; }
+#clock text.glyphs {
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-size: 22vh;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-variant-numeric: tabular-nums;
+}
+#clock text.face {
+  fill: rgba(255, 244, 252, 0.16);   /* the tint in the transparent middle */
+  stroke: rgba(255, 255, 255, 0.28); /* hairline edge so the glass reads on bright scenes */
+  stroke-width: 1.2px;
+  paint-order: stroke;
+}
+
+#clock .date {
+  margin-top: 0.4vh;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-size: 2.6vh;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 1px 2px rgba(5, 3, 12, 0.45), 0 0 18px rgba(5, 3, 12, 0.35);
+}
+
 /* ── dev panel (only created when running outside the host) ── */
 #dev {
   position: fixed;

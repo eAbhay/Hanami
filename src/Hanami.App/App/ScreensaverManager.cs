@@ -9,12 +9,12 @@ namespace Hanami.App;
 /// <summary>
 /// The idle screensaver: after N minutes without input (plugged in only) it covers every monitor
 /// with a topmost live wallpaper and holds a Windows power request so the screen stays on.
+/// Only a key press or mouse click ends it — moving the mouse does not. The page reports those
+/// (it has keyboard focus and sits under the cursor); see <see cref="WatchInput"/> for the fallback.
 /// Rules live in <see cref="ScreensaverPolicy"/>; this class does the timing and the windows.
 /// </summary>
 public sealed class ScreensaverManager : IDisposable
 {
-    // Mouse jitter (a desk bump, an optical sensor drifting) shouldn't end the screensaver.
-    private const int MoveTolerancePx = 12;
     // Input in the first moments after showing is the tail of whatever started it (e.g. the Preview click).
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(900);
 
@@ -33,7 +33,7 @@ public sealed class ScreensaverManager : IDisposable
     private bool _showing, _opening, _preview;
     private DateTime _shownAt;
     private uint _inputBaseline;          // last-input tick the current show (or wait) is measured from
-    private Win32.POINT _cursorAtShow;
+    private Win32.POINT _lastCursor;
     private IntPtr _previousForeground;
     private uint _blockedUntilInputAfter;  // after an automatic end, wait for fresh input before showing again
     private bool _blocked;
@@ -119,14 +119,17 @@ public sealed class ScreensaverManager : IDisposable
                 var wallpaper = _library.Resolve(s.Screensaver.WallpaperId ?? desktop.WallpaperId);
                 view.SendConfig(wallpaper, desktop.Effect, fps);
                 await view.SetModeAsync(new ResolvedMode(Mode.Full, "Screensaver", false));
+                view.MessageReceived += OnPageMessage;
                 _views.Add(view);
             }
             if (_views.Count == 0) return;
 
             _keepAwake.Set(true);
-            // Focus our window so the key that wakes the screen doesn't also type into the user's app.
+            // Focus our window so the key that wakes the screen reaches the page instead of typing
+            // into the user's app.
             Win32.ForceForeground(_views[0].Hwnd);
-            Win32.GetCursorPos(out _cursorAtShow);
+            _views[0].FocusPage();
+            Win32.GetCursorPos(out _lastCursor);
             _inputBaseline = Win32.LastInputTick();
             _shownAt = DateTime.UtcNow;
             _showing = true;
@@ -147,19 +150,30 @@ public sealed class ScreensaverManager : IDisposable
         }
     }
 
+    private void OnPageMessage(WallpaperView view, System.Text.Json.Nodes.JsonObject msg)
+    {
+        if (!_showing || (string?)msg["type"] != "dismiss") return;
+        if (DateTime.UtcNow - _shownAt < Grace) return;
+        Hide((string?)msg["input"] ?? "input", byInput: true);
+    }
+
+    /// <summary>
+    /// Fallback for when Windows refused to give us keyboard focus: a key press then goes to the
+    /// other app and the page never sees it. Input that didn't move the cursor must have been a
+    /// key, click or wheel, so end on that; input that moved the cursor is ignored.
+    /// </summary>
     private void WatchInput()
     {
         if (!_showing) return;
         var last = Win32.LastInputTick();
         if (last == _inputBaseline) return;
         _inputBaseline = last;
-        if (DateTime.UtcNow - _shownAt < Grace) return;
-
-        // Same cursor position → a key, click or wheel. Small drift → ignore. Real movement → wake.
         Win32.GetCursorPos(out var pt);
-        var moved = Math.Max(Math.Abs(pt.X - _cursorAtShow.X), Math.Abs(pt.Y - _cursorAtShow.Y));
-        if (moved > 0 && moved <= MoveTolerancePx) return;
-        Hide("input", byInput: true);
+        var moved = pt.X != _lastCursor.X || pt.Y != _lastCursor.Y;
+        _lastCursor = pt;
+        if (moved || DateTime.UtcNow - _shownAt < Grace) return;
+        if (_views.Any(v => v.Hwnd == Win32.GetForegroundWindow())) return;   // the page handles it
+        Hide("key (unfocused)", byInput: true);
     }
 
     private void Hide(string why, bool byInput)

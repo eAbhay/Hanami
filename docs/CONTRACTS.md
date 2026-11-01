@@ -116,6 +116,7 @@ Page → host: `window.chrome.webview.postMessage(obj)`
 |---|---|
 | `{type:"ready"}` | Page loaded; host replies with `config`. |
 | `{type:"mediaError", wallpaperId, message}` | Video/image failed to load or decode. |
+| `{type:"dismiss", input}` | Screensaver pages only (`&screensaver=1`): a key press or mouse click asked to end it. |
 
 The page must also run standalone in a normal browser for development
 (`web/wallpaper/index.html?dev`): when `window.chrome?.webview` is missing, use real mouse
@@ -206,9 +207,12 @@ A monitor that is fully covered is additionally hidden + suspended by the host (
 
 Plugged in only. After `idleMinutes` without keyboard/mouse input the host covers every monitor
 with a topmost fullscreen window showing the wallpaper page (`…/wallpaper/index.html?monitor=<key>&screensaver=1`,
-always in `full` mode, cursor hidden) and holds a Windows display-required + system-required
-power request, so the screen stays on and the PC does not idle-sleep. Any key, click, wheel or
-mouse movement beyond a few pixels ends it (and locks Windows first if `requireSignIn`).
+always in `full` mode, cursor hidden, with a glass clock and date) and holds a Windows
+display-required + system-required power request, so the screen stays on and the PC does not
+idle-sleep. Only a key press or mouse click ends it — moving the mouse does not (and it locks
+Windows first if `requireSignIn`). The page has keyboard focus and posts
+`{type:"dismiss", input:"key"|"click"}` to the host; if Windows refused focus, the host treats
+input that didn't move the cursor as a key press.
 It does not start (status explains why) when: disabled, on battery, session locked, a fullscreen
 app is running, or another app already holds a display request (video playback, calls).
 It ends on unplug, lock, sleep, or after `stopAfterHours`. The idle count restarts after waking.

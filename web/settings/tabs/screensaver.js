@@ -24,12 +24,12 @@ export function createScreensaverTab(ctx) {
       h("div.callout-art", svg("screensaver")),
       h("div.callout-text",
         h("div.callout-title", "Live screensaver"),
-        h("div.callout-sub", "When plugged in and idle, Hanami shows your live wallpaper fullscreen and keeps the screen on. Any mouse move or key ends it.")),
+        h("div.callout-sub", "When plugged in and idle, Hanami shows your live wallpaper fullscreen with a clock, and keeps the screen on. Press any key or click to end it — moving the mouse won't.")),
       enabled),
     h("div.ss-status",
       h("div.ss-status-main", statusDot, statusText, activeBadge),
       previewBtn),
-    h("div.ss-preview-hint", "Preview shows it right now — move the mouse or press a key to exit."));
+    h("div.ss-preview-hint", "Preview shows it right now — press any key or click to exit."));
 
   async function preview() {
     previewBtn.disabled = true;
