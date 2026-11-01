@@ -20,9 +20,10 @@ Decisions already made with the user (don't re-ask):
   average visible alpha of roughly 0.2–0.4 for fireflies, sparkles and embers.
 - Screensaver clock: the user sets its **position** and **font** (an installed Windows font, the
   bundled Tilt Warp, or a font file they import). Applies to the screensaver clock (the only clock).
-- Fingerprint to end the screensaver: **nice to have**. Spike first; if Windows won't let us see a
-  touch, drop it with a note — the user said that's fine.
-- Taskbar transparency: not an app feature (user sets it up in Windows / a third-party tool).
+- Fingerprint to end the screensaver: **dropped** by the user (not worth the effort).
+- Taskbar transparency: not an app feature. On Windows 11 the taskbar is XAML inside Explorer and
+  resets its own background, so making it transparent means injecting into `explorer.exe` (what
+  TranslucentTB does) — too fragile for Hanami. The user uses TranslucentTB instead.
 
 ---
 
@@ -128,38 +129,8 @@ Contract first:
 
 Notes:
 
-## Phase 4 — Spike: end the screensaver on a fingerprint touch (drop if blocked)
+## Phase 4 — Ship
 
-Facts gathered: this laptop has a **Goodix MOC Fingerprint** reader (status OK), the Windows
-Biometric Service (`WbioSrvc`) is demand-start, and Enhanced Sign-in Security looks not configured
-(`…\DeviceGuard\Scenarios\SecureBiometrics` key absent). While the screensaver shows, Windows is
-unlocked, so Hello isn't listening and a touch produces no input event — we'd have to ask the
-sensor ourselves. Windows gives the system sensor pool to the **foreground** app's session, and the
-screensaver window is foreground, so this may work.
-
-- [ ] 4.1 Time-boxed probe (scratch project in the scratchpad, not the repo): a tiny WinForms/WPF
-      window that, while focused, calls `WinBioOpenSession(WINBIO_TYPE_FINGERPRINT,
-      WINBIO_POOL_SYSTEM, WINBIO_FLAG_DEFAULT, null, 0, WINBIO_DB_DEFAULT)` then
-      `WinBioIdentifyWithCallback`. Any callback (match, `WINBIO_E_UNKNOWN_ID`, bad capture) =
-      "touched". **Ask the user to touch the sensor** and report what came back. Also confirm that
-      after `WinBioCancel` + `WinBioCloseSession`, locking (Win+L by the user) and signing in with
-      the fingerprint still works.
-- [ ] 4.2 If the probe fails (access denied, no callback while focused, Hello breaks): stop, write
-      the result in Notes, tell the user. No code in the repo.
-- [ ] 4.3 If it works: `Platform/FingerprintWatch.cs` (P/Invoke in `Native/`), started by
-      `ScreensaverManager` after the screensaver is shown and focused, stopped (cancel + close
-      session) in `Hide` **before** `LockWorkStation`, and on dispose. Callback → dispatcher →
-      `Hide("fingerprint", byInput: true)` (respects the grace period and `requireSignIn` like any
-      input). No sensor / any error → log once, silently do nothing (the other laptop may have no
-      reader). README + CONTRACTS screensaver text ("a key press, click or fingerprint touch").
-- [ ] 4.4 Check with the user touching the sensor during a preview, then with `requireSignIn` on
-      (it should lock, and Hello on the lock screen must still accept the finger). Commit.
-
-Notes:
-
-## Phase 5 — Ship
-
-- [ ] 5.1 README: click burst default, flicker/opacity, clock position/size/fonts, fingerprint (if
-      shipped).
-- [ ] 5.2 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
+- [ ] 4.1 README: click burst default, flicker/opacity, clock position/size/fonts.
+- [ ] 4.2 `tools\build.ps1` (tests + `dist\Hanami.exe`), relaunch the dev copy normally
       (`--dev --startup`, no debug port), commit, tell the user `dist\Hanami.exe` is updated.
