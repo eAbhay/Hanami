@@ -128,4 +128,20 @@ public sealed class StorageTests : IDisposable
         Assert.Equal(0, again.Wallpapers);
         Assert.Equal(1, again.Skipped);
     }
+
+    [Fact]
+    public async Task Pack_OldSettings_AreMigratedOnImport()
+    {
+        var pack = Path.Combine(_dir, "old" + PackService.Extension);
+        using (var zip = System.IO.Compression.ZipFile.Open(pack, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            using (var w = new StreamWriter(zip.CreateEntry("pack.json").Open())) w.Write("""{"format":1}""");
+            using (var w = new StreamWriter(zip.CreateEntry("settings.json").Open()))
+                w.Write("""{"effects":{"sakura":{"clickBurst":true,"speed":2}}}""");
+        }
+        var (_, imported) = await PackService.ImportAsync(new Library(Path.Combine(_dir, "L")), pack, null);
+        Assert.Equal(2, imported!.SettingsVersion);
+        Assert.False(imported.Effects["sakura"].ContainsKey("clickBurst"));
+        Assert.Equal(2.0, (double?)imported.Effects["sakura"]["speed"]);
+    }
 }

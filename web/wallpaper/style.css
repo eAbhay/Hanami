@@ -36,25 +36,27 @@ html, body {
   src: url("fonts/TiltWarp.ttf") format("truetype");
   font-display: block;
 }
+/* clock.js sets left (the time's centre) and top (the time box's top) in px and --cs (size, 0.5–1.6). */
 #clock {
+  --cs: 1;
   position: fixed;
-  inset: 0;
+  left: 50%;
+  top: 18vh;
+  width: calc(76vw * var(--cs));   /* explicit: a fixed box would otherwise shrink to the space right of `left` */
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding-bottom: 34vh;          /* the time's centre sits about a third of the way down */
   pointer-events: none;
   opacity: 0;
-  transform: translateY(1.5vh);
+  transform: translate(-50%, 1.5vh);
   transition: opacity 1200ms ease, transform 1600ms cubic-bezier(.2, .7, .2, 1);
 }
-#clock.shown { opacity: 1; transform: none; }
+#clock.shown { opacity: 1; transform: translate(-50%, 0); }
 
 #clock .time-wrap {
   position: relative;
-  width: 76vw;
-  height: 26vh;
+  width: calc(76vw * var(--cs));
+  height: calc(26vh * var(--cs));
 }
 #clock .frost,
 #clock .glass {
@@ -68,8 +70,8 @@ html, body {
 }
 #clock .glass { overflow: visible; }
 #clock text.glyphs {
-  font-family: "Hanami Clock", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  font-size: 22vh;
+  font-family: var(--clock-family, "Hanami Clock"), "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  font-size: calc(22vh * var(--cs));
   font-weight: 400;
   font-variation-settings: "XROT" 0, "YROT" 0;
   letter-spacing: -0.02em;
@@ -80,19 +82,21 @@ html, body {
 #clock text.face {
   fill: rgba(255, 244, 252, 0.16);   /* the tint in the transparent middle */
   stroke: rgba(255, 255, 255, 0.28); /* hairline edge so the glass reads on bright scenes */
-  stroke-width: 1.2px;
+  stroke-width: calc(1.2px * var(--cs));
   paint-order: stroke;
 }
 
 #clock .date {
-  margin-top: 0.4vh;
+  margin-top: calc(0.4vh * var(--cs));
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  font-size: 2.6vh;
+  font-size: calc(2.6vh * var(--cs));
   font-weight: 500;
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.88);
   text-shadow: 0 1px 2px rgba(5, 3, 12, 0.45), 0 0 18px rgba(5, 3, 12, 0.35);
 }
+#clock.date-same .date { font-family: var(--clock-family, "Hanami Clock"), "Segoe UI", system-ui, sans-serif; letter-spacing: 0.04em; }
+#clock .date[hidden] { display: none; }
 
 /* ── dev panel (only created when running outside the host) ── */
 #dev {

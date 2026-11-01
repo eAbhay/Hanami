@@ -131,7 +131,7 @@ public sealed class ScreensaverManager : IDisposable
                 var view = await WallpaperView.CreateScreensaverAsync(_env, m, _paths);
                 var desktop = s.AssignmentFor(m.Key);
                 var wallpaper = _library.Resolve(s.Screensaver.WallpaperId ?? desktop.WallpaperId);
-                view.SendConfig(wallpaper, s.ScreensaverEffectFor(m.Key), fps);
+                view.SendConfig(wallpaper, s.ScreensaverEffectFor(m.Key), fps, new FontLibrary(_library).ClockMessage(s.Screensaver.Clock));
                 await view.SetModeAsync(new ResolvedMode(Mode.Full, "Screensaver", false));
                 view.MessageReceived += OnPageMessage;
                 _views.Add(view);
@@ -166,6 +166,11 @@ public sealed class ScreensaverManager : IDisposable
 
     private void OnPageMessage(WallpaperView view, System.Text.Json.Nodes.JsonObject msg)
     {
+        if ((string?)msg["type"] == "fontError")
+        {
+            Log.Warn($"Clock font {(string?)msg["font"]} failed to load: {(string?)msg["message"]}");
+            return;
+        }
         if (!_showing || (string?)msg["type"] != "dismiss") return;
         if (DateTime.UtcNow - _shownAt < Grace) return;
         Hide((string?)msg["input"] ?? "input", byInput: true);

@@ -131,6 +131,47 @@ public sealed class EffectSettingsTests : IDisposable
     }
 
     [Fact]
+    public void V1File_DropsStoredClickBurst_AndBecomesV2()
+    {
+        var path = Write("""
+            { "effects": { "snow": { "density": 2, "clickBurst": true }, "rain": { "clickBurst": false } } }
+            """);
+        var store = new SettingsStore(path);
+
+        Assert.Equal(2, store.Current.SettingsVersion);
+        Assert.False(store.Current.Effects["snow"].ContainsKey("clickBurst"));
+        Assert.Equal(2.0, (double?)store.Current.Effects["snow"]["density"]);
+        Assert.False(store.Current.Effects["rain"].ContainsKey("clickBurst"));
+
+        store.Save();
+        var written = JsonNode.Parse(File.ReadAllText(path))!;
+        Assert.Equal(2, (int?)written["settingsVersion"]);
+        Assert.Null(written["effects"]!["snow"]!["clickBurst"]);
+    }
+
+    [Fact]
+    public void V2File_KeepsClickBurst()
+    {
+        var s = SettingsStore.Load(Write("""
+            { "settingsVersion": 2, "effects": { "snow": { "clickBurst": true } } }
+            """));
+        Assert.True((bool?)s.Effects["snow"]["clickBurst"]);
+        Assert.Equal(2, s.SettingsVersion);
+    }
+
+    [Fact]
+    public void Override_WithFlicker_SurvivesRoundTrip()
+    {
+        var path = Path.Combine(_dir, "config", "settings.json");
+        var store = new SettingsStore(path);
+        store.SetEffectTuning("fireflies", new JsonObject { ["flicker"] = 0.25, ["opacity"] = 1.6 });
+        var reloaded = new SettingsStore(path).Current;
+        Assert.Equal(0.25, (double?)reloaded.Effects["fireflies"]["flicker"]);
+        Assert.Equal(1.6, (double?)reloaded.Effects["fireflies"]["opacity"]);
+        Assert.Equal(0.25, (double?)reloaded.ComposeEffect("fireflies")["flicker"]);
+    }
+
+    [Fact]
     public void Patch_CanSetAndClearScreensaverEffect()
     {
         var store = new SettingsStore(Path.Combine(_dir, "config", "settings.json"));

@@ -11,6 +11,24 @@ public sealed class ScreensaverSettings
     public bool RequireSignIn { get; set; }
     /// <summary>0 = never stop on its own.</summary>
     public double StopAfterHours { get; set; }
+    public ClockSettings Clock { get; set; } = new();
+}
+
+/// <summary>Where and how the screensaver clock is drawn (same on every monitor). See docs/CONTRACTS.md.</summary>
+public sealed class ClockSettings
+{
+    public const double DefaultX = 0.5, DefaultY = 0.31;
+
+    /// <summary>The time's centre as a fraction of the monitor.</summary>
+    public double X { get; set; } = DefaultX;
+    public double Y { get; set; } = DefaultY;
+    /// <summary>0.5 – 1.6.</summary>
+    public double Size { get; set; } = 1;
+    /// <summary>null = the bundled Tilt Warp; "system:&lt;family&gt;"; "library:&lt;file&gt;" (Library/fonts/).</summary>
+    public string? Font { get; set; }
+    /// <summary>"system" (Segoe UI) or "same" (the clock's font).</summary>
+    public string DateFont { get; set; } = "system";
+    public bool ShowDate { get; set; } = true;
 }
 
 public readonly record struct ScreensaverInputs(

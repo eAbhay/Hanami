@@ -13,13 +13,14 @@ import { createScene, SCENES } from "./scenes.js";
 import { mountClock } from "./clock.js";
 
 const host = window.chrome?.webview ?? null;
+let clock = null;   // screensaver pages only
 // The idle screensaver loads this same page in a topmost window (…&screensaver=1): no cursor,
 // a glass clock, and it asks the host to end only on a key press or mouse click — moving the
 // mouse is ignored.
 const isScreensaver = new URLSearchParams(location.search).has("screensaver");
 if (isScreensaver) {
   document.documentElement.classList.add("screensaver");
-  mountClock(document.body);
+  clock = mountClock(document.body, { onFontError: (e) => post({ type: "fontError", ...e }) });
   const dismiss = (e, input) => {
     e.preventDefault();
     e.stopPropagation();
@@ -256,6 +257,7 @@ function handle(msg) {
       // makes a reset take effect).
       if (msg.effect && typeof msg.effect === "object") engine.setConfig({ ...(PRESET_DEFAULTS[msg.effect.preset] ?? {}), ...msg.effect });
       if ("wallpaper" in msg) setWallpaper(msg.wallpaper);
+      if (msg.clock && typeof msg.clock === "object") clock?.set(msg.clock);
       applyMode(MODES.includes(msg.mode) ? msg.mode : mode);
       break;
     }
@@ -331,7 +333,7 @@ function initDev() {
   buildPanel(state, send);
   send();
   // dev convenience for console experiments
-  window.hanami = { engine, handle, state, send };
+  window.hanami = { engine, handle, state, send, clock };
 }
 
 function buildPanel(state, send) {
@@ -423,7 +425,8 @@ function buildPanel(state, send) {
   slider("Density", "density", 0.1, 3, 0.05);
   slider("Speed", "speed", 0.2, 3, 0.05);
   slider("Size", "size", 0.5, 2, 0.05);
-  slider("Opacity", "opacity", 0, 1, 0.01);
+  slider("Opacity", "opacity", 0, 2, 0.01);
+  slider("Flicker", "flicker", 0, 1, 0.01);
   slider("Wind", "wind", -1, 1, 0.01);
   slider("Strength", "interactionStrength", 0, 2, 0.05);
   slider("Radius", "interactionRadius", 40, 400, 5);

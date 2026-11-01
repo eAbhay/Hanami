@@ -1,6 +1,6 @@
 // Screensaver tab — what the screensaver shows. When it runs lives on the Power tab.
 import { h, svg } from "../util.js";
-import { pageHeader, card, wallpaperPicker, effectPicker } from "../components/index.js";
+import { pageHeader, card, wallpaperPicker, effectPicker, createClockCard } from "../components/index.js";
 
 export function createScreensaverTab(ctx) {
   const save = (patch) => ctx.mutate("updateSettings", { screensaver: patch }).catch(() => {});
@@ -35,6 +35,8 @@ export function createScreensaverTab(ctx) {
     },
   });
 
+  const clockCard = createClockCard(ctx);
+
   const toPower = h("button.link-row", { type: "button", onclick: () => ctx.showTab("power") },
     svg("clock"), h("span", "Timing and power settings"), h("span.link-row-go", "Power →"));
 
@@ -43,6 +45,7 @@ export function createScreensaverTab(ctx) {
     status,
     card("Background", "Same as desktop follows each monitor", backgrounds.el),
     card("Effect", "Same as desktop follows each monitor's effect", effects),
+    clockCard.el,
     toPower);
 
   function update(s) {
@@ -56,6 +59,7 @@ export function createScreensaverTab(ctx) {
 
     backgrounds.update(s, cfg.wallpaperId ?? null);
     effects.set(cfg.effectPreset ?? null);
+    clockCard.update(s);
   }
 
   return { el, update, hide: backgrounds.hide };

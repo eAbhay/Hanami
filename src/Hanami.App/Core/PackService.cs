@@ -49,6 +49,12 @@ public static class PackService
                 await WriteTextAsync(zip, "pack.json", JsonSerializer.Serialize(info, Json.FileOptions));
                 if (settings is not null)
                     await WriteTextAsync(zip, "settings.json", JsonSerializer.Serialize(settings, Json.FileOptions));
+                if (settings?.Screensaver.Clock.Font is { } font && font.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal))
+                {
+                    var fonts = new FontLibrary(library);
+                    var fontId = font[FontLibrary.LibraryPrefix.Length..];
+                    if (fonts.Exists(fontId)) zip.CreateEntryFromFile(fonts.PathOf(fontId), $"fonts/{fontId}", CompressionLevel.NoCompression);
+                }
 
                 var buffer = new byte[1 << 20];
                 foreach (var (id, file) in files)
@@ -91,6 +97,15 @@ public static class PackService
         {
             using var reader = new StreamReader(settingsEntry.Open());
             settings = SettingsStore.Normalize(JsonSerializer.Deserialize<AppSettings>(await reader.ReadToEndAsync(ct), Json.Options));
+        }
+
+        var fontLib = new FontLibrary(library);
+        foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("fonts/", StringComparison.Ordinal) && e.Name.Length > 0))
+        {
+            // fonts/<id> only: a valid id has no separators, so nothing can escape the folder
+            if (entry.FullName != $"fonts/{entry.Name}" || !FontLibrary.IsValidId(entry.Name) || fontLib.Exists(entry.Name)) continue;
+            Directory.CreateDirectory(fontLib.Dir);
+            entry.ExtractToFile(fontLib.PathOf(entry.Name));
         }
 
         var entries = zip.Entries.Where(e => e.FullName.StartsWith("wallpapers/", StringComparison.Ordinal) && e.Name.Length > 0).ToList();

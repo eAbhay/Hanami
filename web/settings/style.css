@@ -890,3 +890,37 @@ code.path {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* ------------------------------------------------------------------ screensaver clock card */
+@font-face { font-family: "Hanami Clock Preview"; src: url("../wallpaper/fonts/TiltWarp.ttf") format("truetype"); font-display: swap; }
+.clock-layout { display: grid; grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1fr); gap: 18px 26px; align-items: start; }
+.clock-place { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.clock-stage { cursor: default; touch-action: none; }
+.clock-handle {
+  position: absolute; transform: translate(-50%, -50%); z-index: 2; display: flex; flex-direction: column; align-items: center;
+  cursor: grab; outline: none; border-radius: 6px; touch-action: none; color: #fff; text-align: center; white-space: nowrap;
+  padding: 0 4px;
+}
+.clock-handle.dragging { cursor: grabbing; }
+.clock-handle:hover, .clock-handle:focus-visible, .clock-handle.dragging { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 4px var(--focus); background: rgba(255, 255, 255, 0.08); }
+.clock-time { line-height: 1.1; font-weight: 400; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+  color: rgba(255, 244, 252, 0.88); text-shadow: 0 2px 10px rgba(20, 8, 40, 0.55); }
+.clock-date { margin-top: 0.4em; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 500; letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.9); text-shadow: 0 1px 3px rgba(20, 8, 40, 0.6); }
+.clock-guide { position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.12s; background: rgba(255, 255, 255, 0.55); z-index: 1; }
+.clock-stage:has(.dragging) .clock-guide.on { opacity: 1; }
+.clock-guide.v { left: 50%; top: 0; bottom: 0; width: 1px; }
+.clock-guide.h { left: 0; right: 0; height: 1px; top: 50%; }
+.clock-place-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.clock-anchors { display: grid; grid-template-columns: repeat(3, 26px); grid-template-rows: repeat(3, 20px); gap: 3px; padding: 4px; border-radius: 8px; background: var(--surface-3); border: 1px solid var(--border); }
+.anchor { border: 0; background: transparent; border-radius: 5px; display: grid; place-items: center; padding: 0; cursor: pointer; }
+.anchor:hover { background: var(--hover); }
+.anchor:focus-visible { outline: 2px solid var(--focus); }
+.anchor-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); transition: transform 0.12s, background 0.12s; }
+.anchor.on .anchor-dot { background: var(--accent); transform: scale(1.45); }
+.clock-opts { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-weight: 500; }
+.font-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.font-select { flex: 1 1 160px; min-width: 0; padding: 0 8px; }
+@media (max-width: 760px) { .clock-layout { grid-template-columns: 1fr; } }

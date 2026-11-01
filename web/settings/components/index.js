@@ -4,3 +4,4 @@ export { pageHeader, card, row, statusPill } from "./layout.js";
 export { wallpaperPicker } from "./wallpaperPicker.js";
 export { effectPicker } from "./effectPicker.js";
 export { createTuningDrawer } from "./tuningDrawer.js";
+export { createClockCard } from "./clockCard.js";

@@ -5,9 +5,10 @@ system tray as a single self-contained `.exe`.
 
 - **Video, image or built-in animated scenes** play behind your desktop icons, one per monitor.
 - **Interactive effects** draw over the wallpaper: sakura petals, snow, autumn leaves, fireflies,
-  rain, sparkles and flame embers. They react to the mouse (repel, attract, or a gust of wind)
-  and burst when you click the desktop. Each effect has its own settings (density, speed, size,
-  opacity, wind, cursor interaction, click burst): click the gear on an effect's tile.
+  rain, sparkles and flame embers. They react to the mouse (repel, attract, or a gust of wind),
+  and can burst when you click the desktop (off by default). Each effect has its own settings
+  (density, speed, size, opacity up to 200%, flicker for fireflies, sparkles and embers, wind,
+  cursor interaction, click burst): click the gear on an effect's tile.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that
@@ -15,9 +16,11 @@ system tray as a single self-contained `.exe`.
   Win+D never flashes your normal wallpaper. Shortly before the screensaver or Windows turns the
   screen off, a playing video freezes so it never keeps the screen on.
 - **Live screensaver** (plugged in only). After a set idle time (default 2 minutes) it covers
-  every monitor with the live wallpaper and a glass clock and date, and keeps the screen on. The clock uses the
-  [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) font (SIL Open Font License, bundled in
-  `web/wallpaper/fonts/`). A
+  every monitor with the live wallpaper and a glass clock and date, and keeps the screen on. You
+  choose where the clock sits (drag it in the Screensaver tab's preview), how big it is and its
+  font: the bundled [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) (SIL Open Font License,
+  `web/wallpaper/fonts/`), any installed Windows font, or a `.ttf`/`.otf`/`.woff`/`.woff2` you import
+  (kept in `Library/fonts/` and carried by packs exported with settings). A
   key press or mouse click ends it; moving the mouse doesn't. On battery,
   or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
   changes Windows power settings, and closing the lid always follows your Windows lid setting.

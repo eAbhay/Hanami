@@ -283,6 +283,16 @@ public sealed class HanamiHost
             case "importPack":
                 return await ImportPackAsync();
 
+            case "getFonts":
+                return await GetFontsAsync();
+
+            case "importFont":
+                return ImportFont();
+
+            case "deleteFont":
+                DeleteFont(Required(p, "id"));
+                return BuildState();
+
             case "previewScreensaver":
                 await _screensaver.PreviewAsync();
                 return new JsonObject { ["ok"] = true };
@@ -358,6 +368,46 @@ public sealed class HanamiHost
         BroadcastState();
     }
 
+    private static string[]? _systemFonts;
+
+    private async Task<JsonNode> GetFontsAsync()
+    {
+        // Enumerating the installed families can take a moment on a big font folder: do it once, off the UI thread.
+        _systemFonts ??= await Task.Run(() =>
+        {
+            var en = System.Windows.Markup.XmlLanguage.GetLanguage("en-us");
+            return System.Windows.Media.Fonts.SystemFontFamilies
+                .Select(f => f.FamilyNames.TryGetValue(en, out var n) ? n : f.Source)
+                .Where(n => !string.IsNullOrWhiteSpace(n) && !n.StartsWith('@'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        });
+        return new JsonObject
+        {
+            ["bundled"] = new JsonArray(new JsonObject { ["id"] = "", ["name"] = "Tilt Warp", ["src"] = "https://app.hanami/wallpaper/fonts/TiltWarp.ttf" }),
+            ["system"] = new JsonArray(_systemFonts.Select(n => (JsonNode?)n).ToArray()),
+            ["imported"] = Json.ToNode(new FontLibrary(_library).List()),
+        };
+    }
+
+    private JsonNode ImportFont()
+    {
+        var exts = string.Join(";", FontLibrary.Extensions.Select(e => "*" + e));
+        var dlg = new OpenFileDialog { Title = "Import a font", Filter = $"Fonts|{exts}" };
+        if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
+        var info = new FontLibrary(_library).Import(dlg.FileName);
+        return new JsonObject { ["imported"] = Json.ToNode(info) };
+    }
+
+    private void DeleteFont(string id)
+    {
+        if (_store.Current.Screensaver.Clock.Font == $"{FontLibrary.LibraryPrefix}{id}")
+            _store.Patch(new JsonObject { ["screensaver"] = new JsonObject { ["clock"] = new JsonObject { ["font"] = null } } });
+        new FontLibrary(_library).Delete(id);
+        BroadcastState();
+    }
+
     private async Task<JsonNode> ExportPackAsync(JsonNode? p)
     {
         var ids = (p?["ids"] as JsonArray)?.Select(x => (string)x!).ToList() ?? new List<string>();
@@ -390,6 +440,9 @@ public sealed class HanamiHost
             settings.Paused = _store.Current.Paused;
             foreach (var a in settings.Assignments.Values)
                 if (a.WallpaperId is { } wid && !_library.Exists(wid)) a.WallpaperId = "builtin:twilight";
+            if (settings.Screensaver.Clock.Font is { } font && font.StartsWith(FontLibrary.LibraryPrefix, StringComparison.Ordinal)
+                && !new FontLibrary(_library).Exists(font[FontLibrary.LibraryPrefix.Length..]))
+                settings.Screensaver.Clock.Font = null;
             _store.Replace(settings);
             SyncStartupRegistration();
         }

@@ -25,6 +25,7 @@ export function createTuningDrawer(ctx) {
   let engine = null;
   let mod = null;
   let opener = null;
+  let hasFlicker = false;   // only effects whose PRESETS entry says flicker: true use the slider
 
   const send = debounce(() => {
     const patch = pending, target = preset;
@@ -48,7 +49,8 @@ export function createTuningDrawer(ctx) {
     density: slider({ label: "Density", min: 0.1, max: 3, step: 0.1, value: 1, format: mult, onInput: (v) => change({ density: v }) }),
     speed: slider({ label: "Speed", min: 0.2, max: 3, step: 0.1, value: 1, format: mult, onInput: (v) => change({ speed: v }) }),
     size: slider({ label: "Size", min: 0.5, max: 2, step: 0.05, value: 1, format: mult, onInput: (v) => change({ size: v }) }),
-    opacity: slider({ label: "Opacity", min: 0, max: 1, step: 0.05, value: 1, format: pct, onInput: (v) => change({ opacity: v }) }),
+    opacity: slider({ label: "Opacity", min: 0, max: 2, step: 0.05, value: 1, format: pct, onInput: (v) => change({ opacity: v }), hint: "Above 100% makes faint particles stronger" }),
+    flicker: slider({ label: "Flicker", min: 0, max: 1, step: 0.05, value: 0.5, format: pct, onInput: (v) => change({ flicker: v }), hint: "How deeply particles pulse or twinkle" }),
     wind: slider({ label: "Wind", min: -1, max: 1, step: 0.05, value: 0, format: windFmt, onInput: (v) => change({ wind: v }), hint: "Constant sideways drift" }),
     interactionStrength: slider({ label: "Strength", min: 0, max: 2, step: 0.1, value: 1, format: mult, onInput: (v) => change({ interactionStrength: v }) }),
     interactionRadius: slider({ label: "Radius", min: 40, max: 400, step: 10, value: 160, format: (v) => `${v} px`, onInput: (v) => change({ interactionRadius: v }) }),
@@ -57,7 +59,7 @@ export function createTuningDrawer(ctx) {
     [{ value: "none", label: "Off" }, { value: "repel", label: "Repel" }, { value: "attract", label: "Attract" }, { value: "wind", label: "Wind" }],
     "repel", (v) => change({ interaction: v }, true), { ariaLabel: "Cursor interaction" });
   const interactionHint = h("p.field-hint");
-  const burst = toggle(true, (v) => change({ clickBurst: v }, true), "Click burst");
+  const burst = toggle(false, (v) => change({ clickBurst: v }, true), "Click burst");
   const resetBtn = h("button.btn.subtle.small", { type: "button", title: "Reset this effect's settings to its defaults", onclick: reset },
     svg("reset"), h("span", "Reset to defaults"));
 
@@ -71,6 +73,7 @@ export function createTuningDrawer(ctx) {
 
   function syncControls(e) {
     for (const [k, s] of Object.entries(sliders)) s.set(e[k]);
+    sliders.flicker.hidden = !hasFlicker;
     interaction.set(e.interaction);
     interactionHint.textContent = INTERACTION_HINT[e.interaction] ?? "";
     const off = e.interaction === "none";
@@ -143,7 +146,7 @@ export function createTuningDrawer(ctx) {
     h("header.drawer-head", title, closeBtn),
     h("div.drawer-body",
       preview,
-      card("Look", resetBtn, h("div.slider-grid", sliders.density, sliders.speed, sliders.size, sliders.opacity, sliders.wind)),
+      card("Look", resetBtn, h("div.slider-grid", sliders.density, sliders.speed, sliders.size, sliders.opacity, sliders.flicker, sliders.wind)),
       card("Cursor interaction", null,
         interaction,
         interactionHint,
@@ -175,6 +178,7 @@ export function createTuningDrawer(ctx) {
     pending = {};
     current = ctx.effectFor(id);
     name = (mod?.PRESETS ?? []).find((p) => p.id === id)?.name ?? id;
+    hasFlicker = !!(mod?.PRESETS ?? []).find((p) => p.id === id)?.flicker;
     title.textContent = `${name} settings`;
     note.textContent = `Used wherever ${name} is selected.`;
     previewLabel.textContent = name;

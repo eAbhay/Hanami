@@ -7,6 +7,8 @@
 //   shadowBlur at runtime. Glows use pre-rendered glow sprites + additive blending.
 // - No per-frame allocations: particles and fx come from free lists, the active arrays are
 //   compacted in place.
+// - Final alpha goes through EffectsEngine.fin(): opacity up to 1 multiplies, above 1 it lifts faint
+//   particles (1 − (1 − a)^opacity) without clipping bright ones.
 // - Live multipliers (speed/size/opacity/wind) are eased towards their targets; density changes
 //   add/remove particles gradually with fades; a preset change crossfades old → new particles.
 // - Sprites are cached per module, so several engines (e.g. settings previews) share them.
@@ -22,10 +24,10 @@ export const PRESETS = Object.freeze([
   Object.freeze({ id: "sakura", name: "Sakura", description: "Cherry blossom petals tumbling on a spring breeze." }),
   Object.freeze({ id: "snow", name: "Snow", description: "Soft snowflakes drifting down in layers of depth." }),
   Object.freeze({ id: "leaves", name: "Autumn leaves", description: "Maple leaves in reds, oranges and golds." }),
-  Object.freeze({ id: "fireflies", name: "Fireflies", description: "Glowing fireflies wandering through the dusk." }),
+  Object.freeze({ id: "fireflies", name: "Fireflies", description: "Glowing fireflies wandering through the dusk.", flicker: true }),
   Object.freeze({ id: "rain", name: "Rain", description: "Light rain with tiny splashes at the bottom." }),
-  Object.freeze({ id: "sparkles", name: "Sparkles", description: "Twinkling four-point stars drifting slowly." }),
-  Object.freeze({ id: "embers", name: "Flame embers", description: "Glowing embers and sparks rising from a fire." }),
+  Object.freeze({ id: "sparkles", name: "Sparkles", description: "Twinkling four-point stars drifting slowly.", flicker: true }),
+  Object.freeze({ id: "embers", name: "Flame embers", description: "Glowing embers and sparks rising from a fire.", flicker: true }),
 ]);
 
 export const DEFAULT_EFFECT = Object.freeze({
@@ -34,11 +36,12 @@ export const DEFAULT_EFFECT = Object.freeze({
   speed: 1,
   size: 1,
   opacity: 1,
+  flicker: 0,
   wind: 0,
   interaction: "repel",
   interactionStrength: 1,
   interactionRadius: 160,
-  clickBurst: true,
+  clickBurst: false,
 });
 
 // Each preset's own starting point. The user's per-effect overrides (Settings.effects) are applied
@@ -49,10 +52,10 @@ export const PRESET_DEFAULTS = Object.freeze({
   sakura: presetDefault("sakura"),
   snow: presetDefault("snow"),
   leaves: presetDefault("leaves"),
-  fireflies: presetDefault("fireflies", { density: 0.8, interaction: "attract" }),
+  fireflies: presetDefault("fireflies", { density: 0.8, interaction: "attract", flicker: 0.5 }),
   rain: presetDefault("rain", { interaction: "wind" }),
-  sparkles: presetDefault("sparkles"),
-  embers: presetDefault("embers", { interaction: "wind" }),
+  sparkles: presetDefault("sparkles", { flicker: 0.5 }),
+  embers: presetDefault("embers", { interaction: "wind", flicker: 0.4 }),
 });
 
 const PRESET_IDS = new Set(PRESETS.map((p) => p.id));
@@ -71,7 +74,8 @@ function sanitize(src, base) {
   if ("density" in src) o.density = num(src.density, 0.1, 3, base.density);
   if ("speed" in src) o.speed = num(src.speed, 0.2, 3, base.speed);
   if ("size" in src) o.size = num(src.size, 0.5, 2, base.size);
-  if ("opacity" in src) o.opacity = num(src.opacity, 0, 1, base.opacity);
+  if ("opacity" in src) o.opacity = num(src.opacity, 0, 2, base.opacity);
+  if ("flicker" in src) o.flicker = num(src.flicker, 0, 1, base.flicker);
   if ("wind" in src) o.wind = num(src.wind, -1, 1, base.wind);
   if (INTERACTIONS.has(src.interaction)) o.interaction = src.interaction;
   if ("interactionStrength" in src) o.interactionStrength = num(src.interactionStrength, 0, 2, base.interactionStrength);
@@ -121,6 +125,12 @@ function petalPath(x, L) {
 
 function paintPetal(x, L, col) {
   petalPath(x, L);
+  x.save();                       // faint dark halo (baked) so petals read on bright backdrops
+  x.shadowColor = HALO + "0.2)";
+  x.shadowBlur = L * 0.08;
+  x.fillStyle = col.base;
+  x.fill();
+  x.restore();
   const g = x.createLinearGradient(0, 0.5 * L, 0, -0.5 * L);
   g.addColorStop(0, col.base);
   g.addColorStop(0.5, col.mid);
@@ -302,10 +312,23 @@ function radialSprite(S, stops) {
   return c;
 }
 
+// Very soft dark halo under light sprites so they separate from white skies (baked once, no runtime cost).
+const HALO = "rgba(24,32,64,";
+
 function buildSnow() {
+  const soft = radialSprite(64, [[0, "rgba(255,255,255,1)"], [0.22, "rgba(255,255,255,0.92)"], [0.5, "rgba(236,244,255,0.38)"], [1, "rgba(236,244,255,0)"]]);
+  const halo = makeCanvas(64);
+  const hx = halo.getContext("2d");
+  const hg = hx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  hg.addColorStop(0.2, HALO + "0.13)");
+  hg.addColorStop(0.65, HALO + "0.07)");
+  hg.addColorStop(1, HALO + "0)");
+  hx.fillStyle = hg;
+  hx.fillRect(0, 0, 64, 64);
+  hx.drawImage(soft, 0, 0);
   return {
     soft: {
-      c: radialSprite(64, [[0, "rgba(255,255,255,1)"], [0.22, "rgba(255,255,255,0.92)"], [0.5, "rgba(236,244,255,0.38)"], [1, "rgba(236,244,255,0)"]]),
+      c: halo,
       k: 2,
     },
     bokeh: {
@@ -468,14 +491,14 @@ function drawTumble(ctx, p, e, a) {
   if (fx > -0.07 && fx < 0.07) fx = fx < 0 ? -0.07 : 0.07;
   const sx = fx * s, sy = (0.84 + 0.16 * Math.sin(p.phase2)) * s;
   const c = Math.cos(p.rot), sn = Math.sin(p.rot);
-  ctx.globalAlpha = a;
+  ctx.globalAlpha = e.fin(a);
   ctx.setTransform(c * sx, sn * sx, -sn * sy, c * sy, p.x * e.dpr, p.y * e.dpr);
   ctx.drawImage(spr.c, -0.5, -0.5, 1, 1);
 }
 
 function drawRound(ctx, p, e, a) {
   const s = p.size * p.sprite.k * e.mSize * e.dpr;
-  ctx.globalAlpha = a;
+  ctx.globalAlpha = e.fin(a);
   ctx.setTransform(s, 0, 0, s, p.x * e.dpr, p.y * e.dpr);
   ctx.drawImage(p.sprite.c, -0.5, -0.5, 1, 1);
 }
@@ -616,9 +639,9 @@ const KINDS = {
         const S = sprites("snow");
         const z = how === "burst" ? rand(0.45, 0.9) : Math.random();
         p.z = z;
-        if (z < 0.45) { p.sprite = S.soft; p.size = rand(1.6, 3); p.alpha = rand(0.45, 0.7); p.vy = rand(16, 30); }
-        else if (z < 0.93) { p.sprite = S.soft; p.size = rand(3, 5.5); p.alpha = rand(0.75, 0.95); p.vy = rand(30, 55); }
-        else { p.sprite = S.bokeh; p.size = rand(9, 16); p.alpha = rand(0.3, 0.5); p.vy = rand(60, 85); }
+        if (z < 0.45) { p.sprite = S.soft; p.size = rand(1.6, 3); p.alpha = rand(0.7, 0.9); p.vy = rand(16, 30); }
+        else if (z < 0.93) { p.sprite = S.soft; p.size = rand(3, 5.5); p.alpha = rand(0.85, 1); p.vy = rand(30, 55); }
+        else { p.sprite = S.bokeh; p.size = rand(9, 16); p.alpha = rand(0.45, 0.65); p.vy = rand(60, 85); }
         p.phase = rand(0, TAU); p.phaseV = rand(0.4, 1.1);
         p.n1 = rand(6, 22);
       }
@@ -666,9 +689,10 @@ const KINDS = {
     },
     draw(ctx, p, e, a) {
       let pulse = 0.5 + 0.5 * Math.sin(p.phase);
-      pulse = 0.12 + 0.88 * pulse * pulse * pulse;
+      pulse = 0.3 + 0.7 * pulse * pulse * pulse;
+      pulse = 1 - e.cfg.flicker * (1 - pulse);
       const s = p.size * (0.82 + 0.18 * pulse) * e.mSize * e.dpr;
-      ctx.globalAlpha = a * pulse;
+      ctx.globalAlpha = e.fin(a * pulse);
       ctx.setTransform(s, 0, 0, s, p.x * e.dpr, p.y * e.dpr);
       ctx.drawImage(p.sprite.c, -0.5, -0.5, 1, 1);
     },
@@ -682,9 +706,9 @@ const KINDS = {
         const z = Math.random();
         p.z = z;
         p.sprite = sprites("rain").streak;
-        if (z < 0.45) { p.size = rand(16, 26); p.n1 = 1; p.alpha = rand(0.22, 0.34); p.vy = rand(700, 900); }
-        else if (z < 0.88) { p.size = rand(28, 42); p.n1 = 1.3; p.alpha = rand(0.34, 0.48); p.vy = rand(1000, 1300); }
-        else { p.size = rand(50, 72); p.n1 = 1.8; p.alpha = rand(0.4, 0.55); p.vy = rand(1400, 1750); }
+        if (z < 0.45) { p.size = rand(16, 26); p.n1 = 1; p.alpha = rand(0.4, 0.55); p.vy = rand(700, 900); }
+        else if (z < 0.88) { p.size = rand(28, 42); p.n1 = 1.3; p.alpha = rand(0.5, 0.65); p.vy = rand(1000, 1300); }
+        else { p.size = rand(50, 72); p.n1 = 1.8; p.alpha = rand(0.55, 0.7); p.vy = rand(1400, 1750); }
         p.n2 = (1 - z) * 0.06 + rand(0, 0.015); // landing height, as a fraction of h from the bottom
       }
       const vx = 40 + e.mWind * this.windPx;
@@ -716,7 +740,7 @@ const KINDS = {
       const n = Math.sqrt(vx * vx + vy * vy) || 1;
       const c = vy / n, s = -vx / n;
       const d = e.dpr, W = p.n1 * e.mSize * d, L = p.size * e.mSize * d;
-      ctx.globalAlpha = a;
+      ctx.globalAlpha = e.fin(a);
       ctx.setTransform(c * W, s * W, -s * L, c * L, p.x * d, p.y * d);
       ctx.drawImage(p.sprite.c, -0.5, -1, 1, 1);
     },
@@ -754,9 +778,10 @@ const KINDS = {
     draw(ctx, p, e, a) {
       let tw = 0.5 + 0.5 * Math.sin(p.phase);
       tw = tw * tw * tw;
-      const s = p.size * (0.45 + 0.55 * tw) * e.mSize * e.dpr;
+      const fl = e.cfg.flicker;
+      const s = p.size * (1 - fl * (1 - (0.45 + 0.55 * tw))) * e.mSize * e.dpr;
       const c = Math.cos(p.rot) * s, sn = Math.sin(p.rot) * s;
-      ctx.globalAlpha = a * (0.12 + 0.88 * tw);
+      ctx.globalAlpha = e.fin(a * (1 - fl * (1 - (0.12 + 0.88 * tw))));
       ctx.setTransform(c, sn, -sn, c, p.x * e.dpr, p.y * e.dpr);
       ctx.drawImage(p.sprite.c, -0.5, -0.5, 1, 1);
     },
@@ -783,7 +808,7 @@ KINDS.embers = {
       p.size = rand(22, 42) * (0.7 + 0.6 * z);
       p.n4 = how === "burst" ? rand(1.2, 2.6) : rand(2.6, 6);
       p.vx = rand(-12, 12); p.vy = -rand(45, 120) * (0.6 + 0.6 * z);
-      p.alpha = rand(0.7, 1) * (0.55 + 0.45 * z);
+      p.alpha = rand(0.85, 1) * (0.75 + 0.25 * z);
     }
     p.phase = rand(0, TAU); p.phaseV = rand(5, 12);       // flicker
     p.phase2 = rand(0, TAU); p.n1 = rand(10, 26);          // sway
@@ -829,8 +854,8 @@ KINDS.embers = {
   },
   draw(ctx, p, e, a) {
     const t = p.n3, S = sprites("embers"), d = e.dpr;
-    const flick = 0.72 + 0.28 * Math.sin(p.phase) * Math.sin(p.phase * 1.7 + 1);
-    a *= Math.min(1, t * 7) * Math.pow(1 - t, 1.15) * flick;
+    const flick = 1 - e.cfg.flicker * (1 - (0.72 + 0.28 * Math.sin(p.phase) * Math.sin(p.phase * 1.7 + 1)));
+    a = e.fin(a * Math.min(1, t * 7) * Math.pow(1 - t, 0.5) * flick);
     if (a < 0.004) return;
     if (p.n2 === 1) {
       const vx = p.vx + p.ex, vy = p.vy + p.ey;
@@ -901,7 +926,8 @@ export class EffectsEngine {
     this.px = 0; this.py = 0; this.pInside = false;
     this.pvx = 0; this.pvy = 0; this._pT = 0;
     /** Read-only diagnostics (not part of the contract): rendered fps and live particle count. */
-    this.stats = { fps: 0, particles: 0 };
+    this.stats = { fps: 0, particles: 0, meanAlpha: 0 };
+    this._aSum = 0; this._aN = 0; this._aT = 0;
     this._fpsN = 0; this._fpsT = 0;
 
     this.resize();
@@ -1061,6 +1087,18 @@ export class EffectsEngine {
     this.canvas = null;
   }
 
+  /**
+   * Final alpha for a particle whose own alpha (alpha × fade × envelope) is `a`. Opacity ≤ 1
+   * multiplies; above 1 it lifts faint particles without clipping bright ones.
+   */
+  fin(a) {
+    const op = this.mOpacity;
+    const r = op <= 1 ? a * op : 1 - Math.pow(1 - (a > 1 ? 1 : a), op);
+    this._aSum += r;
+    this._aN++;
+    return r;
+  }
+
   // ── internals ──
 
   _target() {
@@ -1175,6 +1213,10 @@ export class EffectsEngine {
       this._fpsT = ts;
     }
     this.stats.particles = this.parts.length;
+    if (ts - this._aT >= 2000) {   // dev diagnostic: mean final alpha actually drawn per particle
+      if (this._aN) this.stats.meanAlpha = Math.round((this._aSum / this._aN) * 100) / 100;
+      this._aSum = 0; this._aN = 0; this._aT = ts;
+    }
 
     if (!this.kind && this.parts.length === 0 && this.fxList.length === 0) {
       this._suspended = true; // nothing to animate ("none"): no frames until something changes
@@ -1316,7 +1358,7 @@ export class EffectsEngine {
     const parts = this.parts;
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i];
-      const a = p.alpha * p.fade * op;
+      const a = p.alpha * p.fade;
       if (a < 0.004) continue;
       const k = p.kind;
       if (k.blend !== blend) {
@@ -1338,12 +1380,12 @@ export class EffectsEngine {
           const e = 1 - (1 - t) * (1 - t) * (1 - t);
           const r = f.size * (0.15 + 0.85 * e);
           const s = ((r * 2) / RING_FRACTION) * d;
-          ctx.globalAlpha = f.a * (1 - t) * (1 - t) * op;
+          ctx.globalAlpha = this.fin(f.a * (1 - t) * (1 - t));
           ctx.setTransform(s, 0, 0, s * f.sy, f.x * d, f.y * d);
           ctx.drawImage(spr.ring, -0.5, -0.5, 1, 1);
         } else {
           const s = f.size * 2 * d;
-          ctx.globalAlpha = f.a * (1 - t) * op;
+          ctx.globalAlpha = this.fin(f.a * (1 - t));
           ctx.setTransform(s, 0, 0, s, f.x * d, f.y * d);
           ctx.drawImage(spr.dot, -0.5, -0.5, 1, 1);
         }

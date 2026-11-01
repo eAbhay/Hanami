@@ -1,4 +1,5 @@
-// Screensaver clock: glass time slightly above centre, small date (with weekday) underneath.
+// Screensaver clock: glass time (position, size and font from the host's `config.clock`), small
+// date (with weekday) underneath.
 //
 // The glass is three layers stacked in the same box:
 //  1. .frost — a backdrop-filter blur of whatever is behind, clipped to the glyph shapes via an
@@ -9,8 +10,15 @@
 //  3. the date: plain small text with a soft shadow for legibility on bright scenes.
 // Time and date follow the Windows locale (12/24 h); the AM/PM marker is dropped, like the
 // Windows lock screen.
+//
+// mountClock(parent, {onFontError}) → {set(clockConfig), destroy()}. The filter's pixel offsets and
+// blurs are tuned for size 1, so layout() scales them with `size`.
 
-export function mountClock(parent) {
+const DEFAULTS = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true };
+const FALLBACK_FAMILY = "Hanami Clock";   // the bundled Tilt Warp (style.css)
+const cssString = (s) => `"${String(s).replace(/["\\\x00-\x1f]/g, "")}"`;
+
+export function mountClock(parent, { onFontError } = {}) {
   const root = document.createElement("div");
   root.id = "clock";
   root.innerHTML = `
@@ -70,6 +78,15 @@ export function mountClock(parent) {
   const svg = root.querySelector("svg");
   const texts = [...root.querySelectorAll("text.glyphs")];
   const dateEl = root.querySelector(".date");
+  let cfg = { ...DEFAULTS };
+
+  // Every filter number that is a pixel distance, with its value at size 1.
+  const scaled = [];
+  for (const el of root.querySelectorAll("feOffset, feGaussianBlur, feSpecularLighting")) {
+    for (const attr of ["dx", "dy", "stdDeviation", "surfaceScale"]) {
+      if (el.hasAttribute(attr)) scaled.push([el, attr, Number(el.getAttribute(attr))]);
+    }
+  }
 
   const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
   const dateFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", day: "numeric", month: "long" });
@@ -84,6 +101,21 @@ export function mountClock(parent) {
       t.setAttribute("x", w / 2);
       t.setAttribute("y", h * 0.5);
     }
+    for (const [el, attr, base] of scaled) el.setAttribute(attr, base * cfg.size);
+
+    // Put the time's centre at (x, y), nudged so the visible glyphs and the date stay on screen.
+    const W = innerWidth, H = innerHeight;
+    const box = texts[0].getBBox();
+    const dateW = cfg.showDate ? dateEl.offsetWidth : 0;
+    const dateH = cfg.showDate ? dateEl.offsetHeight + 0.004 * H : 0;
+    const halfW = Math.max(box.width, dateW) / 2 + 0.02 * W;
+    const above = Math.max(box.height, 0) / 2 + 0.02 * H;
+    const below = h / 2 + dateH + 0.02 * H;
+    const fit = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    const cx = fit(cfg.x * W, halfW, W - halfW);
+    const cy = fit(cfg.y * H, above, H - below);
+    root.style.left = `${cx}px`;
+    root.style.top = `${cy - h / 2}px`;
   }
 
   let lastText = "";
@@ -98,6 +130,7 @@ export function mountClock(parent) {
       lastText = time;
       for (const t of texts) t.textContent = time;
       dateEl.textContent = dateFmt.format(now);
+      layout();
     }
   }
 
@@ -109,15 +142,88 @@ export function mountClock(parent) {
     timer = setTimeout(tick, 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
   }
 
-  // Fade in only once the font is ready, so the glass clip never shows the fallback face.
-  const fontReady = document.fonts.load('100px "Hanami Clock"').catch(() => {});
+  // Font: null → Tilt Warp; {family} → an installed font (Tilt Warp behind it, so a missing one
+  // still looks right); {family, src} → an imported font file, loaded as a FontFace.
+  let fontGen = 0, userFace = null;
+  async function applyFont() {
+    const gen = ++fontGen;
+    const f = cfg.font;
+    let family = null;
+    try {
+      if (f?.src) {
+        const name = `Hanami User Clock ${gen}`;
+        const face = new FontFace(name, `url(${cssString(f.src)})`);
+        await face.load();
+        if (gen !== fontGen) return;
+        if (userFace) document.fonts.delete(userFace);
+        document.fonts.add(face);
+        userFace = face;
+        family = name;
+      } else if (f?.family) {
+        family = f.family;
+        await document.fonts.load(`100px ${cssString(family)}`);
+      }
+    } catch (err) {
+      if (gen !== fontGen) return;
+      family = null;
+      onFontError?.({ font: f?.id ?? "", message: String(err?.message ?? err) });
+    }
+    if (gen !== fontGen) return;
+    await document.fonts.load(`100px ${cssString(FALLBACK_FAMILY)}`).catch(() => {});
+    root.style.setProperty("--clock-family", family ? `${cssString(family)}, ${cssString(FALLBACK_FAMILY)}` : cssString(FALLBACK_FAMILY));
+    layout();
+  }
+
+  function sanitizeConfig(c) {
+    const num = (v, lo, hi, d) => (Number.isFinite(Number(v)) && v !== null ? Math.min(hi, Math.max(lo, Number(v))) : d);
+    const font = c?.font && typeof c.font === "object" && (c.font.family || c.font.src) ? c.font : null;
+    return {
+      x: num(c?.x, 0, 1, DEFAULTS.x),
+      y: num(c?.y, 0, 1, DEFAULTS.y),
+      size: num(c?.size, 0.5, 1.6, DEFAULTS.size),
+      font,
+      dateFont: c?.dateFont === "same" ? "same" : "system",
+      showDate: c?.showDate !== false,
+    };
+  }
+
+  // Fade in only once the first config's font is ready, so the glass clip never shows the wrong
+  // face; without a config (dev page) the defaults show after a moment.
+  let revealed = false;
+  async function reveal(promise) {
+    await promise;
+    if (revealed) return;
+    revealed = true;
+    requestAnimationFrame(() => root.classList.add("shown"));
+  }
+
+  let configured = false;
+  function set(next) {
+    configured = true;
+    const prev = cfg;
+    cfg = sanitizeConfig(next);
+    root.style.setProperty("--cs", cfg.size);
+    root.classList.toggle("date-same", cfg.dateFont === "same");
+    dateEl.hidden = !cfg.showDate;
+    const sameFont = JSON.stringify(prev.font) === JSON.stringify(cfg.font) && revealed;
+    layout();
+    if (sameFont) return;
+    reveal(applyFont());
+  }
+
+  root.style.setProperty("--cs", cfg.size);
   layout();
   tick();
   addEventListener("resize", layout);
-  fontReady.then(() => requestAnimationFrame(() => root.classList.add("shown")));
-  return () => {
-    clearTimeout(timer);
-    removeEventListener("resize", layout);
-    root.remove();
+  const fallbackTimer = setTimeout(() => { if (!configured) set(DEFAULTS); }, 1200);
+  return {
+    set,
+    destroy() {
+      clearTimeout(timer);
+      clearTimeout(fallbackTimer);
+      removeEventListener("resize", layout);
+      if (userFace) document.fonts.delete(userFace);
+      root.remove();
+    },
   };
 }

@@ -107,7 +107,7 @@ public sealed class WallpaperView : IDisposable
         _controller.Bounds = new System.Drawing.Rectangle(0, 0, monitor.Bounds.Width, monitor.Bounds.Height);
     }
 
-    public void SendConfig(WallpaperRef? wallpaper, JsonObject effect, int fpsCap)
+    public void SendConfig(WallpaperRef? wallpaper, JsonObject effect, int fpsCap, JsonObject? clock = null)
     {
         var msg = new JsonObject
         {
@@ -117,6 +117,7 @@ public sealed class WallpaperView : IDisposable
             ["fpsCap"] = fpsCap,
             ["mode"] = ModeName(_mode),
         };
+        if (clock is not null) msg["clock"] = clock.DeepClone();   // screensaver pages only
         if (_ready) Post(msg); else _pendingConfig = msg;
     }
 

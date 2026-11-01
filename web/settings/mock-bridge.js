@@ -147,7 +147,8 @@ function initialState() {
         energySaver: "reduced", whenMaximized: "paused", whenFullscreen: "paused",
       },
       performance: { fpsCap: 60, batteryFpsCap: 30 },
-      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, effectPreset: null, requireSignIn: false, stopAfterHours: 0 },
+      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, effectPreset: null, requireSignIn: false, stopAfterHours: 0,
+        clock: { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true } },
       startWithWindows: true,
       paused: false,
     },
@@ -232,6 +233,7 @@ export function createMockHost(post) {
     return w;
   }
 
+  let importedFonts = [];
   const methods = {
     getState: () => snapshot(),
 
@@ -240,6 +242,9 @@ export function createMockHost(post) {
       deepMerge(state.settings, patch);
       const ss = state.settings.screensaver;
       ss.idleMinutes = Math.min(120, Math.max(1, Math.round(ss.idleMinutes)));
+      const ck = ss.clock;
+      ck.x = Math.min(1, Math.max(0, ck.x)); ck.y = Math.min(1, Math.max(0, ck.y));
+      ck.size = Math.min(1.6, Math.max(0.5, ck.size));
       emitState();
       return snapshot();
     },
@@ -346,6 +351,31 @@ export function createMockHost(post) {
       await created;
       emitState();
       return { imported: picks.length };
+    },
+
+    getFonts: async () => {
+      await sleep(80);
+      return {
+        bundled: [{ id: "", name: "Tilt Warp", src: "", sizeBytes: 0 }],
+        system: ["Arial", "Bahnschrift", "Cascadia Code", "Comic Sans MS", "Consolas", "Georgia", "Impact", "Segoe Print", "Segoe Script", "Segoe UI", "Times New Roman", "Verdana"],
+        imported: clone(importedFonts),
+      };
+    },
+
+    importFont: async () => {
+      await sleep(400);   // "file dialog"
+      const names = ["Lobster", "Pacifico", "Bebas Neue"];
+      const name = names[importedFonts.length % names.length];
+      const f = { id: `${name}.ttf`, name, src: "", sizeBytes: 140_000 };
+      if (!importedFonts.some((x) => x.id === f.id)) importedFonts.push(f);
+      return { imported: clone(f) };
+    },
+
+    deleteFont: ({ id }) => {
+      importedFonts = importedFonts.filter((f) => f.id !== id);
+      if (state.settings.screensaver.clock.font === `library:${id}`) state.settings.screensaver.clock.font = null;
+      emitState();
+      return snapshot();
     },
 
     previewScreensaver: () => {

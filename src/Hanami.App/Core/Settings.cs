@@ -9,6 +9,12 @@ public enum Mode { Paused = 0, Reduced = 1, Full = 2 }
 
 public sealed class AppSettings
 {
+    /// <summary>The settings shape this build writes. Files without the key are version 1.</summary>
+    public const int CurrentVersion = 2;
+
+    /// <summary>Bumped by one-time migrations in <see cref="SettingsStore.Normalize"/>.</summary>
+    public int SettingsVersion { get; set; } = 1;
+
     public bool SameOnAllMonitors { get; set; } = true;
 
     /// <summary>"*" is the default for every monitor; other keys are per-monitor overrides.</summary>
@@ -146,6 +152,19 @@ public sealed class SettingsStore
 
     public void Save() => Json.WriteFileAtomic(_path, JsonSerializer.Serialize(Current, Json.FileOptions));
 
+    private static void NormalizeClock(ScreensaverSettings ss)
+    {
+        var c = ss.Clock ??= new ClockSettings();
+        c.X = Finite(c.X, ClockSettings.DefaultX, 0, 1);
+        c.Y = Finite(c.Y, ClockSettings.DefaultY, 0, 1);
+        c.Size = Finite(c.Size, 1, 0.5, 1.6);
+        if (c.DateFont is not ("system" or "same")) c.DateFont = "system";
+        if (!FontLibrary.IsValidSetting(c.Font)) c.Font = null;
+    }
+
+    private static double Finite(double v, double fallback, double lo, double hi) =>
+        double.IsFinite(v) ? Math.Clamp(v, lo, hi) : fallback;
+
     /// <summary>Fills gaps left by older or hand-edited files so the rest of the app can trust the shape.</summary>
     internal static AppSettings Normalize(AppSettings? s)
     {
@@ -177,12 +196,20 @@ public sealed class SettingsStore
             if (!EffectPresets.IsValid(key) || s.Effects[key] is null) { s.Effects.Remove(key); continue; }
             s.Effects[key].Remove("preset");
         }
+        if (s.SettingsVersion < 2)
+        {
+            // v2: click burst became off by default. Older drawers stored whole effect objects, so a
+            // stored clickBurst is almost always the old default rather than a choice: drop it.
+            foreach (var tuning in s.Effects.Values) tuning.Remove("clickBurst");
+        }
+        s.SettingsVersion = AppSettings.CurrentVersion;
         s.Power ??= new();
         s.Performance ??= new();
         s.Screensaver ??= new();
         if (!EffectPresets.IsValid(s.Screensaver.EffectPreset)) s.Screensaver.EffectPreset = null;
         s.Screensaver.IdleMinutes = Math.Clamp(s.Screensaver.IdleMinutes, 1, 120);
         s.Screensaver.StopAfterHours = Math.Clamp(s.Screensaver.StopAfterHours, 0, 48);
+        NormalizeClock(s.Screensaver);
         s.Power.LowBatteryThreshold = Math.Clamp(s.Power.LowBatteryThreshold, 0, 100);
         s.Performance.FpsCap = Math.Clamp(s.Performance.FpsCap, 5, 240);
         s.Performance.BatteryFpsCap = Math.Clamp(s.Performance.BatteryFpsCap, 5, 240);
