@@ -171,6 +171,7 @@ Contract sections: "Screensaver behaviour", the `config` and page-message tables
 - [ ] 3.11 README section; note in `Uninstaller`/data docs that Windows keeps its own copy of the picture after uninstall. Commit.
 
 Notes:
+3.1 half done: both csproj files now target `net10.0-windows10.0.19041.0` (build OK, 221 tests pass); the published exe grew from 72.7 to 78.8 MB. `Platform/LockScreenImage.cs` has `ILockScreenImage` + the real wrapper (`SetAsync`, `BackupAsync`), unused so far. NOT done: the real `SetImageFileAsync` test on this Insider build (waiting for the user), and everything from 3.2 on.
 
 ## Phase 4 — Pets: drop on windows, latch on walls
 
