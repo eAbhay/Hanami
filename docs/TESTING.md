@@ -110,3 +110,6 @@ restore it afterwards). Start the dev copy; `Pets: showing N` is logged.
 - The pure parts (`World`, `PetBrain`, pack import) are unit-tested in `PetBrainTests`, `WorldTests` and `PetPackTests`.
 - Things only a person can check: dragging and throwing a pet, riding a window you drag, a click-through next to a pet, a
   second monitor with another DPI.
+- Round 6 behaviour (drop on a window, latch, jump, hop, shake, companions, stroke) is covered by `PetBehaviourTests` with scripted
+  `World`s. On the real screen, use two test pets, a throw-away WinForms window of your own at 1000x680 and 820x560, and synthetic
+  mouse input for the drag: press on a pet, move to the window's title bar, release gently.

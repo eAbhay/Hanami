@@ -289,6 +289,7 @@ type Settings = {
     items: { id: string; packId: string }[];   // pets out; the same pack may appear more than once; max 8
     scale: number;              // 0.5 – 2, default 1
     climbWindows: boolean;      // default true
+    socialize: boolean;         // pets greet, sit with and follow each other, default true (only matters with 2+ pets)
     activity: "calm" | "normal" | "lively";    // default "normal"
   };
   // Items whose pack is gone are dropped on load; bad ids and duplicate item ids are repaired.
@@ -391,10 +392,29 @@ at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames`
   sides, hang from and climb along the ceiling, fall (gravity 2 px/tick², terminal ≈ 20), land (bounce frames), react
   to a click (hearts rise inside the pet window), sometimes walk or run to the cursor when it is on the floor's level,
   and sprawl dizzily after being carried around for 5+ seconds. Only abilities the pack's frames allow are used.
-  A pet on a window is carried when it moves and falls when the window is minimized, closed or covered. Pets never
-  move, resize or focus the user's windows. Mouse: press and drag (> 4 px) picks a pet up (the cursor holds its
-  anchor), release throws it with the last ~80 ms of cursor velocity, a click without moving reacts, right-click opens
-  Sit · Sleep · Hide pets · Pet settings.
+  A pet on a window is carried when it moves and falls when the window is minimized, closed (it hops and a "!" shows)
+  or covered. Pets never move, resize or focus the user's windows. Mouse: press and drag (> 4 px) picks a pet up (the
+  cursor holds its anchor); release throws it with the last ~80 ms of cursor velocity, except that a **gentle release**
+  (under 6 px/tick) lands on the closest floor within 24 px under / 56 px above the cursor (a window's title bar, the
+  taskbar), or latches onto a wall or the ceiling within 40 px (climbing packs only), staying put 5 – 20 s before it
+  starts to climb. A fast throw into a wall or ceiling latches too (for a second or so). A click without moving reacts;
+  holding the cursor on a pet for 0.6 s strokes it (hearts, standing or sitting still, until the cursor leaves, 30 s at most);
+  right-click opens Sit · Sleep · Stay here · Follow me · Hide pets · Pet settings. **Stay here** (session only) keeps a
+  pet standing, sitting, lying or sleeping, holding on to a wall or ceiling; **Follow me** (session only) tracks the cursor's
+  X along its floor for 60 s, lets go of walls and never climbs; each cancels the other, and a click ends Follow me.
+- **Blocking and jumping**: anything overlapping the pet's *body* (its frame height × 0.85, `PetProfile.BodyHeight`) blocks
+  its walk, not just its feet. A wall that reaches the feet is climbed (85 % for windows, 60 % for screen edges, else the pet
+  turns back); one that ends above the feet is jumped to when its bottom is within 2 body heights (otherwise the pet turns
+  back; packs that can't climb always do). A jump is a scripted arc (`PetState.Jump`, 24 px high, 14 + distance/6 ticks, the
+  `jump` animation), re-targeted every tick to its window; if the target is gone the pet falls. Pets also seek a climbable
+  window side up to 600 px away on their own (`Seek`). At the end of a window's top edge a pet turns back, climbs down the
+  side, steps off, sits at the edge with its legs dangling (`sitDangle`, 200 – 750 ticks) or hops to another window up to
+  3 body heights away and 1.5 higher or lower. Shaking a window a pet stands on (reversing at over 25 px/tick twice within
+  15 ticks, or one jerk over 60 px) throws the pet off.
+- **Companions**: with `pets.socialize` and two or more pets (`PetSocial`, checked every 10 ticks): two free pets within
+  90 px on the same surface, past their pair cooldown (60 s; calm 120 s, lively 30 s), face each other with hearts for about
+  2 s, then (40 %) both sit for 5 – 15 s, (30 %) one follows the other for up to 15 s keeping a gap of 70 px, or (30 %) they
+  walk off in opposite directions. Pets on Stay here or Follow me are not free.
 - **Visibility**: always on top of apps; hidden while a fullscreen app covers their monitor, while the screensaver
   shows and while Windows is locked; "Hide pets" (tray or pet menu) hides them for the session only. They follow the
   power rules without the maximized/fullscreen rules: `paused` freezes them on their current frame (and they can't be

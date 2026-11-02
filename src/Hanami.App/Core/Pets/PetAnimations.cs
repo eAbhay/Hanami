@@ -21,7 +21,8 @@ public sealed class PoseDef
 /// A pack's own frame map: which images play for each animation. Optional in a manifest and in a
 /// <c>hanami-pet.json</c> next to the images; built from a pack's <c>conf/actions.xml</c> when it has one. Animations it
 /// leaves out use the default Shimeji-ee table. Animation names: stand, walk, run, sit, sitLookUp, sprawl, sleep, fall,
-/// bounce, grabWall, climbWallUp, climbWallDown, grabCeiling, climbCeiling, resist; <c>swing</c> = the five frames shown
+/// bounce, grabWall, climbWallUp, climbWallDown, grabCeiling, climbCeiling, resist, jump, sitDangle (the last two fall back
+/// to the pack's own fall / sit when a pack maps animations but not these); <c>swing</c> = the five frames shown
 /// while dragged (far left … far right).
 /// </summary>
 public sealed class PetMapping
@@ -40,7 +41,7 @@ public sealed class PetAnimations
 {
     public static readonly string[] Names =
         ["stand", "walk", "run", "sit", "sitLookUp", "sprawl", "sleep", "fall", "bounce", "grabWall", "climbWallUp", "climbWallDown",
-         "grabCeiling", "climbCeiling", "resist"];
+         "grabCeiling", "climbCeiling", "resist", "jump", "sitDangle"];
 
     public static readonly PetAnimations Default = new();
 
@@ -51,6 +52,7 @@ public sealed class PetAnimations
         ["fall"] = ShimejiFrames.Fall, ["bounce"] = ShimejiFrames.Bounce, ["grabWall"] = ShimejiFrames.GrabWall,
         ["climbWallUp"] = ShimejiFrames.ClimbWallUp, ["climbWallDown"] = ShimejiFrames.ClimbWallDown,
         ["grabCeiling"] = ShimejiFrames.GrabCeiling, ["climbCeiling"] = ShimejiFrames.ClimbCeiling, ["resist"] = ShimejiFrames.Resist,
+        ["jump"] = ShimejiFrames.Jump, ["sitDangle"] = ShimejiFrames.SitDangleLegs,
     };
 
     /// <summary>The five dragged frames: far left, left, centre, right, far right (relative to the cursor).</summary>
@@ -74,6 +76,8 @@ public sealed class PetAnimations
     public Pose[] GrabCeiling => _a["grabCeiling"];
     public Pose[] ClimbCeiling => _a["climbCeiling"];
     public Pose[] Resist => _a["resist"];
+    public Pose[] Jump => _a["jump"];
+    public Pose[] SitDangle => _a["sitDangle"];
 
     /// <summary>The swing frame while dragged (same thresholds as Shimeji's Pinched action).</summary>
     public int Pinched(double footX, double cursorX) =>
@@ -118,6 +122,13 @@ public sealed class PetAnimations
         }
         // A pack that maps stand/sprawl but not sleep sleeps on its sprawl pose.
         if (!defined.Contains("sleep") && defined.Contains("sprawl")) result._a["sleep"] = result._a["sprawl"];
+        // A pack with its own frame numbering that doesn't define the newer animations plays its own fall / sit, not the
+        // default table's frames (those numbers mean something else in its images).
+        if (mapping.Animations is { Count: > 0 })
+        {
+            if (!defined.Contains("jump")) result._a["jump"] = result._a["fall"];
+            if (!defined.Contains("sitDangle")) result._a["sitDangle"] = result._a["sit"];
+        }
         if (mapping.Swing is { Count: 5 } sw && sw.All(n => n is >= 1 and <= ShimejiFrames.NumFrames)) result.Swing = sw.ToArray();
         return result;
     }
@@ -172,6 +183,7 @@ public sealed class PetAnimations
         Take("sprawl", "Sprawl"); Take("fall", "Falling"); Take("bounce", "Bouncing"); Take("grabWall", "GrabWall");
         Take("climbWallUp", "ClimbWall", 0); Take("climbWallDown", "ClimbWall", 1);
         Take("grabCeiling", "GrabCeiling"); Take("climbCeiling", "ClimbCeiling"); Take("resist", "Resisting");
+        Take("jump", "Jumping"); Take("sitDangle", "SitAndDangleLegs");
 
         List<int>? swing = null;
         var pinched = Animations("Pinched");

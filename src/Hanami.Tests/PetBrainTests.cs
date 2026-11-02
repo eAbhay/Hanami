@@ -45,9 +45,9 @@ public sealed class PetBrainTests
     public void ThrownAtAWall_BouncesBack_AndLands()
     {
         var world = Plain();
-        var pet = Pet();
+        var pet = Pet(caps: new PetCapabilities(false, false, true, true));   // a pack that can't climb bounces off the wall
         pet.BeginDrag(100, 500);
-        pet.EndDrag(-30, 0);                    // fast to the left, into the left edge
+        pet.EndDrag(-30, 0, world);             // fast to the left, into the left edge
         Assert.Equal(PetState.Thrown, pet.State);
         var maxLeft = double.MaxValue;
         var turned = false;
@@ -97,7 +97,7 @@ public sealed class PetBrainTests
         var world = Plain();
         var pet = Pet();
         pet.BeginDrag(800, 300);
-        pet.EndDrag(10, -5);
+        pet.EndDrag(10, -5, world);
         Assert.Equal((10, -5), (pet.Vx, pet.Vy));
         Run(pet, world, 300);
         Assert.Equal(Screen.Bottom, pet.Y);
@@ -293,7 +293,7 @@ public sealed class PetBrainTests
         var pet = Pet();
         pet.BeginDrag(500, 400);
         for (var i = 0; i < 25 * 8; i++) { pet.DragTo(500 + (i % 50), 400); pet.Step(world); }
-        pet.EndDrag(0, 0);
+        pet.EndDrag(0, 0, world);
         var states = new HashSet<PetState>();
         for (var i = 0; i < 200; i++) { pet.Step(world); states.Add(pet.State); }
         Assert.Contains(PetState.Lie, states);
@@ -301,7 +301,7 @@ public sealed class PetBrainTests
         var quick = Pet();
         quick.BeginDrag(500, 400);
         for (var i = 0; i < 25; i++) { quick.DragTo(500 + i, 400); quick.Step(world); }
-        quick.EndDrag(0, 0);
+        quick.EndDrag(0, 0, world);
         var quickStates = new HashSet<PetState>();
         for (var i = 0; i < 60; i++) { quick.Step(world); quickStates.Add(quick.State); }
         Assert.DoesNotContain(PetState.Lie, quickStates);
@@ -358,10 +358,9 @@ public sealed class PetBrainTests
         var world = WithWindow(new PxRect(400, 500, 1000, 900));
         Run(pet, world, 150);
         var x0 = pet.X;
-        var moved = WithWindow(new PxRect(480, 530, 1080, 930));
-        pet.Step(moved);
+        for (var i = 1; i <= 4; i++) pet.Step(WithWindow(new PxRect(400 + 20 * i, 500 + 7 * i + (i == 4 ? 2 : 0), 1000 + 20 * i, 900 + 7 * i + (i == 4 ? 2 : 0))));   // dragged smoothly, a few px per tick
         Assert.Equal(530, pet.Y);
-        Assert.True(Math.Abs(pet.X - (x0 + 80)) < 6);   // 80 px along, plus at most one step of its own walking
+        Assert.True(Math.Abs(pet.X - (x0 + 80)) < 10);   // 80 px along, plus a few steps of its own walking
     }
 
     [Fact]

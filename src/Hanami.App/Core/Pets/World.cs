@@ -223,6 +223,118 @@ public sealed class World
         return best;
     }
 
+    /// <summary>
+    /// The first wall met moving horizontally from x0 to x1 by a body spanning <paramref name="headY"/> (top) to
+    /// <paramref name="feetY"/>: a wall counts when its span overlaps that vertical range. Same sides and order as the point version.
+    /// </summary>
+    public Surface? FirstWallCrossed(double x0, double x1, double headY, double feetY)
+    {
+        if (Math.Abs(x1 - x0) < 1e-9) return null;
+        var dir = Math.Sign(x1 - x0);
+        Surface? best = null;
+        var bestD = double.MaxValue;
+        foreach (var s in _walls)
+        {
+            if (s.Side != -dir || feetY < s.From - Tolerance || headY > s.To + Tolerance) continue;
+            var d = (s.At - x0) * dir;
+            if (d < -0.001 || d > (x1 - x0) * dir + 0.001 || d >= bestD) continue;
+            best = s;
+            bestD = d;
+        }
+        return best;
+    }
+
+    /// <summary>The nearest wall (either side) within <paramref name="reach"/> of x whose span holds y.</summary>
+    public Surface? NearestWall(double x, double y, double reach)
+    {
+        Surface? best = null;
+        var bestD = double.MaxValue;
+        foreach (var s in _walls)
+        {
+            if (y < s.From - Tolerance || y > s.To + Tolerance) continue;
+            var d = Math.Abs(s.At - x);
+            if (d <= reach && d < bestD) { best = s; bestD = d; }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// The nearest floor whose range holds x with its height in [y − <paramref name="below"/>, y + <paramref name="above"/>],
+    /// i.e. up to <paramref name="below"/> px above the point and <paramref name="above"/> px under it (a pet let go a few
+    /// pixels inside a title bar still lands on it). Floors are already cut where a window in front covers them.
+    /// </summary>
+    public Surface? DropFloor(double x, double y, double above, double below)
+    {
+        Surface? best = null;
+        var bestD = double.MaxValue;
+        foreach (var s in _floors)
+        {
+            if (x < s.From - Tolerance || x > s.To + Tolerance || s.At < y - below || s.At > y + above) continue;
+            var d = Math.Abs(s.At - y);
+            if (d < bestD) { best = s; bestD = d; }
+        }
+        return best;
+    }
+
+    /// <summary>The first ceiling a point crosses moving up from (x0, y0) to (x1, y1) (y1 &lt;= y0), and the x where it does.</summary>
+    public (Surface Ceiling, double X)? FirstCeilingCrossed(double x0, double y0, double x1, double y1)
+    {
+        if (y1 > y0) return null;
+        (Surface, double)? best = null;
+        var bestAt = double.MinValue;
+        foreach (var s in _ceilings)
+        {
+            if (s.At > y0 + 0.001 || s.At < y1 - 0.001 || s.At <= bestAt) continue;
+            var t = y0 - y1 < 1e-9 ? 0 : (y0 - s.At) / (y0 - y1);
+            var x = x0 + (x1 - x0) * t;
+            if (x < s.From - Tolerance || x > s.To + Tolerance) continue;
+            best = (s, x);
+            bestAt = s.At;
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// A wall of another window a pet standing at (x, feetY) could jump to: its open side faces the pet, it lies within
+    /// <paramref name="maxDistance"/> ahead, and its bottom is no more than <paramref name="reach"/> above the feet
+    /// (or it reaches down to them). The nearest first.
+    /// </summary>
+    public Surface? ReachableWall(double x, double feetY, double reach, double maxDistance)
+    {
+        Surface? best = null;
+        var bestD = double.MaxValue;
+        foreach (var s in _walls)
+        {
+            if (s.Owner == 0) continue;
+            var ahead = (x - s.At) * s.Side;      // > 0: the pet is on the wall's open side
+            if (ahead < 0 || ahead > maxDistance) continue;
+            if (s.To < feetY - reach || s.From > feetY + Tolerance) continue;
+            if (ahead < bestD) { best = s; bestD = ahead; }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// The floor of another window to hop to from (x, y) in direction <paramref name="facing"/> (±1): the nearest one ahead
+    /// whose gap is at most <paramref name="gapMax"/> and whose height differs by at most <paramref name="riseMax"/>, with
+    /// the x to land on. A window's own floor (<paramref name="exceptOwner"/>) never counts.
+    /// </summary>
+    public (Surface Floor, double X)? HopTarget(double x, double y, int facing, double gapMax, double riseMax, long exceptOwner = -1)
+    {
+        (Surface, double)? best = null;
+        var bestGap = double.MaxValue;
+        foreach (var s in _floors)
+        {
+            if (s.Owner == 0 || s.Owner == exceptOwner || Math.Abs(s.At - y) > riseMax) continue;
+            var gap = facing > 0 ? s.From - x : x - s.To;
+            if (gap < 0 || gap > gapMax || gap >= bestGap) continue;
+            var inset = Math.Min(16, (s.To - s.From) / 2);
+            best = (s, facing > 0 ? s.From + inset : s.To - inset);
+            bestGap = gap;
+        }
+        return best;
+    }
+
     /// <summary>Whether a point is over any monitor's work area (with a margin), i.e. somewhere a pet can be.</summary>
     public bool InsideWorkArea(double x, double y, int margin = 0) =>
         WorkAreas.Any(a => x >= a.Left - margin && x <= a.Right + margin && y >= a.Top - margin && y <= a.Bottom + margin);

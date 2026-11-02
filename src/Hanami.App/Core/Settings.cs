@@ -168,6 +168,8 @@ public sealed class PetSettings
     /// <summary>0.5 – 2.</summary>
     public double Scale { get; set; } = 1;
     public bool ClimbWindows { get; set; } = true;
+    /// <summary>Pets greet each other, sit together and follow one another.</summary>
+    public bool Socialize { get; set; } = true;
     /// <summary>"calm" | "normal" | "lively".</summary>
     public string Activity { get; set; } = "normal";
 }

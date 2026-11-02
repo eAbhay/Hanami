@@ -25,9 +25,12 @@ system tray as a single self-contained `.exe`.
   Hanami uses the packs' images only, with its own behaviour logic (frame meanings come from the pack's own
   `conf/actions.xml` or a `hanami-pet.json` next to the images, else Shimeji-ee's default numbering): pets walk along the taskbar and the
   tops of your windows, climb window sides and screen edges, hang from the top of the screen, sit, nap,
-  fall when a window moves away, come over to your cursor now and then, and can be picked up and thrown.
-  They never move or resize your windows, hide while a fullscreen app or the screensaver is up, and freeze
-  when the power rules pause Hanami. Size, activity (calm / normal / lively) and "climb windows" are on the
+  fall when a window moves away (with a startled hop), come over to your cursor now and then, and can be
+  picked up and thrown or set down: let go gently on a window's title bar, the taskbar, a screen edge or the top
+  of the screen and they sit or hang there for a while. They hop up to windows that block their way, dangle their
+  legs at a window's edge, hop between windows, get shaken off a window you shake, say hello to each other, and
+  like being stroked (rest the cursor on one). Right-click: Stay here / Follow me. They never move or resize your windows, hide while a fullscreen app or the screensaver is up, and freeze
+  when the power rules pause Hanami. Size, activity (calm / normal / lively), "climb windows" and "play together" are on the
   Pets tab, "Hide pets" is in the tray menu. They are carried by exported packs.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,

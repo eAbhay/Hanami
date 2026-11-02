@@ -16,16 +16,20 @@ namespace Hanami.App;
 /// </summary>
 public sealed class PetWindow : Window
 {
+    private static readonly Brush Heart = new SolidColorBrush(Color.FromRgb(0xff, 0x6f, 0x9c));
+    private static readonly Brush Startle = new SolidColorBrush(Color.FromRgb(0xff, 0xb0, 0x20));
     private readonly Image _image = new();
     private readonly ScaleTransform _flip = new(1, 1);
     private IntPtr _hwnd;
     private readonly Canvas _hearts = new() { IsHitTestVisible = false };
     private readonly TextBlock[] _heartMarks = new TextBlock[3];
-    private (BitmapSource? frame, bool flip, int x, int y, int w, int h, int hearts) _last;
+    private (BitmapSource? frame, bool flip, int x, int y, int w, int h, int hearts, bool startled) _last;
 
     /// <summary>Left button went down / moved / went up, with the cursor in physical pixels (move and up only while pressed).</summary>
     public event Action<Win32.POINT>? Pressed, Moved, Released;
     public event Action? RightClicked;
+    /// <summary>The cursor came onto / left the visible part of the pet (transparent pixels don't count).</summary>
+    public event Action? HoverStarted, HoverEnded;
 
     public PetWindow()
     {
@@ -60,6 +64,8 @@ public sealed class PetWindow : Window
         MouseMove += (_, e) => { if (IsMouseCaptured && e.LeftButton == MouseButtonState.Pressed) Moved?.Invoke(CursorPos()); };
         MouseLeftButtonUp += (_, e) => { if (IsMouseCaptured) { ReleaseMouseCapture(); Released?.Invoke(CursorPos()); } e.Handled = true; };
         MouseRightButtonUp += (_, e) => { RightClicked?.Invoke(); e.Handled = true; };
+        MouseEnter += (_, _) => HoverStarted?.Invoke();
+        MouseLeave += (_, _) => HoverEnded?.Invoke();
     }
 
     private static Win32.POINT CursorPos()
@@ -70,14 +76,15 @@ public sealed class PetWindow : Window
 
     /// <summary>
     /// Draws <paramref name="frame"/> (mirrored when <paramref name="flip"/>) in the physical rectangle; does nothing
-    /// when nothing changed. <paramref name="hearts"/> is 0â€“1 while small hearts rise inside the window (a click), else âˆ’1.
+    /// when nothing changed. <paramref name="mark"/> is 0–1 while a mark shows over the pet (small hearts rising, or a "!" when
+    /// <paramref name="startled"/>), else −1.
     /// </summary>
-    public void Present(BitmapSource frame, bool flip, int x, int y, int w, int h, double hearts = -1)
+    public void Present(BitmapSource frame, bool flip, int x, int y, int w, int h, double mark = -1, bool startled = false)
     {
-        var step = hearts < 0 ? -1 : (int)(hearts * 20);
-        var state = (frame, flip, x, y, w, h, step);
+        var step = mark < 0 ? -1 : (int)(mark * 20);
+        var state = (frame, flip, x, y, w, h, step, startled);
         if (state.Equals(_last)) return;
-        PaintHearts(step < 0 ? -1 : step / 20.0, w, h);
+        PaintHearts(step < 0 ? -1 : step / 20.0, w, h, startled);
         if (!ReferenceEquals(_last.frame, frame)) _image.Source = frame;
         if (_last.flip != flip) _flip.ScaleX = flip ? -1 : 1;
         _last = state;
@@ -85,12 +92,26 @@ public sealed class PetWindow : Window
         if (!IsVisible) Show();
     }
 
-    private void PaintHearts(double t, double w, double h)
+    private void PaintHearts(double t, double w, double h, bool startled)
     {
         for (var i = 0; i < _heartMarks.Length; i++)
         {
             var m = _heartMarks[i];
-            if (t < 0) { m.Visibility = Visibility.Collapsed; continue; }
+            m.Text = startled ? "!" : "♥";
+            m.Foreground = startled ? Startle : Heart;
+            if (t < 0 || (startled && i > 0)) { m.Visibility = Visibility.Collapsed; continue; }
+            if (startled)
+            {
+                var d = VisualTreeHelper.GetDpi(this).DpiScaleX;
+                m.FontSize = Math.Max(10, h * 0.26 / d);
+                m.FontWeight = FontWeights.Bold;
+                Canvas.SetLeft(m, w / d * 0.46);
+                Canvas.SetTop(m, h / d * 0.04);
+                m.Opacity = 1;
+                m.Visibility = Visibility.Visible;
+                continue;
+            }
+            m.FontWeight = FontWeights.Normal;
             // Device pixels, since the window is sized in physical pixels (about 1 DIP per physical px under a per-monitor-aware app at the window's own DPI).
             var dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
             m.FontSize = Math.Max(8, h * 0.16 / dpi);

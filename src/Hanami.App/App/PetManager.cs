@@ -65,6 +65,10 @@ public sealed class PetManager : IDisposable
         public double Ps;
         public string Activity = "normal";
         public bool Pressed, Dragging, Hidden;
+        /// <summary>"Stay here" and "Follow me" from the pet's menu: session only, re-applied whenever the brain is rebuilt.</summary>
+        public bool Stay, Follow;
+        public long HoverSince = -1;           // when the cursor came onto the pet, -1 = not over it
+        public bool Stroking;
         public Win32.POINT PressAt;
         public readonly List<(long ms, int x, int y)> Samples = new();
     }
@@ -79,7 +83,8 @@ public sealed class PetManager : IDisposable
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly uint _pid = (uint)Environment.ProcessId;
     private readonly Random _rng = new();
-    private double _owed;                       // ms of simulation still to run
+    private readonly PetSocial _social = new();
+    private double _owed;                      // ms of simulation still to run
     private long _lastMs, _lastScanMs, _lastCoverageMs, _lastAreasMs, _tickCount;
     private List<MonitorInfo> _monitors = new();
     private World _world = World.Build([new PxRect(0, 0, 1920, 1040)]);
@@ -155,6 +160,8 @@ public sealed class PetManager : IDisposable
         pet.Window.Moved += p => OnMoved(pet, p);
         pet.Window.Released += p => OnReleased(pet, p);
         pet.Window.RightClicked += () => ShowMenu(pet);
+        pet.Window.HoverStarted += () => pet.HoverSince = _clock.ElapsedMilliseconds;
+        pet.Window.HoverEnded += () => { pet.HoverSince = -1; EndStroke(pet); };
         _pets[item.Id] = pet;
         Reset(pet);
     }
@@ -162,6 +169,7 @@ public sealed class PetManager : IDisposable
     private void Remove(string id)
     {
         if (!_pets.Remove(id, out var pet)) return;
+        _social.Forget(id);
         pet.Window.Close();
     }
 
@@ -171,7 +179,11 @@ public sealed class PetManager : IDisposable
         var settings = _settings().Pets;
         pet.Ps = settings.Scale * ScaleAt(x ?? 0, y ?? 0);
         pet.Activity = settings.Activity;
-        pet.Brain = new PetBrain(new PetProfile(pet.Frames.Caps, pet.Frames.Set, pet.Ps, settings.Activity, pet.Frames.Anims), new Random(_rng.Next()));
+        pet.Brain = new PetBrain(new PetProfile(pet.Frames.Caps, pet.Frames.Set, pet.Ps, settings.Activity, pet.Frames.Anims,
+            BodyHeight: pet.Frames.Height * pet.Ps * 0.85), new Random(_rng.Next()));
+        pet.Brain.Stay = pet.Stay;
+        if (pet.Follow) pet.Brain.SetFollowCursor(true);
+        pet.Stroking = false;
         var (sx, sy) = x is null ? _world.SpawnPoint(_rng) : (x.Value, y!.Value);
         pet.Brain.Spawn(sx, sy);
         pet.Hidden = false;
@@ -257,6 +269,7 @@ public sealed class PetManager : IDisposable
         {
             _owed -= TickMs;
             steps++;
+            StepSocial();
             foreach (var pet in _pets.Values) StepPet(pet);
         }
         if (steps == 0) return;
@@ -275,10 +288,34 @@ public sealed class PetManager : IDisposable
     /// </summary>
     private Mode ModeOf(Pet pet) => _mode();
 
+    /// <summary>Lets pets that are close notice each other (every 10 ticks) and tells each follower where its leader is.</summary>
+    private void StepSocial()
+    {
+        if (_pets.Count < 2 || !_settings().Pets.Socialize || _mode() == Mode.Paused)
+        {
+            foreach (var p in _pets.Values) p.Brain.PetTargetX = null;
+            return;
+        }
+        var list = _pets.Select(kv => (kv.Key, kv.Value.Brain)).ToList();
+        if (++_socialTick % PetSocial.EveryTicks == 0) _social.Update(list, _socialTick, _settings().Pets.Activity, _rng);
+        foreach (var (id, brain) in list) brain.PetTargetX = _social.TargetX(id, list);
+    }
+
+    private long _socialTick;       // simulation ticks while two or more pets are out: the clock of the pair cooldowns
+
     private void StepPet(Pet pet)
     {
         if (pet.Brain.IsHeld) { pet.Brain.Step(_world); return; }
         if (ModeOf(pet) == Mode.Paused) return;    // sits still, no animation
+
+        // The cursor resting on a pet for 0.6 s (button up) strokes it.
+        if (!pet.Stroking && pet.HoverSince >= 0 && !pet.Pressed && !pet.Dragging && _clock.ElapsedMilliseconds - pet.HoverSince >= 600)
+        {
+            pet.Brain.BeginStroke();
+            pet.Stroking = pet.Brain.State == PetState.Stroked;
+        }
+        if (pet.Stroking && pet.Brain.State != PetState.Stroked) pet.Stroking = false;   // ended by itself
+        if (pet.Follow && !pet.Brain.FollowCursor) pet.Follow = false;                   // a minute passed, or the pet was clicked
 
         var wantScale = _settings().Pets.Scale * ScaleAt(pet.Brain.X, pet.Brain.Y);
         if (Math.Abs(wantScale - pet.Ps) > 0.01 || _settings().Pets.Activity != pet.Activity) { Reset(pet, pet.Brain.X, pet.Brain.Y); return; }
@@ -304,7 +341,14 @@ public sealed class PetManager : IDisposable
         var ay = b.Pose.AnchorY * ky;
         var x = (int)Math.Round(b.X - ax * pet.Ps);
         var y = (int)Math.Round(b.Y - ay * pet.Ps);
-        pet.Window.Present(frame, flip, x, y, (int)Math.Round(f.Width * pet.Ps), (int)Math.Round(f.Height * pet.Ps), b.ReactProgress);
+        pet.Window.Present(frame, flip, x, y, (int)Math.Round(f.Width * pet.Ps), (int)Math.Round(f.Height * pet.Ps), b.MarkProgress, b.Mark == PetMark.Startled);
+    }
+
+    private void EndStroke(Pet pet)
+    {
+        if (!pet.Stroking) return;
+        pet.Stroking = false;
+        pet.Brain.EndStroke();
     }
 
     // ---- mouse -----------------------------------------------------------------------------------
@@ -312,6 +356,7 @@ public sealed class PetManager : IDisposable
     private void OnPressed(Pet pet, Win32.POINT p)
     {
         if (ModeOf(pet) == Mode.Paused) return;
+        EndStroke(pet);
         pet.Pressed = true;
         pet.Dragging = false;
         pet.PressAt = p;
@@ -353,7 +398,8 @@ public sealed class PetManager : IDisposable
             vx = (last.x - first.x) / dt * TickMs;
             vy = (last.y - first.y) / dt * TickMs;
         }
-        pet.Brain.EndDrag(vx, vy);
+        if (_windowTerrain) RebuildWorld();   // the last scan can be half a second old, and the pet may have been dropped on a window that just moved
+        pet.Brain.EndDrag(vx, vy, _world);
     }
 
     /// <summary>"Call here": the pet falls again from above the centre of the primary monitor.</summary>
@@ -372,12 +418,24 @@ public sealed class PetManager : IDisposable
         sit.Click += (_, _) => pet.Brain.Command(PetCommand.Sit);
         var sleep = new MenuItem { Header = "Sleep", IsEnabled = pet.Frames.Caps.Sleep };
         sleep.Click += (_, _) => pet.Brain.Command(PetCommand.Sleep);
+        var stay = new MenuItem { Header = "Stay here", IsCheckable = true, IsChecked = pet.Stay };
+        stay.Click += (_, _) => { pet.Stay = stay.IsChecked; if (pet.Stay) pet.Follow = false; pet.Brain.Stay = pet.Stay; };
+        var follow = new MenuItem { Header = "Follow me", IsCheckable = true, IsChecked = pet.Follow };
+        follow.Click += (_, _) =>
+        {
+            pet.Follow = follow.IsChecked;
+            if (pet.Follow) { pet.Stay = false; pet.Brain.Stay = false; }
+            pet.Brain.SetFollowCursor(pet.Follow);
+        };
         var hide = new MenuItem { Header = "Hide pets" };
         hide.Click += (_, _) => Hidden = true;
         var settings = new MenuItem { Header = "Pet settings" };
         settings.Click += (_, _) => _openPetSettings();
         menu.Items.Add(sit);
         menu.Items.Add(sleep);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(stay);
+        menu.Items.Add(follow);
         menu.Items.Add(new Separator());
         menu.Items.Add(hide);
         menu.Items.Add(settings);

@@ -143,7 +143,7 @@ function initialState() {
       sameOnAllMonitors: true,
       assignments: { "*": { wallpaperId: "builtin:twilight" } },
       effects: {},   // effect defaults: per-effect overrides, e.g. { snow: { density: 2 } }
-      pets: { enabled: true, items: [], scale: 1, climbWindows: true, activity: "normal" },
+      pets: { enabled: true, items: [], scale: 1, climbWindows: true, socialize: true, activity: "normal" },
       theme: { split: false, mode: "system" },   // light/dark wallpapers: off by default
       looks: {},     // per wallpaper: { desktop: { effectPreset, tuning }, screensaver: { effectPreset | absent, tuning, clock } }
       power: {

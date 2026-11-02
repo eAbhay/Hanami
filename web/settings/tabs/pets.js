@@ -13,6 +13,9 @@ export function createPetsTab(ctx) {
   const savePets = (patch) => ctx.mutate("updateSettings", { pets: patch }).catch(() => {});
   const show = toggle(true, (v) => savePets({ enabled: v }), "Show pets");
   const climb = toggle(true, (v) => savePets({ climbWindows: v }), "Climb windows");
+  const social = toggle(true, (v) => savePets({ socialize: v }), "Play together");
+  const socialRow = h("div", h("div.divider"),
+    row(null, "Play together", "Pets that meet say hello, sit side by side or follow each other around.", social));
   const activity = segmented([{ value: "calm", label: "Calm" }, { value: "normal", label: "Normal" }, { value: "lively", label: "Lively" }],
     "normal", (v) => savePets({ activity: v }), { ariaLabel: "Activity" });
   const sendScale = debounce(() => savePets({ scale: pendingScale }), 150);
@@ -37,7 +40,8 @@ export function createPetsTab(ctx) {
       h("div.field", h("label.field-label", "Activity"), activity,
         h("p.field-hint", "Calm pets sit and nap more; lively ones run around and rarely sleep.")),
       h("div.divider"),
-      row(null, "Climb windows", "Stand on the tops of your windows and climb their sides. Pets never move, resize or click your windows.", climb)),
+      row(null, "Climb windows", "Stand on the tops of your windows and climb their sides. Pets never move, resize or click your windows.", climb),
+      socialRow),
     card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
     card("Pet library", h("span.card-meta", "Imported Shimeji packs"), empty, packList));
 
@@ -82,6 +86,8 @@ export function createPetsTab(ctx) {
     pendingScale = cfg.scale ?? 1;
     if (!sendScale.pending()) size.set(pendingScale);
     const items = cfg.items ?? [];
+    social.set(cfg.socialize ?? true);
+    socialRow.hidden = items.length < 2;
     outEmpty.hidden = items.length > 0;
     outList.replaceChildren(...items.map((it) => {
       const pack = byId.get(it.packId);
