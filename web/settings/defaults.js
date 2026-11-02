@@ -6,4 +6,5 @@ export const FALLBACK_EFFECT = {
 };
 
 // Contract default for a look's screensaver clock (docs/CONTRACTS.md → ClockSettings).
-export const DEFAULT_CLOCK = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true };
+export const DEFAULT_CLOCK = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true,
+  tint: "#fff4fc", opacity: 0.16, frost: 18 };

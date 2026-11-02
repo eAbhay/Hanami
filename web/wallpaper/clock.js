@@ -14,7 +14,9 @@
 // mountClock(parent, {onFontError}) → {set(clockConfig), destroy()}. The filter's pixel offsets and
 // blurs are tuned for size 1, so layout() scales them with `size`.
 
-const DEFAULTS = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true };
+const DEFAULTS = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true, tint: "#fff4fc", opacity: 0.16, frost: 18 };
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const FALLBACK_FAMILY = "Hanami Clock";   // the bundled Tilt Warp (style.css)
 const cssString = (s) => `"${String(s).replace(/["\\\x00-\x1f]/g, "")}"`;
 
@@ -78,6 +80,7 @@ export function mountClock(parent, { onFontError } = {}) {
   const svg = root.querySelector("svg");
   const texts = [...root.querySelectorAll("text.glyphs")];
   const dateEl = root.querySelector(".date");
+  const maskSlope = root.querySelector("feFuncA");
   let cfg = { ...DEFAULTS };
 
   // Every filter number that is a pixel distance, with its value at size 1.
@@ -184,7 +187,22 @@ export function mountClock(parent, { onFontError } = {}) {
       font,
       dateFont: c?.dateFont === "same" ? "same" : "system",
       showDate: c?.showDate !== false,
+      tint: typeof c?.tint === "string" && HEX.test(c.tint) ? c.tint : DEFAULTS.tint,
+      opacity: num(c?.opacity, 0.04, 0.8, DEFAULTS.opacity),
+      frost: num(c?.frost, 0, 40, DEFAULTS.frost),
     };
+  }
+
+  // Glass colours: the fill is the tint at its opacity, the rim edge the tint mixed half with white.
+  // The filter's solid glyph mask is built from the fill's alpha, so its slope grows as the opacity drops
+  // (otherwise every edge effect would fade out with the fill).
+  function applyGlass() {
+    const [r, g, b] = rgb(cfg.tint);
+    const mix = (v) => Math.round((v + 255) / 2);
+    root.style.setProperty("--clock-fill", `rgba(${r}, ${g}, ${b}, ${cfg.opacity})`);
+    root.style.setProperty("--clock-edge", `rgba(${mix(r)}, ${mix(g)}, ${mix(b)}, 0.28)`);
+    root.style.setProperty("--clock-frost", `${cfg.frost * (innerHeight / 1080)}px`);
+    maskSlope.setAttribute("slope", Math.max(12, 1.2 / cfg.opacity));
   }
 
   // Fade in only once the first config's font is ready, so the glass clip never shows the wrong
@@ -205,6 +223,7 @@ export function mountClock(parent, { onFontError } = {}) {
     root.style.setProperty("--cs", cfg.size);
     root.classList.toggle("date-same", cfg.dateFont === "same");
     dateEl.hidden = !cfg.showDate;
+    applyGlass();
     const sameFont = JSON.stringify(prev.font) === JSON.stringify(cfg.font) && revealed;
     layout();
     if (sameFont) return;
@@ -214,7 +233,7 @@ export function mountClock(parent, { onFontError } = {}) {
   root.style.setProperty("--cs", cfg.size);
   layout();
   tick();
-  addEventListener("resize", layout);
+  addEventListener("resize", () => { applyGlass(); layout(); });
   const fallbackTimer = setTimeout(() => { if (!configured) set(DEFAULTS); }, 1200);
   return {
     set,

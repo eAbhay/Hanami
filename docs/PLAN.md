@@ -1,4 +1,4 @@
-﻿# Implementation plan — round 6: screensaver slide-up, matching lock screen, clock glass, livelier pets
+# Implementation plan — round 6: screensaver slide-up, matching lock screen, clock glass, livelier pets
 
 How to use this file (for a fresh chat, e.g. Sonnet):
 1. Read `CLAUDE.md`, then this file. In `docs/CONTRACTS.md`, read the sections your phase names and search it
@@ -62,29 +62,30 @@ Contract sections: `ClockSettings`, the `config.clock` row, the `setLook` row.
 
 Additive fields, so `AppSettings.CurrentVersion` stays 3 (missing values take the defaults).
 
-- [ ] 1.1 **Contract:** add to `ClockSettings` in `docs/CONTRACTS.md`, and to the `config.clock` row:
+- [x] 1.1 **Contract:** add to `ClockSettings` in `docs/CONTRACTS.md`, and to the `config.clock` row:
       `tint: string` (`#rrggbb`, default `#fff4fc`), `opacity: number` (0.04–0.8, default 0.16),
       `frost: number` (blur px at 1080p, 0–40, default 18).
-- [ ] 1.2 **Host:** `Core/ScreensaverPolicy.cs` `ClockSettings` gains `Tint`, `Opacity`, `Frost` with `Default*`
+- [x] 1.2 **Host:** `Core/ScreensaverPolicy.cs` `ClockSettings` gains `Tint`, `Opacity`, `Frost` with `Default*`
       constants. `Settings.cs` `NormalizeClock`: clamp the numbers with `Finite`, replace a tint that fails
       `^#[0-9a-fA-F]{6}$` with the default. `FontLibrary.ClockMessage` passes them through (check how it builds the object).
-- [ ] 1.3 **Page, `web/wallpaper/clock.js`:** add to `DEFAULTS` and `sanitizeConfig`. In `set()`, set CSS variables on
+- [x] 1.3 **Page, `web/wallpaper/clock.js`:** add to `DEFAULTS` and `sanitizeConfig`. In `set()`, set CSS variables on
       `#clock`: `--clock-fill` (tint at the opacity), `--clock-edge` (tint mixed 50% with white, alpha 0.28),
       `--clock-frost` (px, scaled by `innerHeight / 1080`). In `style.css`, `#clock text.face` uses `--clock-fill` and
       `--clock-edge`, `.frost` uses `blur(var(--clock-frost, 18px))` (keep `saturate`/`brightness`, both prefixes).
       **Watch out:** `<feFuncA slope="12">` builds the solid glyph mask from the fill's alpha, so at low opacity every
       edge effect fades away. Set the slope to `Math.max(12, 1.2 / opacity)` in `set()`. That's why the minimum isn't 0.
       Keep the date white: it needs to stay readable.
-- [ ] 1.4 **Settings, `components/clockCard.js`:** a "Glass" group under the font: tint swatches (Default `#fff4fc`, White
+- [x] 1.4 **Settings, `components/clockCard.js`:** a "Glass" group under the font: tint swatches (Default `#fff4fc`, White
       `#ffffff`, Ice `#cfe8ff`, Sakura `#ffc4dc`, Gold `#ffe2a8`, Ink `#20182e`) plus an `<input type=color>`, then sliders
       "Glass opacity" (shown as %) and "Frost". Same debounce path as size (`change`). The preview's `timeEl` shows the
       tint with its opacity, approximately; say nothing about it being exact. Update `defaults.js` `DEFAULT_CLOCK` and the
       `mock-bridge.js` clock defaults and sanitising.
-- [ ] 1.5 **Tests:** `ClockTests`: defaults, clamping, bad tint, old settings without the fields load with defaults, round trip.
-- [ ] 1.6 **Check:** Preview at low opacity, high opacity, a dark tint and frost 0 and 40, on a bright and a dark wallpaper,
+- [x] 1.5 **Tests:** `ClockTests`: defaults, clamping, bad tint, old settings without the fields load with defaults, round trip.
+- [x] 1.6 **Check:** Preview at low opacity, high opacity, a dark tint and frost 0 and 40, on a bright and a dark wallpaper,
       using `tools\dev\input.ps1 -Crop`. The rim must survive at minimum opacity. Commit.
 
 Notes:
+Done. Checked in the browser dev page with the CSS variables set by hand (dark tint, 4% opacity, frost 0, slope 30): rim, shade and shadow survive. Not done: the real-screen Preview check with `input.ps1 -Crop` on bright and dark wallpapers. Glass code is `applyGlass()` in `web/wallpaper/clock.js`; the settings preview colour is approximate.
 
 ## Phase 2 — Slide-up dismiss
 

@@ -99,6 +99,7 @@ public sealed class FontLibrary
         {
             ["x"] = c.X, ["y"] = c.Y, ["size"] = c.Size, ["font"] = font,
             ["dateFont"] = c.DateFont, ["showDate"] = c.ShowDate,
+            ["tint"] = c.Tint, ["opacity"] = c.Opacity, ["frost"] = c.Frost,
         };
     }
 }

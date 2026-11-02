@@ -121,7 +121,7 @@ Messages arrive via `window.chrome.webview.addEventListener("message", e => e.da
 |---|---|
 | `{type:"config", wallpaper: WallpaperRef \| null, effect: {preset} & Partial<EffectTuning>, fpsCap: number, mode: Mode}` | Full (re)configuration. Sent after `ready` and whenever anything changes. `wallpaper: null` → plain dark background. `effect` is the preset plus only the user's overrides for it; the page fills every missing key from `PRESET_DEFAULTS[preset]`. |
 | `{type:"mode", mode: Mode}` | Mode change only. |
-| `config.clock` | Screensaver pages only (`&screensaver=1`): `{x, y, size, showDate, dateFont, font: {id, family, src?} \| null}` — the `Settings.screensaver.clock` values with `font` resolved (`src` = `https://library.hanami/fonts/<file>` for imported fonts; null = Tilt Warp). The page centres the time on `(x·width, y·height)`, clamped so everything stays on screen, and scales the glass filter with `size`. |
+| `config.clock` | Screensaver pages only (`&screensaver=1`): `{x, y, size, showDate, dateFont, tint, opacity, frost, font: {id, family, src?} \| null}` — the `Settings.screensaver.clock` values with `font` resolved (`src` = `https://library.hanami/fonts/<file>` for imported fonts; null = Tilt Warp). The page centres the time on `(x·width, y·height)`, clamped so everything stays on screen, and scales the glass filter with `size`. |
 | `{type:"pointer", x, y, inside}` | Cursor in CSS px relative to this monitor's top-left. `inside:false` when the cursor is on another monitor (effects should relax back). Sent at up to 60 Hz, only on change. |
 | `{type:"click", x, y, button}` | A click that landed on the desktop surface of this monitor. `button`: `"left"` \| `"right"`. The page only bursts on left clicks (right opens the desktop menu). |
 
@@ -303,6 +303,9 @@ type ClockSettings = {          // the screensaver clock of one wallpaper (looks
                                 // "library:<file>" = an imported font in Library/fonts/ (a missing one shows Tilt Warp)
   dateFont: "system" | "same";  // "same" = the date uses the clock's font; default "system" (Segoe UI)
   showDate: boolean;            // default true
+  tint: string;                 // glass colour "#rrggbb", default "#fff4fc"
+  opacity: number;              // glass fill opacity 0.04 – 0.8, default 0.16
+  frost: number;                // blur of the glass in px at 1080p, 0 – 40, default 18
 };
 
 type MonitorInfo = { key: string; name: string; isPrimary: boolean;

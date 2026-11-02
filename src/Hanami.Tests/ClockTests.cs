@@ -36,6 +36,41 @@ public sealed class ClockTests : IDisposable
         Assert.Null(c.Font);
         Assert.Equal("system", c.DateFont);
         Assert.True(c.ShowDate);
+        Assert.Equal("#fff4fc", c.Tint);
+        Assert.Equal(0.16, c.Opacity);
+        Assert.Equal(18, c.Frost);
+    }
+
+    [Fact]
+    public void Glass_ClampsNumbers_ReplacesBadTint_AndRoundTrips()
+    {
+        var store = new SettingsStore(SettingsPath);
+        store.SetLook(Id, JsonNode.Parse("""{"screensaver":{"clock":{"tint":"red","opacity":5,"frost":-4}}}""")!.AsObject());
+        var c = store.Current.ScreensaverClockFor("*");
+        Assert.Equal("#fff4fc", c.Tint);
+        Assert.Equal(0.8, c.Opacity);
+        Assert.Equal(0, c.Frost);
+
+        store.SetLook(Id, JsonNode.Parse("""{"screensaver":{"clock":{"tint":"#20182E","opacity":0.01,"frost":99}}}""")!.AsObject());
+        c = new SettingsStore(SettingsPath).Current.ScreensaverClockFor("*");
+        Assert.Equal("#20182E", c.Tint);
+        Assert.Equal(0.04, c.Opacity);
+        Assert.Equal(40, c.Frost);
+
+        var msg = new FontLibrary(new Library(Path.Combine(_dir, "Library"))).ClockMessage(c);
+        Assert.Equal("#20182E", (string?)msg["tint"]);
+        Assert.Equal(0.04, (double?)msg["opacity"]);
+        Assert.Equal(40, (double?)msg["frost"]);
+    }
+
+    [Fact]
+    public void OldSettingsWithoutGlassFields_LoadWithDefaults()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+        File.WriteAllText(SettingsPath, """{"version":3,"looks":{"builtin:twilight":{"screensaver":{"clock":{"x":0.2}}}}}""");
+        var c = SettingsStore.Load(SettingsPath).ScreensaverClockFor("*");
+        Assert.Equal(0.2, c.X);
+        Assert.Equal((ClockSettings.DefaultTint, ClockSettings.DefaultOpacity, ClockSettings.DefaultFrost), (c.Tint, c.Opacity, c.Frost));
     }
 
     [Fact]

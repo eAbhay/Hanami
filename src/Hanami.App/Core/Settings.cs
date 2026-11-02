@@ -402,6 +402,9 @@ public sealed class SettingsStore
         c.X = Finite(c.X, ClockSettings.DefaultX, 0, 1);
         c.Y = Finite(c.Y, ClockSettings.DefaultY, 0, 1);
         c.Size = Finite(c.Size, 1, 0.5, 1.6);
+        c.Opacity = Finite(c.Opacity, ClockSettings.DefaultOpacity, 0.04, 0.8);
+        c.Frost = Finite(c.Frost, ClockSettings.DefaultFrost, 0, 40);
+        if (c.Tint is null || !System.Text.RegularExpressions.Regex.IsMatch(c.Tint, "^#[0-9a-fA-F]{6}$")) c.Tint = ClockSettings.DefaultTint;
         if (c.DateFont is not ("system" or "same")) c.DateFont = "system";
         if (!FontLibrary.IsValidSetting(c.Font)) c.Font = null;
         return c;

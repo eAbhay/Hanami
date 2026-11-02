@@ -922,6 +922,12 @@ code.path {
 .clock-opts { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-weight: 500; }
+.swatch-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); padding: 0; cursor: pointer; }
+.swatch:hover { transform: scale(1.1); }
+.swatch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.swatch.on { box-shadow: 0 0 0 2px var(--surface-1, #fff), 0 0 0 4px var(--accent); }
+.tint-input { width: 32px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer; }
 .font-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .font-select { flex: 1 1 160px; min-width: 0; padding: 0 8px; }
 @media (max-width: 760px) { .clock-layout { grid-template-columns: 1fr; } }

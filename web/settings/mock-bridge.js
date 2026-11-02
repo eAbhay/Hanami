@@ -172,7 +172,7 @@ function initialState() {
 const RANK = { paused: 0, reduced: 1, full: 2 };
 const defaultLook = () => ({
   desktop: { effectPreset: "sakura", tuning: {} },
-  screensaver: { tuning: {}, clock: { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true } },
+  screensaver: { tuning: {}, clock: { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true, tint: "#fff4fc", opacity: 0.16, frost: 18 } },
 });
 
 export function createMockHost(post) {
@@ -291,6 +291,9 @@ export function createMockHost(post) {
           const ck = look.screensaver.clock;
           ck.x = Math.min(1, Math.max(0, ck.x)); ck.y = Math.min(1, Math.max(0, ck.y));
           ck.size = Math.min(1.6, Math.max(0.5, ck.size));
+          ck.opacity = Math.min(0.8, Math.max(0.04, Number(ck.opacity) || 0.16));
+          ck.frost = Math.min(40, Math.max(0, Number.isFinite(Number(ck.frost)) ? Number(ck.frost) : 18));
+          if (!/^#[0-9a-fA-F]{6}$/.test(ck.tint)) ck.tint = "#fff4fc";
         }
       }
       emitState();

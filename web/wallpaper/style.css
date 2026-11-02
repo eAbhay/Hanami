@@ -65,8 +65,8 @@ html, body {
 }
 #clock .frost {
   clip-path: url(#clock-clip);
-  backdrop-filter: blur(18px) saturate(1.5) brightness(1.08);
-  -webkit-backdrop-filter: blur(18px) saturate(1.5) brightness(1.08);
+  backdrop-filter: blur(var(--clock-frost, 18px)) saturate(1.5) brightness(1.08);
+  -webkit-backdrop-filter: blur(var(--clock-frost, 18px)) saturate(1.5) brightness(1.08);
 }
 #clock .glass { overflow: visible; }
 #clock text.glyphs {
@@ -80,8 +80,8 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 #clock text.face {
-  fill: rgba(255, 244, 252, 0.16);   /* the tint in the transparent middle */
-  stroke: rgba(255, 255, 255, 0.28); /* hairline edge so the glass reads on bright scenes */
+  fill: var(--clock-fill, rgba(255, 244, 252, 0.16));   /* the tint in the transparent middle (clock.js sets it) */
+  stroke: var(--clock-edge, rgba(255, 255, 255, 0.28)); /* hairline edge so the glass reads on bright scenes */
   stroke-width: calc(1.2px * var(--cs));
   paint-order: stroke;
 }

@@ -24,6 +24,8 @@ public sealed class ScreensaverSettings
 public sealed class ClockSettings
 {
     public const double DefaultX = 0.5, DefaultY = 0.31;
+    public const string DefaultTint = "#fff4fc";
+    public const double DefaultOpacity = 0.16, DefaultFrost = 18;
 
     /// <summary>The time's centre as a fraction of the monitor.</summary>
     public double X { get; set; } = DefaultX;
@@ -35,6 +37,12 @@ public sealed class ClockSettings
     /// <summary>"system" (Segoe UI) or "same" (the clock's font).</summary>
     public string DateFont { get; set; } = "system";
     public bool ShowDate { get; set; } = true;
+    /// <summary>Glass colour, <c>#rrggbb</c>.</summary>
+    public string Tint { get; set; } = DefaultTint;
+    /// <summary>Fill opacity of the glass, 0.04 – 0.8.</summary>
+    public double Opacity { get; set; } = DefaultOpacity;
+    /// <summary>Blur of the glass in px at 1080p, 0 – 40.</summary>
+    public double Frost { get; set; } = DefaultFrost;
 }
 
 public readonly record struct ScreensaverInputs(

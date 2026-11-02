@@ -7,13 +7,15 @@ import { card, row } from "./layout.js";
 import { DEFAULT_CLOCK } from "../defaults.js";
 
 const BUNDLED_FAMILY = "Hanami Clock Preview";   // Tilt Warp, declared in style.css
-const SNAP = 0.02;                               // drag snaps to the centre lines within 2%
+const TINTS = [["Default", "#fff4fc"], ["White", "#ffffff"], ["Ice", "#cfe8ff"], ["Sakura", "#ffc4dc"], ["Gold", "#ffe2a8"], ["Ink", "#20182e"]];
+const SNAP = 0.02;                              // drag snaps to the centre lines within 2%
 const ANCHORS = [                                // [label, x, y]
   ["Top left", 0.15, 0.13], ["Top", 0.5, 0.13], ["Top right", 0.85, 0.13],
   ["Left", 0.15, 0.5], ["Centre", 0.5, 0.5], ["Right", 0.85, 0.5],
   ["Bottom left", 0.15, 0.87], ["Bottom", 0.5, 0.87], ["Bottom right", 0.85, 0.87],
 ];
 const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+const rgba = (hex, a) => `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")}, ${a})`;
 const q = (s) => `"${String(s).replace(/["\\\x00-\x1f]/g, "")}"`;
 
 export function createClockCard(ctx) {
@@ -132,6 +134,18 @@ export function createClockCard(ctx) {
   const size = slider({ label: "Size", min: 0.5, max: 1.6, step: 0.05, value: 1, format: (v) => `${Math.round(v * 100)}%`,
     onInput: (v) => change({ size: v }) });
 
+  // glass: tint swatches + a free colour, opacity and frost sliders
+  const swatchEls = TINTS.map(([label, hex]) => h("button.swatch", {
+    type: "button", title: label, "aria-label": label, "data-hex": hex, style: { background: hex },
+    onclick: () => change({ tint: hex }, true),
+  }));
+  const tintInput = h("input.tint-input", { type: "color", "aria-label": "Custom glass colour", value: DEFAULT_CLOCK.tint,
+    onchange: () => change({ tint: tintInput.value }, true) });
+  const opacity = slider({ label: "Glass opacity", min: 0.04, max: 0.8, step: 0.01, value: DEFAULT_CLOCK.opacity,
+    format: (v) => `${Math.round(v * 100)}%`, onInput: (v) => change({ opacity: v }) });
+  const frost = slider({ label: "Frost", min: 0, max: 40, step: 1, value: DEFAULT_CLOCK.frost,
+    format: (v) => `${Math.round(v)}`, onInput: (v) => change({ frost: v }) });
+
   const fontSelect = h("select.text-input.font-select", { "aria-label": "Clock font",
     onchange: () => change({ font: fontSelect.value || null }, true) });
   const importBtn = h("button.btn.small", { type: "button", onclick: importFont }, svg("plus"), h("span", "Import font…"));
@@ -224,6 +238,15 @@ export function createClockCard(ctx) {
     showDate.set(clock.showDate);
     dateSame.set(clock.dateFont === "same");
     dateSame.input.disabled = !clock.showDate;
+    opacity.set(clock.opacity);
+    frost.set(clock.frost);
+    tintInput.value = clock.tint;
+    for (const b of swatchEls) {
+      const on = b.dataset.hex === clock.tint.toLowerCase();
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+    timeEl.style.color = rgba(clock.tint, Math.max(0.3, Math.min(1, clock.opacity * 4 + 0.2)));
     timeEl.textContent = timeText();
     dateEl.textContent = dateText();
     paintFont();
@@ -246,6 +269,11 @@ export function createClockCard(ctx) {
           h("label.field-label", "Font"),
           h("div.font-row", fontSelect, importBtn, removeBtn),
           fontNote),
+        h("div.field",
+          h("label.field-label", "Glass"),
+          h("div.swatch-row", swatchEls, tintInput)),
+        opacity,
+        frost,
         h("div.divider"),
         row(null, "Use the clock font for the date", null, dateSame),
         row(null, "Show date", null, showDate))));
