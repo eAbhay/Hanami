@@ -122,6 +122,8 @@ Messages arrive via `window.chrome.webview.addEventListener("message", e => e.da
 | `{type:"config", wallpaper: WallpaperRef \| null, effect: {preset} & Partial<EffectTuning>, fpsCap: number, mode: Mode}` | Full (re)configuration. Sent after `ready` and whenever anything changes. `wallpaper: null` → plain dark background. `effect` is the preset plus only the user's overrides for it; the page fills every missing key from `PRESET_DEFAULTS[preset]`. |
 | `{type:"mode", mode: Mode}` | Mode change only. |
 | `config.clock` | Screensaver pages only (`&screensaver=1`): `{x, y, size, showDate, dateFont, tint, opacity, frost, font: {id, family, src?} \| null}` — the `Settings.screensaver.clock` values with `font` resolved (`src` = `https://library.hanami/fonts/<file>` for imported fonts; null = Tilt Warp). The page centres the time on `(x·width, y·height)`, clamped so everything stays on screen, and scales the glass filter with `size`. |
+| `config.holdForCapture` | Optional `true`, on the primary monitor's screensaver page only (and only when the lock screen picture needs a new photo, see "Lock screen"). The page keeps the clock and `#fx` hidden until its background is fully shown (video `playing`, image loaded, scene drawn, plus the 600 ms crossfade), then posts `{type:"readyForCapture"}`; the host replies `{type:"captureDone"}` and the page reveals the clock and starts `#fx`. The page also releases the hold by itself after 3 s. |
+| `{type:"captureDone"}` | Screensaver page: the host has photographed the background; reveal the clock and particles. |
 | `{type:"pointer", x, y, inside}` | Cursor in CSS px relative to this monitor's top-left. `inside:false` when the cursor is on another monitor (effects should relax back). Sent at up to 60 Hz, only on change. |
 | `{type:"click", x, y, button}` | A click that landed on the desktop surface of this monitor. `button`: `"left"` \| `"right"`. The page only bursts on left clicks (right opens the desktop menu). |
 
@@ -131,6 +133,7 @@ Page → host: `window.chrome.webview.postMessage(obj)`
 |---|---|
 | `{type:"ready"}` | Page loaded; host replies with `config`. |
 | `{type:"mediaError", wallpaperId, message}` | Video/image failed to load or decode. |
+| `{type:"readyForCapture"}` | Screensaver pages (with `&capture=1` always; otherwise only after `config.holdForCapture`): the plain background is fully visible, so the host may capture it. A `&capture=1` page (a hidden copy with no clock, no `#fx`, no input handling) is created by the host to refresh the lock screen picture without a screensaver. |
 | `{type:"fontError", font, message}` | Screensaver pages only: the clock font (`font` = the setting string) failed to load; the page shows Tilt Warp. The host logs it. |
 | `{type:"dismiss", input}` | Screensaver pages only (`&screensaver=1`): a key press or mouse click asked to end it. |
 
@@ -166,6 +169,8 @@ Events: host posts `{event: "<name>", data}`.
 | `getExportItems` | – | `ExportItem[]` |
 | `exportPack` | `{ids: string[], includeSettings: boolean}` (host opens save dialog) | `{path}` or `{cancelled: true}` |
 | `importPack` | – (host opens open dialog) | `{imported: number}` or `{cancelled: true}` |
+| `restoreLockScreen` | – (puts the lock screen picture Hanami kept before its first write back; Hanami never does this by itself) | `State`, or an error when there is no copy |
+| `openLockScreenSettings` | – (opens Windows' `ms-settings:lockscreen`) | `{ok: true}` |
 | `previewScreensaver` | – (shows the screensaver now, ignoring idle time and power source; ends on input as usual) | `{ok: true}` |
 | `getFonts` | – | `{bundled: FontInfo[], system: string[], imported: FontInfo[]}` (`system` = installed family names, sorted; the bundled entry has `id: ""`) |
 | `importFont` | – (file dialog: .ttf .otf .woff .woff2; copied to `Library/fonts/<id>`) | `{imported: FontInfo}` or `{cancelled: true}` |
@@ -282,6 +287,7 @@ type Settings = {
     wallpaperId: string | null; // null = same wallpaper as each monitor's desktop (and its look)
     darkWallpaperId: string | null; // dark-mode background; null = use wallpaperId. Only with an own wallpaperId
     requireSignIn: boolean;     // default false — lock Windows when the screensaver ends
+    syncLockScreen: boolean;    // default false — make the Windows lock screen picture a still of the main monitor's screensaver wallpaper
     stopAfterHours: number;     // 0 = never (default); after this, hide it and let Windows' timers take over
   };
   pets: {
@@ -329,6 +335,9 @@ type State = {
                                 // "Another app is keeping the screen on", "Showing"
     windowsDisplayOffMinutes: number | null;  // Windows' plugged-in "turn off screen after" (null = never)
     windowsSleepMinutes: number | null;       // Windows' plugged-in "sleep after" (null = never)
+    lockScreen: { status: "off" | "idle" | "ok" | "failed";   // idle = on, nothing written yet
+                  error?: string; updatedAt?: string;          // ISO time of the last successful update
+                  hasBackup: boolean };                        // a copy of the previous lock picture exists
   };
 };
 ```
@@ -370,6 +379,23 @@ It ends on unplug, lock, sleep, or after `stopAfterHours`. The idle count restar
 The power request belongs to the Hanami process, so quitting Hanami restores Windows' own
 screen-off and sleep timers; Hanami never changes Windows power settings. Lid close always
 follows Windows (apps cannot block it).
+
+### Lock screen
+
+`screensaver.syncLockScreen` (off by default, Screensaver tab → Lock screen): the Windows lock screen picture becomes a **still** of the
+primary monitor's screensaver wallpaper without the clock or particles (Windows draws its own clock, and a live wallpaper can't appear on
+its secure desktop). One picture for all monitors, set through `Windows.System.UserProfile.LockScreen` (`Platform/LockScreenImage`, behind
+`ILockScreenImage`); no registry or policy routes. Rules in `Core/LockImagePolicy`: on a screensaver start (not Preview) it re-photographs a
+video or built-in scene every time and an image only when `Signature(wallpaperId, dark)` changed; on turning the option on, a screensaver
+wallpaper change or a theme change it refreshes when the signature changed (debounced 1.5 s, skipped while the screensaver shows or Windows is locked).
+A screensaver start uses the `holdForCapture` handshake; otherwise a hidden copy of the page (`&screensaver=1&capture=1`, a 1/255-opaque click-through
+window on the monitor) is photographed with `CapturePreviewAsync` and disposed.
+Files, in `<install>/config/lockscreen/`: `current.jpg` (what Hanami last set) and `previous.jpg` (a copy of the lock picture before Hanami's
+first write, kept once). **Never restored automatically**; with the option off the Screensaver tab offers *Restore my previous picture*
+(`restoreLockScreen`) and a link to Windows' lock screen settings. **Windows Spotlight overrides the API** (verified on build 26300: the call
+succeeds, Spotlight still shows), and an app can't switch Spotlight off or on, so the user must set the lock screen to *Picture* in Windows; the
+confirm dialog says so. Windows keeps its own copy of the picture after Hanami is uninstalled. With `requireSignIn`, the sign-in curtain under the sliding
+screensaver shows `current.jpg` (sync on) or the picture the lock screen had at start (sync off), else black.
 
 ### Desktop pets
 

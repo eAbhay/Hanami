@@ -138,7 +138,7 @@ Done except 2.6 (the user's own sign-in dismiss test). Slide ran on the real scr
 Contract sections: "Screensaver behaviour", the `config` and page-message tables, the `screensaver` part of settings and `State`, the bridge methods table.
 
 **First step, stop if it fails:**
-- [ ] 3.1 Change `TargetFramework` to `net10.0-windows10.0.19041.0` in **both** `Hanami.App.csproj` and `Hanami.Tests.csproj`. Build, run tests, check the
+- [x] 3.1 Change `TargetFramework` to `net10.0-windows10.0.19041.0` in **both** `Hanami.App.csproj` and `Hanami.Tests.csproj`. Build, run tests, check the
       published exe's size change. New `Platform/LockScreenImage.cs` wrapping `Windows.System.UserProfile.LockScreen`:
       `SetAsync(path)` (`StorageFile.GetFileFromPathAsync` + `SetImageFileAsync`, called on the UI thread) and `BackupAsync(path)`
       (`GetImageStream` to a file). Catch and report failures, never throw into the host.
@@ -146,32 +146,32 @@ Contract sections: "Screensaver behaviour", the `config` and page-message tables
       switches off and how long the image takes to appear. If the API fails on an unpackaged app, stop and report; don't reach for registry or policy routes.
 
 **Getting the frame.** It must be the wallpaper alone, without the clock or particles, since Windows draws its own clock.
-- [ ] 3.2 **Pure rules, `Core/LockImagePolicy.cs`** (tested): `Signature(wallpaperId, dark)`; `ShouldCapture(enabled, trigger, lastSignature, signature, type)`: on a screensaver start
+- [x] 3.2 **Pure rules, `Core/LockImagePolicy.cs`** (tested): `Signature(wallpaperId, dark)`; `ShouldCapture(enabled, trigger, lastSignature, signature, type)`: on a screensaver start
       always for video and builtin, for an image only when the signature changed; on a settings or theme change only when it changed.
       Add `screensaver.syncLockScreen: boolean` (default false) to contract and `ScreensaverSettings`.
-- [ ] 3.3 **Page handshake**, added to the contract: `config.holdForCapture: true` on the primary monitor's screensaver page only. The page keeps the clock unrevealed and
+- [x] 3.3 **Page handshake**, added to the contract: `config.holdForCapture: true` on the primary monitor's screensaver page only. The page keeps the clock unrevealed and
       `#fx` hidden until the first background frame is fully visible (video `playing`/image loaded/scene drawn, plus the 600 ms `FADE_MS` crossfade), then posts `{type:"readyForCapture"}`.
       The host replies `{type:"captureDone"}`, and the page reveals the clock and starts `#fx`. The page also reveals after 3 s by itself, so a host failure can't leave it without a clock.
       `clock.js` needs a way to hold its `reveal` for this.
-- [ ] 3.4 `WallpaperView.CaptureAsync(path)`: `CoreWebView2.CapturePreviewAsync(Jpeg, stream)`, writing to a temp file then moving it over the target.
-- [ ] 3.5 **New `App/LockScreenSync.cs`** owns: `<config>/lockscreen/current.jpg` and `previous.jpg` (add to `AppPaths`), the last signature, the first-write backup (only if `previous.jpg` doesn't exist) and status.
+- [x] 3.4 `WallpaperView.CaptureAsync(path)`: `CoreWebView2.CapturePreviewAsync(Jpeg, stream)`, writing to a temp file then moving it over the target.
+- [x] 3.5 **New `App/LockScreenSync.cs`** owns: `<config>/lockscreen/current.jpg` and `previous.jpg` (add to `AppPaths`), the last signature, the first-write backup (only if `previous.jpg` doesn't exist) and status.
       Screensaver start (not preview): capture from the primary view, then set. Must not delay the screensaver.
-- [ ] 3.6 **Refresh without a screensaver** (setting turned on, wallpaper or theme changed), debounced 1.5 s, skipped while showing or locked: a temporary hidden capture view from a new
+- [x] 3.6 **Refresh without a screensaver** (setting turned on, wallpaper or theme changed), debounced 1.5 s, skipped while showing or locked: a temporary hidden capture view from a new
       `WallpaperView.CreateCaptureAsync` at the primary monitor's size with `&screensaver=1&capture=1` (no clock mounted, no input handling).
       Chromium may not paint an off-screen window. Try off-screen first; if frames don't come, use a click-through, no-activate layered window with alpha 1 on the monitor; if that fails too, for a video
       use `thumb.jpg` and tell the user the first image is low-res until the next screensaver. Dispose it right after.
       Trigger from `HanamiHost` next to `_screensaver.PushConfigAll()` and in `OnThemeChanged`.
-- [ ] 3.7 **Curtain image:** sync on: `current.jpg`, swapped in when a capture finishes. Sync off: the image from `GetImageStream`, decoded once, else black.
-- [ ] 3.8 **Bridge and state** (contract first): `state.screensaver.lockScreen: {status: "off"|"ok"|"failed", error?, updatedAt?, hasBackup}`; methods `restoreLockScreen` and `openLockScreenSettings` (`ms-settings:lockscreen`, shell execute).
-- [ ] 3.9 **Settings, `tabs/screensaver.js`:** a "Lock screen" card with the toggle "Match the lock screen to the screensaver", default off. Copy says it's a still image from the screensaver, updated each time
+- [x] 3.7 **Curtain image:** sync on: `current.jpg`, swapped in when a capture finishes. Sync off: the image from `GetImageStream`, decoded once, else black.
+- [x] 3.8 **Bridge and state** (contract first): `state.screensaver.lockScreen: {status: "off"|"ok"|"failed", error?, updatedAt?, hasBackup}`; methods `restoreLockScreen` and `openLockScreenSettings` (`ms-settings:lockscreen`, shell execute).
+- [x] 3.9 **Settings, `tabs/screensaver.js`:** a "Lock screen" card with the toggle "Match the lock screen to the screensaver", default off. Copy says it's a still image from the screensaver, updated each time
       it starts, and shared by all monitors (primary's wallpaper). Turning it on opens a confirm `dialog`: "This replaces your Windows lock screen picture, and turns off Windows Spotlight if it's on. Hanami keeps a copy of your current picture."
       Status line shows last update or error. When off with a backup: "Restore my previous picture" and "Lock screen settings…". Mock-bridge support for all of it.
       On the Power tab, mention the option in the `requireSignIn` row's hint.
 - [ ] 3.10 **Check with the user present:** turn on, Win+L, compare; change wallpaper, Win+L; flip theme; real screensaver with sign-in end to end; restore. Clock absent from the image; video, image and builtin all work.
-- [ ] 3.11 README section; note in `Uninstaller`/data docs that Windows keeps its own copy of the picture after uninstall. Commit.
+- [x] 3.11 README section; note in `Uninstaller`/data docs that Windows keeps its own copy of the picture after uninstall. Commit.
 
 Notes:
-3.1 half done: both csproj files now target `net10.0-windows10.0.19041.0` (build OK, 221 tests pass); the published exe grew from 72.7 to 78.8 MB. `Platform/LockScreenImage.cs` has `ILockScreenImage` + the real wrapper (`SetAsync`, `BackupAsync`), unused so far. NOT done: the real `SetImageFileAsync` test on this Insider build (waiting for the user), and everything from 3.2 on.
+Done except 3.10 (the user's own checks: Win+L per wallpaper type, theme flip, real sign-in end to end, restore). 3.1: the API works only with the lock screen set to **Picture**; with Windows Spotlight it succeeds but Spotlight still shows, and Hanami can't switch Spotlight (the registry value `RotatingLockScreenEnabled` already read 0 while Spotlight was active), so the card and confirm dialog tell the user to pick Picture and link to Windows' settings (the plan's wording that Hanami turns Spotlight off was dropped). The exe grew 72.7 -> 78.8 MB. `GetImageStream` returned the same original picture even after our set, so `previous.jpg` is Windows' view of the pre-Hanami picture, not necessarily what the user last saw. Verified on this laptop: clean capture of a video/image wallpaper (no clock, no particles) both from the hidden 1/255-alpha capture view and via `holdForCapture` at a real screensaver start (about 1.2 s, clock appears afterwards). Not checked: video wallpapers specifically, builtin scenes, the curtain image, a theme flip. Code: `App/LockScreenSync.cs`, `Core/LockImagePolicy.cs`, `Platform/LockScreenImage.cs`, `WallpaperView.CreateCaptureAsync`/`CaptureAsync`.
 
 ## Phase 4 — Pets: drop on windows, latch on walls
 

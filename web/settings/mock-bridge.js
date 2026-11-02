@@ -151,7 +151,7 @@ function initialState() {
         energySaver: "reduced", whenMaximized: "paused", whenFullscreen: "paused",
       },
       performance: { fpsCap: 60, batteryFpsCap: 30 },
-      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, stopAfterHours: 0 },
+      screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, syncLockScreen: false, stopAfterHours: 0 },
       startWithWindows: true,
       paused: false,
     },
@@ -163,7 +163,7 @@ function initialState() {
     power: { onBattery: false, batteryPercent: 82, energySaver: false },
     wallpapers: [...builtins, ...lib],
     // Windows' plugged-in timers (the real host reads them from the active power plan).
-    screensaver: { active: false, status: "", windowsDisplayOffMinutes: 10, windowsSleepMinutes: 30 },
+    screensaver: { active: false, status: "", windowsDisplayOffMinutes: 10, windowsSleepMinutes: 30, lockScreen: { status: "off", hasBackup: false } },
     theme: { active: "light", windows: "light" },
     petPacks: [],
   };
@@ -208,6 +208,9 @@ export function createMockHost(post) {
   let previewTimer = 0;
   function computeScreensaver() {
     const cfg = state.settings.screensaver, ss = state.screensaver;
+    const ls = ss.lockScreen;
+    if (!cfg.syncLockScreen) ls.status = ls.status === "ok" ? "off" : ls.status;
+    else if (ls.status !== "ok") { ls.status = "ok"; ls.updatedAt = new Date().toISOString(); ls.hasBackup = true; }
     if (ss.active) ss.status = "Showing";
     else if (!cfg.enabled) ss.status = "Off";
     else if (state.power.onBattery) ss.status = "Off on battery";
@@ -469,6 +472,16 @@ export function createMockHost(post) {
       emitState();
       return snapshot();
     },
+
+    restoreLockScreen: () => {
+      const ls = state.screensaver.lockScreen;
+      if (!ls.hasBackup) throw new Error("There is no earlier picture to restore.");
+      ls.status = "off"; ls.hasBackup = true;
+      emitState();
+      return snapshot();
+    },
+
+    openLockScreenSettings: () => ({ ok: true }),
 
     previewScreensaver: () => {
       // Real host: shows it now, ending on input. Mock: "show" it for a few seconds.

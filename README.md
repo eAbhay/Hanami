@@ -47,6 +47,11 @@ system tray as a single self-contained `.exe`.
   key press or mouse click slides it up off the screen; moving the mouse doesn't end it. On battery,
   or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
   changes Windows power settings, and closing the lid always follows your Windows lid setting.
+- **Matching lock screen (optional).** Screensaver → *Lock screen*: sets your Windows lock screen to a still picture of the
+  screensaver's wallpaper (no clock; Windows can't show a live wallpaper there), refreshed each time the screensaver starts and
+  when its wallpaper or the theme changes. Off by default. It needs the lock screen set to *Picture* in Windows (Windows Spotlight
+  overrides it, and apps can't switch Spotlight). Hanami keeps a copy of your previous picture and never puts it back by itself:
+  turn the option off and use *Restore my previous picture*. Windows keeps its copy of the picture after you uninstall Hanami.
 - **Uninstall.** General → *Uninstall Hanami…*, or Windows' own Settings → Apps (and the Start menu's right-click
   Uninstall). It asks whether to **keep** or **delete** your wallpapers, pet packs and settings; keeping them lets a
   later install into the same folder pick up where you left off.

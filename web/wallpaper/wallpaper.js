@@ -18,7 +18,13 @@ let clock = null;   // screensaver pages only
 // a glass clock, and it asks the host to end only on a key press or mouse click — moving the
 // mouse is ignored.
 const isScreensaver = new URLSearchParams(location.search).has("screensaver");
-if (isScreensaver) {
+// &capture=1 (with &screensaver=1): a hidden copy the host photographs for the lock screen picture: just the background,
+// no clock, no particles, no input handling. It tells the host when the background is fully shown.
+const isCapture = isScreensaver && new URLSearchParams(location.search).has("capture");
+if (isCapture) {
+  document.documentElement.classList.add("screensaver");
+  document.getElementById("fx").style.visibility = "hidden";
+} else if (isScreensaver) {
   document.documentElement.classList.add("screensaver");
   clock = mountClock(document.body, { onFontError: (e) => post({ type: "fontError", ...e }) });
   const dismiss = (e, input) => {
@@ -34,6 +40,37 @@ const bgRoot = document.getElementById("bg");
 const fxCanvas = document.getElementById("fx");
 
 const FADE_MS = 600;
+// Capture handshake (docs/CONTRACTS.md): with config.holdForCapture the clock and #fx stay hidden until the host has photographed
+// the plain background; it replies {type:"captureDone"}. A timer releases the hold anyway so a host failure can't leave no clock.
+const HOLD_MAX_MS = 3000;
+let holding = false, captureAnnounced = false, holdTimer = 0;
+function releaseHold() {
+  if (!holding) return;
+  holding = false;
+  clearTimeout(holdTimer);
+  fxCanvas.style.visibility = "";
+  clock?.release();
+}
+function beginHold() {
+  if (holding || captureAnnounced) return;
+  holding = true;
+  fxCanvas.style.visibility = "hidden";
+  clock?.hold();
+  holdTimer = setTimeout(releaseHold, HOLD_MAX_MS);
+}
+/** The first background is up: once its crossfade (and a video's first frames) are done, tell the host it can photograph it. */
+function announceCapture(L) {
+  if (captureAnnounced || !(holding || isCapture)) return;
+  captureAnnounced = true;
+  const send = () => post({ type: "readyForCapture" });
+  const settle = () => setTimeout(send, FADE_MS + 80);
+  if (L.video && L.video.paused) {
+    let done = false;
+    const go = () => { if (!done) { done = true; settle(); } };
+    L.video.addEventListener("playing", go, { once: true });
+    setTimeout(go, 1500);
+  } else settle();
+}
 const MODES = ["full", "reduced", "paused"];
 const FITS = ["cover", "contain", "fill"];
 
@@ -188,6 +225,7 @@ function show(L) {
   const old = current;
   current = L;
   applyModeToLayer(L);
+  announceCapture(L);
   void L.el.offsetWidth; // commit opacity:0 so the transition runs
   L.el.classList.add("visible");
   if (old) {
@@ -257,12 +295,16 @@ function handle(msg) {
       // makes a reset take effect).
       if (msg.effect && typeof msg.effect === "object") engine.setConfig({ ...(PRESET_DEFAULTS[msg.effect.preset] ?? {}), ...msg.effect });
       if ("wallpaper" in msg) setWallpaper(msg.wallpaper);
+      if (msg.holdForCapture === true && !captureAnnounced) beginHold();
       if (msg.clock && typeof msg.clock === "object") clock?.set(msg.clock);
       applyMode(MODES.includes(msg.mode) ? msg.mode : mode);
       break;
     }
     case "mode":
       applyMode(msg.mode);
+      break;
+    case "captureDone":
+      releaseHold();
       break;
     case "pointer":
       engine.setPointer(msg.x, msg.y, msg.inside !== false);

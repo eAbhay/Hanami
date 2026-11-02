@@ -23,6 +23,7 @@ public sealed class HanamiHost
     private WallpaperManager _wallpapers = null!;
     private ScreensaverManager _screensaver = null!;
     private bool _petsSawScreensaver;
+    private LockScreenSync _lockSync = null!;
     private TrayIcon _tray = null!;
     private ThemeWatch _theme = null!;
     private PetManager _pets = null!;
@@ -70,6 +71,12 @@ public sealed class HanamiHost
         _screensaver = new ScreensaverManager(_env, _paths, () => _store.Current, IsDark, _library,
             () => _wallpapers.Power, () => _wallpapers.SessionLocked);
         _screensaver.Changed += OnScreensaverChanged;
+        _lockSync = new LockScreenSync(_env, _paths, () => _store.Current, IsDark, _library, new Platform.LockScreenImage(),
+            () => _screensaver.Showing || _wallpapers.SessionLocked);
+        _lockSync.Changed += BroadcastState;
+        _screensaver.Lock = _lockSync;
+        _ = _lockSync.WarmCurtainAsync();
+        _lockSync.RequestRefresh();
         _screensaver.Start();
         _pets = new PetManager(_petLibrary, () => _store.Current, () => ModeResolver.Resolve(_store.Current, _wallpapers.Power, default, _wallpapers.SessionLocked).Mode, () => OpenSettingsTab("pets"));
         _pets.Changed += OnStatusChanged;
@@ -90,6 +97,7 @@ public sealed class HanamiHost
     {
         _wallpapers.PushConfigAll();
         _screensaver.PushConfigAll();
+        _lockSync.RequestRefresh();
         OnStatusChanged();
     }
 
@@ -132,6 +140,7 @@ public sealed class HanamiHost
         _settingsWindow?.Close();
         _pets?.Dispose();
         _theme?.Dispose();
+        _lockSync?.Dispose();
         _screensaver?.Dispose();
         _wallpapers?.Dispose();
         _tray?.Dispose();
@@ -268,6 +277,13 @@ public sealed class HanamiHost
             ["status"] = _screensaver.Showing ? "Showing" : _screensaver.Status,
             ["windowsDisplayOffMinutes"] = displayOff,
             ["windowsSleepMinutes"] = sleep,
+            ["lockScreen"] = new JsonObject
+            {
+                ["status"] = _lockSync.Status,
+                ["error"] = _lockSync.Error,
+                ["updatedAt"] = _lockSync.UpdatedAt?.ToString("o"),
+                ["hasBackup"] = _lockSync.HasBackup,
+            },
         };
     }
 
@@ -376,6 +392,14 @@ public sealed class HanamiHost
                 DeleteFont(Required(p, "id"));
                 return BuildState();
 
+            case "restoreLockScreen":
+                if (!await _lockSync.RestoreAsync()) throw new InvalidOperationException(_lockSync.Error ?? "There is no earlier picture to restore.");
+                return BuildState();
+
+            case "openLockScreenSettings":
+                LockScreenSync.OpenWindowsSettings();
+                return new JsonObject { ["ok"] = true };
+
             case "previewScreensaver":
                 await _screensaver.PreviewAsync();
                 return new JsonObject { ["ok"] = true };
@@ -409,6 +433,7 @@ public sealed class HanamiHost
         _pets.Sync();
         _wallpapers.PushConfigAll();
         _screensaver.PushConfigAll();
+        _lockSync.RequestRefresh();
         await _wallpapers.ApplyModesAsync();
         OnStatusChanged();
     }

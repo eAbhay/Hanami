@@ -1,7 +1,7 @@
 // Screensaver tab — what the screensaver shows. When it runs lives on the Power tab.
-import { h, svg } from "../util.js";
+import { h, svg, toggle, dialog } from "../util.js";
 import { scopeSelector } from "../scope.js";
-import { pageHeader, card, wallpaperPicker, effectPicker, createClockCard, slotSwitch } from "../components/index.js";
+import { pageHeader, card, row, wallpaperPicker, effectPicker, createClockCard, slotSwitch } from "../components/index.js";
 
 export function createScreensaverTab(ctx) {
   const save = (patch) => ctx.mutate("updateSettings", { screensaver: patch }).catch(() => {});
@@ -66,6 +66,36 @@ export function createScreensaverTab(ctx) {
 
   const clockCard = createClockCard(ctx);
 
+  // ---------------------------------------------------------------- lock screen
+  // A still of the primary monitor's screensaver wallpaper as the Windows lock screen picture. Off by default.
+  const syncToggle = toggle(false, onSyncToggle, "Match the lock screen to the screensaver");
+  const lockStatus = h("p.field-hint.lock-status");
+  const restoreBtn = h("button.btn.small", { type: "button", hidden: true, onclick: restoreLock }, svg("reset"), h("span", "Restore my previous picture"));
+  const settingsBtn = h("button.btn.subtle.small", { type: "button", onclick: () => ctx.call("openLockScreenSettings").catch((e) => ctx.toastError(e)) },
+    h("span", "Lock screen settings…"));
+  const lockCard = card("Lock screen", null,
+    row("lock", "Match the lock screen to the screensaver",
+      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock), updated each time the screensaver starts and when its wallpaper or the theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Your lock screen must be set to Picture, not Windows Spotlight.",
+      syncToggle),
+    lockStatus,
+    h("div.slot-switch", restoreBtn, settingsBtn));
+
+  async function onSyncToggle(on) {
+    if (on) {
+      const ok = await dialog({
+        title: "Replace your lock screen picture?",
+        body: "Hanami will set your Windows lock screen picture to the screensaver's wallpaper and keep a copy of your current one. It never changes it back by itself; you can restore it here. Windows Spotlight overrides this, so set your lock screen to Picture in Windows first.",
+        confirmLabel: "Turn on",
+      });
+      if (!ok) { syncToggle.set(false); return; }
+    }
+    save({ syncLockScreen: on });
+  }
+  async function restoreLock() {
+    try { await ctx.mutate("restoreLockScreen"); ctx.toast("Your previous lock screen picture is back", "success"); }
+    catch (err) { ctx.toastError(err); }
+  }
+
   const toPower = h("button.link-row", { type: "button", onclick: () => ctx.showTab("power") },
     svg("clock"), h("span", "Timing and power settings"), h("span.link-row-go", "Power →"));
 
@@ -76,6 +106,7 @@ export function createScreensaverTab(ctx) {
     card("Background", slots, emptyDark, backgrounds.el),
     card("Effect", effectNote, effects),
     clockCard.el,
+    lockCard,
     toPower);
 
   function update(s) {
@@ -104,6 +135,14 @@ export function createScreensaverTab(ctx) {
     effects.setSameDetail(look.desktop.effectPreset);
     effectNote.textContent = ctx.wallpaper(id) ? `Saved with ${ctx.wallpaper(id).name}` : "Same as desktop follows the wallpaper's effect";
     clockCard.update(s);
+
+    const lock = st.lockScreen ?? { status: "off", hasBackup: false };
+    syncToggle.set(!!cfg.syncLockScreen);
+    lockStatus.hidden = !cfg.syncLockScreen && !lock.error;
+    lockStatus.textContent = lock.status === "failed" ? `Couldn't update it: ${lock.error ?? "unknown error"}`
+      : lock.status === "ok" ? `Updated ${new Date(lock.updatedAt).toLocaleString()}`
+      : cfg.syncLockScreen ? "Waiting to update" : "";
+    restoreBtn.hidden = !lock.hasBackup || !!cfg.syncLockScreen;
   }
 
   return { el, update, hide: backgrounds.hide };

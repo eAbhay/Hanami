@@ -52,6 +52,32 @@ public sealed class WallpaperView : IDisposable
         return InitAsync(env, source, monitor, paths, "&screensaver=1");
     }
 
+    /// <summary>
+    /// A copy of the screensaver page without clock, particles or input, only to be photographed for the lock screen picture
+    /// (<c>&amp;capture=1</c>). Never visible: a layered window at 1/255 opacity on the monitor, click-through, not activating,
+    /// which Chromium still paints (an off-screen window may not be).
+    /// </summary>
+    public static Task<WallpaperView> CreateCaptureAsync(CoreWebView2Environment env, MonitorInfo monitor, AppPaths paths)
+    {
+        var source = NewWindow($"Hanami capture {monitor.Key}", monitor,
+            Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE | Win32.WS_EX_LAYERED | Win32.WS_EX_TRANSPARENT, visible: true);
+        Win32.SetLayeredWindowAttributes(source.Handle, 0, 1, Win32.LWA_ALPHA);
+        var b = monitor.Bounds;
+        Win32.SetWindowPos(source.Handle, IntPtr.Zero, b.Left, b.Top, b.Width, b.Height, Win32.SWP_NOACTIVATE | Win32.SWP_NOZORDER | Win32.SWP_SHOWWINDOW);
+        return InitAsync(env, source, monitor, paths, "&screensaver=1&capture=1");
+    }
+
+    /// <summary>Saves what the page shows now as a JPEG (written to a temp file, then moved over <paramref name="path"/>).</summary>
+    public async Task CaptureAsync(string path)
+    {
+        if (_controller is null || _disposed) throw new InvalidOperationException("The view is closed.");
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        var temp = path + ".tmp";
+        await using (var fs = File.Create(temp))
+            await _controller.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Jpeg, fs);
+        File.Move(temp, path, overwrite: true);
+    }
+
     private static HwndSource NewWindow(string name, MonitorInfo monitor, uint exStyle, bool visible) =>
         new(new HwndSourceParameters(name)
         {
@@ -107,7 +133,7 @@ public sealed class WallpaperView : IDisposable
         _controller.Bounds = new System.Drawing.Rectangle(0, 0, monitor.Bounds.Width, monitor.Bounds.Height);
     }
 
-    public void SendConfig(WallpaperRef? wallpaper, JsonObject effect, int fpsCap, JsonObject? clock = null)
+    public void SendConfig(WallpaperRef? wallpaper, JsonObject effect, int fpsCap, JsonObject? clock = null, bool holdForCapture = false)
     {
         var msg = new JsonObject
         {
@@ -118,6 +144,7 @@ public sealed class WallpaperView : IDisposable
             ["mode"] = ModeName(_mode),
         };
         if (clock is not null) msg["clock"] = clock.DeepClone();   // screensaver pages only
+        if (holdForCapture) msg["holdForCapture"] = true;          // the page holds its clock and particles until captureDone
         if (_ready) Post(msg); else _pendingConfig = msg;
     }
 

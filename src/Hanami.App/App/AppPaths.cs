@@ -13,6 +13,8 @@ public sealed class AppPaths
 
     public string LibraryDir => Path.Combine(InstallDir, "Library");
     public string ConfigPath => Path.Combine(InstallDir, "config", "settings.json");
+    /// <summary><c>current.jpg</c> (the picture Hanami last set) and <c>previous.jpg</c> (a copy of what the lock screen showed before the first time).</summary>
+    public string LockScreenDir => Path.Combine(InstallDir, "config", "lockscreen");
     public string ExePath => Path.Combine(InstallDir, "Hanami.exe");
 
     /// <summary>Browser profile/cache. Kept out of the install folder so it is never exported.</summary>

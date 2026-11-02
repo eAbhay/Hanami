@@ -12,6 +12,8 @@ public sealed class ScreensaverSettings
     [System.Text.Json.Serialization.JsonPropertyName("effectPreset")]
     public string? LegacyEffectPreset { get; set; }
     public bool RequireSignIn { get; set; }
+    /// <summary>Make the Windows lock screen picture a still of the primary monitor's screensaver wallpaper (off by default; see docs/CONTRACTS.md).</summary>
+    public bool SyncLockScreen { get; set; }
     /// <summary>0 = never stop on its own.</summary>
     public double StopAfterHours { get; set; }
 

@@ -11,7 +11,7 @@
 // Time and date follow the Windows locale (12/24 h); the AM/PM marker is dropped, like the
 // Windows lock screen.
 //
-// mountClock(parent, {onFontError}) → {set(clockConfig), destroy()}. The filter's pixel offsets and
+// mountClock(parent, {onFontError}) → {set(clockConfig), hold(), release(), destroy()}. The filter's pixel offsets and
 // blurs are tuned for size 1, so layout() scales them with `size`.
 
 const DEFAULTS = { x: 0.5, y: 0.31, size: 1, font: null, dateFont: "system", showDate: true, tint: "#fff4fc", opacity: 0.16, frost: 18 };
@@ -207,10 +207,11 @@ export function mountClock(parent, { onFontError } = {}) {
 
   // Fade in only once the first config's font is ready, so the glass clip never shows the wrong
   // face; without a config (dev page) the defaults show after a moment.
-  let revealed = false;
+  let revealed = false, held = false, revealWhenReleased = false;
   async function reveal(promise) {
     await promise;
     if (revealed) return;
+    if (held) { revealWhenReleased = true; return; }
     revealed = true;
     requestAnimationFrame(() => root.classList.add("shown"));
   }
@@ -237,6 +238,14 @@ export function mountClock(parent, { onFontError } = {}) {
   const fallbackTimer = setTimeout(() => { if (!configured) set(DEFAULTS); }, 1200);
   return {
     set,
+    /** Keep the clock hidden (even once its font is ready) until <see>release</see>: the lock-screen capture needs the plain background. */
+    hold() { held = true; },
+    release() {
+      held = false;
+      if (!revealWhenReleased) return;
+      revealWhenReleased = false;
+      reveal(Promise.resolve());
+    },
     destroy() {
       clearTimeout(timer);
       clearTimeout(fallbackTimer);
