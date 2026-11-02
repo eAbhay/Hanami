@@ -11,6 +11,8 @@ How to use this file (for a fresh chat, e.g. Sonnet):
 5. A change includes its tests, comments, `docs/CONTRACTS.md`, `README.md` and settings-UI copy.
    Change the contract first, then both sides. `web/settings/mock-bridge.js` must keep working.
 
+**Status (2 Nov 2026): round 6 is built and committed.** Open for the user on the real desktop: the sign-in lock end to end, video and built-in wallpapers on the lock screen, a theme flip, second monitor and DPI, pet drag/throw/shake with a real pack. Decided during the round: Hanami does not touch the registry or Windows policies (so no Spotlight switch, no PersonalizationCSP); with require sign-in a key or click locks at once, without the slide.
+
 Earlier rounds are in git history (`git log -- docs/PLAN.md`). Still open from round 5, for the user on
 the real desktop: real pack drag/throw, riding a dragged window, flipping the Windows theme, a
 second-monitor DPI check on the other laptop. The in-wallpaper Live2D character is not part of this round.

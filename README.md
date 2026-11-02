@@ -51,7 +51,7 @@ system tray as a single self-contained `.exe`.
   screensaver's wallpaper (no clock; Windows can't show a live wallpaper there), refreshed each time the screensaver starts and
   when its wallpaper or the theme changes. Off by default. It needs the lock screen set to *Picture* in Windows (Windows Spotlight
   overrides it, and apps can't switch Spotlight). Hanami keeps a copy of your previous picture and never puts it back by itself:
-  turn the option off and use *Restore my previous picture*. Windows keeps its copy of the picture after you uninstall Hanami.
+  turn the option off and use *Restore my previous picture*. Hanami deliberately doesn't touch the registry or Windows policies for this, so with "require sign-in" you still press once to leave Windows' lock screen and again to reach the PIN box. Windows keeps its copy of the picture after you uninstall Hanami.
 - **Uninstall.** General → *Uninstall Hanami…*, or Windows' own Settings → Apps (and the Start menu's right-click
   Uninstall). It asks whether to **keep** or **delete** your wallpapers, pet packs and settings; keeping them lets a
   later install into the same folder pick up where you left off.

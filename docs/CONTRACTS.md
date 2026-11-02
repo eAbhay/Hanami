@@ -385,7 +385,7 @@ follows Windows (apps cannot block it).
 `screensaver.syncLockScreen` (off by default, Screensaver tab → Lock screen): the Windows lock screen picture becomes a **still** of the
 primary monitor's screensaver wallpaper without the clock or particles (Windows draws its own clock, and a live wallpaper can't appear on
 its secure desktop). One picture for all monitors, set through `Windows.System.UserProfile.LockScreen` (`Platform/LockScreenImage`, behind
-`ILockScreenImage`); no registry or policy routes. Rules in `Core/LockImagePolicy`: on a screensaver start (not Preview) it re-photographs a
+`ILockScreenImage`); no registry or policy routes (by decision: undocumented, build-specific and, for policies, admin-level; the cost is that Windows' own lock screen still needs its extra key press before the PIN box). Rules in `Core/LockImagePolicy`: on a screensaver start (not Preview) it re-photographs a
 video or built-in scene every time and an image only when `Signature(wallpaperId, dark)` changed; on turning the option on, a screensaver
 wallpaper change or a theme change it refreshes when the signature changed (debounced 1.5 s, skipped while the screensaver shows or Windows is locked).
 A screensaver start uses the `holdForCapture` handshake; otherwise a hidden copy of the page (`&screensaver=1&capture=1`, a 1/255-opaque click-through
