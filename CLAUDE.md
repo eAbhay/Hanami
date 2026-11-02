@@ -34,6 +34,22 @@ powershell -ExecutionPolicy Bypass -File tools\build.ps1             # tests + p
 The shell may have a stale PATH: prefix commands with
 `$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')`.
 
+## How we work (plan and execute)
+
+This project uses a plan and execute approach: one chat plans into `docs/PLAN.md`, then each phase runs
+in its own fresh chat.
+
+- **Read only what the task needs.** Start from this file and the last finished phase's Notes in
+  `docs/PLAN.md`, then open only the code related to the task and the relevant section of
+  `docs/CONTRACTS.md`. Notes say where to look; the code is the source of truth, so check it before relying on them.
+- **Wide searches go to a subagent**, which reports back only the conclusion.
+- **Plans:** each phase lists the files and functions to read (name a function or class, not a line number,
+  since line numbers go stale) and what is already diagnosed, so the executor doesn't redo that work.
+- **End of a phase:** write its Notes in under 10 lines: what differed from the plan, what is unverified,
+  traps, and where new code lives. Don't repeat what git records.
+- **Long chats:** when a chat gets long, write a handoff note and continue in a fresh chat. Small fixes don't
+  need a separate plan.
+
 ## Rules for this repo
 
 - A change includes its tests, comments, `docs/CONTRACTS.md`, `README.md` and settings-UI copy
