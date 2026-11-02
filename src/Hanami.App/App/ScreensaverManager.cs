@@ -260,8 +260,9 @@ public sealed class ScreensaverManager : IDisposable
     }
 
     /// <summary>
-    /// Ends the screensaver because of input: slides every window up off its monitor, then <see cref="Finish"/>.
-    /// With sign-in required the slide reveals a <see cref="ScreenCurtain"/>, never the desktop, and Windows is locked at the end.
+    /// Ends the screensaver because of input. Without sign-in it slides every window up off its monitor, then <see cref="Finish"/>.
+    /// With sign-in required there is no slide: Windows is locked at once (the lock screen takes over), and the
+    /// <see cref="ScreenCurtain"/> windows cover the desktop until Windows reports the lock, so it is never shown unlocked.
     /// </summary>
     private async Task DismissAsync(string why)
     {
@@ -276,7 +277,7 @@ public sealed class ScreensaverManager : IDisposable
             {
                 if (_curtains.Count < _views.Count)
                 {
-                    EnsureCurtains();   // the setting changed while showing; let them paint before anything moves
+                    EnsureCurtains();   // the setting changed while showing; let them paint before the screensaver goes
                     await Dispatcher.Yield(DispatcherPriority.Render);
                 }
             }
@@ -285,9 +286,9 @@ public sealed class ScreensaverManager : IDisposable
                 Revealing = true;
                 Changed?.Invoke();   // the host resumes the desktop wallpaper behind us
                 await Task.Delay(RevealDelay);
+                if (gen != _slideGen) return;
+                await SlideAsync();
             }
-            if (gen != _slideGen) return;
-            await SlideAsync();
         }
         catch (Exception ex)
         {

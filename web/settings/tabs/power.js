@@ -97,7 +97,7 @@ export function createPowerTab(ctx) {
       row("clock", "Start after", "Minutes without mouse or keyboard input, while plugged in.",
         h("div.ss-idle", idleSeg, h("label.num-wrap", idleInput, h("span", "min"))), { rule: true }),
       row("power", "Stop after", "After this, Hanami hides it and lets Windows turn the screen off and sleep as usual.", stopSeg, { rule: true }),
-      row("lock", "Require sign-in when it ends", "Locks Windows when the screensaver ends, sliding up to the lock screen. To match that lock screen to the screensaver, see the Screensaver tab. Leave off if your desk is private.", signIn, { rule: true })),
+      row("lock", "Require sign-in when it ends", "Locks Windows the moment a key or click ends the screensaver, going straight to the lock screen instead of sliding up. To match that lock screen to the screensaver, see the Screensaver tab. Leave off if your desk is private.", signIn, { rule: true })),
     timers,
     h("p.footnote", svg("info"),
       h("span", "On battery Hanami never shows the screensaver, so Windows' own timers apply. Closing the lid always follows your Windows lid setting.")));

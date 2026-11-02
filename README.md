@@ -44,7 +44,7 @@ system tray as a single self-contained `.exe`.
   font: the bundled [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) (SIL Open Font License,
   `web/wallpaper/fonts/`), any installed Windows font, or a `.ttf`/`.otf`/`.woff`/`.woff2` you import
   (kept in `Library/fonts/` and carried by packs exported with settings). A
-  key press or mouse click slides it up off the screen; moving the mouse doesn't end it. On battery,
+  key press or mouse click slides it up off the screen (or, with "require sign-in", locks Windows straight away); moving the mouse doesn't end it. On battery,
   or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
   changes Windows power settings, and closing the lid always follows your Windows lid setting.
 - **Matching lock screen (optional).** Screensaver → *Lock screen*: sets your Windows lock screen to a still picture of the
