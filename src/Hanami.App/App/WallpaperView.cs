@@ -147,6 +147,18 @@ public sealed class WallpaperView : IDisposable
         }
     }
 
+    /// <summary>
+    /// Slides a screensaver window up by <paramref name="offset"/> px: the window moves up and a region clips the
+    /// part that would leave its own monitor, so nothing shows on a monitor above.
+    /// </summary>
+    public void SlideTo(int offset)
+    {
+        if (_disposed) return;
+        var b = Monitor.Bounds;
+        Win32.SetWindowRgn(Hwnd, Win32.CreateRectRgn(0, offset, b.Width, b.Height), false);
+        Win32.SetWindowPos(Hwnd, IntPtr.Zero, b.Left, b.Top - offset, b.Width, b.Height, Win32.SWP_NOACTIVATE | Win32.SWP_NOZORDER | Win32.SWP_NOSIZE);
+    }
+
     public bool IsLive => !_hidden && _mode != Mode.Paused;
 
     /// <summary>Gives the page keyboard focus (the screensaver listens for key presses itself).</summary>

@@ -62,6 +62,16 @@ public static class ScreensaverPolicy
         return (false, $"Starts after {s.IdleMinutes} min idle");
     }
 
+    public static readonly TimeSpan SlideDuration = TimeSpan.FromMilliseconds(420);
+
+    /// <summary>How far (px) the screensaver has slid up after fraction <paramref name="t"/> of the slide: ease-out cubic, 0 at the start, the full height at the end.</summary>
+    public static int SlideOffset(double t, int height)
+    {
+        t = double.IsFinite(t) ? Math.Clamp(t, 0, 1) : 0;
+        var inv = 1 - t;
+        return (int)Math.Round((1 - inv * inv * inv) * Math.Max(0, height));
+    }
+
     /// <summary>Whether a showing screensaver must end for a reason other than user input.</summary>
     public static string? EndReason(ScreensaverSettings s, bool onBattery, bool sessionLocked, TimeSpan shownFor, bool preview)
     {

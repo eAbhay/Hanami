@@ -353,10 +353,16 @@ Plugged in only. After `idleMinutes` without keyboard/mouse input the host cover
 with a topmost fullscreen window showing the wallpaper page (`…/wallpaper/index.html?monitor=<key>&screensaver=1`,
 always in `full` mode, cursor hidden, with a glass clock and date) and holds a Windows
 display-required + system-required power request, so the screen stays on and the PC does not
-idle-sleep. Only a key press or mouse click ends it — moving the mouse does not (and it locks
-Windows first if `requireSignIn`). The page has keyboard focus and posts
-`{type:"dismiss", input:"key"|"click"}` to the host; if Windows refused focus, the host treats
-input that didn't move the cursor as a key press.
+idle-sleep. Only a key press or mouse click ends it — moving the mouse does not. The page has keyboard
+focus and posts `{type:"dismiss", input:"key"|"click"}` to the host; if Windows refused focus, the host
+treats input that didn't move the cursor as a key press. That input **slides the screensaver up** off every
+monitor (420 ms, ease-out, the windows themselves move, clipped to their own monitor) like the Windows lock
+screen; further dismiss messages during the slide are ignored. While it slides, `Showing` stays true but
+`Revealing` is true, and the host counts the desktop wallpapers as uncovered so they resume behind it
+(pets stay hidden until the slide is over). With `requireSignIn` a black `ScreenCurtain` window sits under
+each screensaver window instead, the slide reveals that, and Windows is locked when it ends; the curtains
+close when Windows reports the lock, or after 3 s. Unplug, lock, sleep and stop-after end it instantly,
+without the slide (a slide in progress is cut short).
 It does not start (status explains why) when: disabled, on battery, session locked, a fullscreen
 app is running, or another app already holds a display request (video playback, calls).
 It ends on unplug, lock, sleep, or after `stopAfterHours`. The idle count restarts after waking.

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Hanami.Core;
 using Hanami.Native;
@@ -31,6 +33,16 @@ public sealed class ScreensaverManager : IDisposable
     private readonly uint _pid = (uint)Environment.ProcessId;
     private readonly List<WallpaperView> _views = new();
 
+    // After Changed(Revealing) the desktop wallpaper behind needs a moment to resume before the first frame moves.
+    private static readonly TimeSpan RevealDelay = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan CurtainTimeout = TimeSpan.FromSeconds(3);
+
+    private readonly Dictionary<string, ScreenCurtain> _curtains = new();
+    private readonly DispatcherTimer _curtainTimer;
+    private bool _sliding;
+    private int _slideGen;                 // bumped when a slide is cancelled or finished, so a stale DismissAsync stops
+    private Action? _stopSlide;
+
     private bool _showing, _opening, _preview;
     private DateTime _shownAt;
     private uint _inputBaseline;          // last-input tick the current show (or wait) is measured from
@@ -44,6 +56,8 @@ public sealed class ScreensaverManager : IDisposable
     private static readonly TimeSpan FreezeSettle = TimeSpan.FromSeconds(2);
 
     public bool Showing => _showing;
+    /// <summary>The screensaver is sliding away for good: <see cref="Showing"/> stays true, but the desktop behind must come alive.</summary>
+    public bool Revealing { get; private set; }
     /// <summary>
     /// True once idle time passed <see cref="IdleFreezePolicy.FreezeAfter"/>, so the desktop video
     /// has let go of its display request; stays true after an automatic end until real input.
@@ -69,6 +83,12 @@ public sealed class ScreensaverManager : IDisposable
         _tick.Tick += async (_, _) => await TickAsync();
         _inputWatch = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(100) };
         _inputWatch.Tick += (_, _) => WatchInput();
+        _curtainTimer = new DispatcherTimer { Interval = CurtainTimeout };
+        _curtainTimer.Tick += (_, _) =>
+        {
+            Log.Warn("Windows did not report a lock within 3 s of the sign-in lock request (blocked by policy?); removing the curtain");
+            CloseCurtains();
+        };
     }
 
     public void Start() => _tick.Start();
@@ -97,7 +117,13 @@ public sealed class ScreensaverManager : IDisposable
 
     public Task PreviewAsync() => ShowAsync(preview: true);
 
-    public void End(string why) => Hide(why, byInput: false);
+    /// <summary>Ends the screensaver at once, without the slide (lock, sleep, unplug, stop-after). A slide in progress is cut short.</summary>
+    public void End(string why)
+    {
+        CancelSlide();
+        if (_showing) Finish(why, byInput: false, lockIt: false);
+        if (why == "Windows locked") CloseCurtains();
+    }
 
     private async Task TickAsync()
     {
@@ -108,7 +134,8 @@ public sealed class ScreensaverManager : IDisposable
         if (_showing)
         {
             var reason = ScreensaverPolicy.EndReason(s, power.OnBattery, locked, DateTime.UtcNow - _shownAt, _preview);
-            if (reason is not null) Hide(reason, byInput: false);
+            if (_sliding) return;
+            if (reason is not null) End(reason);
             else KeepOnTop();
             return;
         }
@@ -153,6 +180,7 @@ public sealed class ScreensaverManager : IDisposable
             }
             if (_views.Count == 0) return;
 
+            if (!preview && s.Screensaver.RequireSignIn) EnsureCurtains();
             _keepAwake.Set(true);
             // Focus our window so the key that wakes the screen reaches the page instead of typing
             // into the user's app.
@@ -171,6 +199,7 @@ public sealed class ScreensaverManager : IDisposable
         {
             Log.Error("Screensaver failed to show", ex);
             DisposeViews();
+            CloseCurtains();
             _keepAwake.Set(false);
         }
         finally
@@ -188,7 +217,7 @@ public sealed class ScreensaverManager : IDisposable
         }
         if (!_showing || (string?)msg["type"] != "dismiss") return;
         if (DateTime.UtcNow - _shownAt < Grace) return;
-        Hide((string?)msg["input"] ?? "input", byInput: true);
+        _ = DismissAsync((string?)msg["input"] ?? "input");
     }
 
     /// <summary>
@@ -207,18 +236,107 @@ public sealed class ScreensaverManager : IDisposable
         _lastCursor = pt;
         if (moved || DateTime.UtcNow - _shownAt < Grace) return;
         if (_views.Any(v => v.Hwnd == Win32.GetForegroundWindow())) return;   // the page handles it
-        Hide("key (unfocused)", byInput: true);
+        _ = DismissAsync("key (unfocused)");
     }
 
-    private void Hide(string why, bool byInput)
+    /// <summary>
+    /// Ends the screensaver because of input: slides every window up off its monitor, then <see cref="Finish"/>.
+    /// With sign-in required the slide reveals a <see cref="ScreenCurtain"/>, never the desktop, and Windows is locked at the end.
+    /// </summary>
+    private async Task DismissAsync(string why)
     {
-        if (!_showing) return;
+        if (!_showing || _sliding) return;
+        var gen = ++_slideGen;
+        _sliding = true;
+        _inputWatch.Stop();
+        var lockIt = !_preview && _settings().Screensaver.RequireSignIn;
+        try
+        {
+            if (lockIt)
+            {
+                if (_curtains.Count < _views.Count)
+                {
+                    EnsureCurtains();   // the setting changed while showing; let them paint before anything moves
+                    await Dispatcher.Yield(DispatcherPriority.Render);
+                }
+            }
+            else
+            {
+                Revealing = true;
+                Changed?.Invoke();   // the host resumes the desktop wallpaper behind us
+                await Task.Delay(RevealDelay);
+            }
+            if (gen != _slideGen) return;
+            await SlideAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Screensaver slide failed: {ex.Message}");
+        }
+        if (gen != _slideGen || !_showing) return;   // cut short by End, which already finished
+        Finish(why, byInput: true, lockIt);
+    }
+
+    private async Task SlideAsync()
+    {
+        var done = new TaskCompletionSource();
+        var clock = Stopwatch.StartNew();
+        EventHandler? onFrame = null;
+        void Stop()
+        {
+            CompositionTarget.Rendering -= onFrame;
+            done.TrySetResult();
+        }
+        onFrame = (_, _) =>
+        {
+            var t = clock.Elapsed / ScreensaverPolicy.SlideDuration;
+            foreach (var v in _views) v.SlideTo(ScreensaverPolicy.SlideOffset(t, v.Monitor.Bounds.Height));
+            if (t >= 1) Stop();
+        };
+        _stopSlide = Stop;
+        CompositionTarget.Rendering += onFrame;
+        // Don't hang if WPF never ticks Rendering for these windows.
+        await Task.WhenAny(done.Task, Task.Delay(ScreensaverPolicy.SlideDuration + TimeSpan.FromSeconds(1)));
+        Stop();
+        _stopSlide = null;
+    }
+
+    private void CancelSlide()
+    {
+        if (!_sliding) return;
+        _slideGen++;
+        _sliding = false;
+        Revealing = false;
+        _stopSlide?.Invoke();
+        _stopSlide = null;
+    }
+
+    private void EnsureCurtains()
+    {
+        foreach (var v in _views)
+            if (!_curtains.ContainsKey(v.Monitor.Key)) _curtains[v.Monitor.Key] = new ScreenCurtain(v.Monitor, v.Hwnd);
+    }
+
+    private void CloseCurtains()
+    {
+        _curtainTimer.Stop();
+        foreach (var c in _curtains.Values) c.Dispose();
+        _curtains.Clear();
+    }
+
+    /// <summary>The one place a showing screensaver goes away, whether it slid (by input) or ended at once.</summary>
+    private void Finish(string why, bool byInput, bool lockIt)
+    {
+        _slideGen++;
+        _sliding = false;
+        Revealing = false;
         _showing = false;
         _inputWatch.Stop();
-        var lockIt = byInput && !_preview && _settings().Screensaver.RequireSignIn;
         if (lockIt) Win32.LockWorkStation();   // lock first, so the desktop is never shown unlocked
 
         DisposeViews();
+        // After a lock request the curtains stay until Windows reports the lock (OnSessionSwitch → End), or give up after a few seconds.
+        if (lockIt) _curtainTimer.Start(); else CloseCurtains();
         _keepAwake.Set(false);
         if (!lockIt && _previousForeground != IntPtr.Zero && Win32.IsWindow(_previousForeground))
             Win32.SetForegroundWindow(_previousForeground);
@@ -269,7 +387,9 @@ public sealed class ScreensaverManager : IDisposable
     {
         _tick.Stop();
         _inputWatch.Stop();
+        CancelSlide();
         DisposeViews();
+        CloseCurtains();
         _keepAwake.Dispose();
     }
 }

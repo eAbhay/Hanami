@@ -22,6 +22,7 @@ public sealed class HanamiHost
     private CoreWebView2Environment _env = null!;
     private WallpaperManager _wallpapers = null!;
     private ScreensaverManager _screensaver = null!;
+    private bool _petsSawScreensaver;
     private TrayIcon _tray = null!;
     private ThemeWatch _theme = null!;
     private PetManager _pets = null!;
@@ -181,9 +182,13 @@ public sealed class HanamiHost
 
     private async void OnScreensaverChanged()
     {
-        if (_wallpapers.ScreensaverShowing != _screensaver.Showing || _wallpapers.IdleFrozen != _screensaver.IdleFrozen)
+        // While the screensaver slides away the desktop wallpaper behind it must be live, so it counts as gone for the wallpapers
+        // (not for pets, which stay hidden until the slide ends).
+        var coversDesktop = _screensaver.Showing && !_screensaver.Revealing;
+        if (_wallpapers.ScreensaverShowing != coversDesktop || _petsSawScreensaver != _screensaver.Showing || _wallpapers.IdleFrozen != _screensaver.IdleFrozen)
         {
-            _wallpapers.ScreensaverShowing = _screensaver.Showing;
+            _wallpapers.ScreensaverShowing = coversDesktop;
+            _petsSawScreensaver = _screensaver.Showing;
             _pets.ScreensaverShowing = _screensaver.Showing;
             _wallpapers.IdleFrozen = _screensaver.IdleFrozen;
             await _wallpapers.ApplyModesAsync();

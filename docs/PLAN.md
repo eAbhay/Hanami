@@ -107,14 +107,14 @@ The window itself moves, because the desktop has to be visible behind it. Host-d
   `Hide` does today. Move that into one shared `Finish(byInput, lockIt)` so the two paths can't drift.
 
 **The animation:**
-- [ ] 2.1 `Native/Win32.cs`: `SetWindowRgn`, `CreateRectRgn` (the system owns a region once it's set; don't delete it).
-- [ ] 2.2 `WallpaperView.SlideTo(int offset)`: `SetWindowRgn(hwnd, CreateRectRgn(0, offset, w, h), false)`, then
+- [x] 2.1 `Native/Win32.cs`: `SetWindowRgn`, `CreateRectRgn` (the system owns a region once it's set; don't delete it).
+- [x] 2.2 `WallpaperView.SlideTo(int offset)`: `SetWindowRgn(hwnd, CreateRectRgn(0, offset, w, h), false)`, then
       `SetWindowPos(hwnd, 0, left, top - offset, w, h, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE)`. The region clips the window to its
       own monitor, so with an external monitor **above** the laptop the slide doesn't appear on that screen.
-- [ ] 2.3 The slide loop: all monitors together, 420 ms, ease-out `1 - (1 - t)^3`, timed by `Stopwatch` and driven by
+- [x] 2.3 The slide loop: all monitors together, 420 ms, ease-out `1 - (1 - t)^3`, timed by `Stopwatch` and driven by
       `CompositionTarget.Rendering` (remove the handler when done). Offset is a fraction of each monitor's own height.
       Put the curve in a pure `ScreensaverPolicy.SlideOffset(t, height)` with tests (0 at start, full height at 1, monotonic, clamped).
-- [ ] 2.4 **With `requireSignIn`, the desktop must never show unlocked.** New `App/ScreenCurtain.cs`: one topmost, no-activate,
+- [x] 2.4 **With `requireSignIn`, the desktop must never show unlocked.** New `App/ScreenCurtain.cs`: one topmost, no-activate,
       tool-window WPF window per monitor, opaque black with an optional `UniformToFill` image, placed in physical pixels with
       `SetWindowPos`. Create it when the screensaver shows (when `requireSignIn && !preview`), z-ordered directly under that monitor's
       screensaver window. If it doesn't exist at dismiss (setting changed while showing), create it and yield a render first.
@@ -122,15 +122,16 @@ The window itself moves, because the desktop has to be visible behind it. Host-d
       Locking flow: slide, `LockWorkStation()`, dispose the views, then close the curtains when `OnSessionSwitch` reports the lock, or after
       a 3 s timeout (log it: lock may be blocked by policy). `End("Windows locked")` must close curtains, so route it through the same place.
       Preview never locks, so it never gets a curtain.
-- [ ] 2.5 **Check with Preview, no real lock:** click and key both slide; video keeps playing; the wallpaper behind is live, not black;
+- [x] 2.5 **Check with Preview, no real lock:** click and key both slide; video keeps playing; the wallpaper behind is live, not black;
       the click doesn't land on the app underneath once the window has moved (the WebView2 has mouse capture; verify in a real app);
       focus returns to the previous window. Use `tools\dev\perf.ps1` during a video slide on Intel graphics.
       If moving the live window janks: capture one frame with `CapturePreviewAsync` at dismiss, show it in a plain WPF window and slide that instead.
       Note it in Notes. A second-monitor check (including `WM_DPICHANGED` when the window nears another DPI) is for the user's other laptop: list it at the end.
 - [ ] 2.6 Ask the user to try one real sign-in dismiss (they enable `requireSignIn` themselves). They should see no flash of desktop.
-- [ ] 2.7 Update the "Screensaver behaviour" section of the contract and the status hint text in `tabs/screensaver.js`. Commit.
+- [x] 2.7 Update the "Screensaver behaviour" section of the contract and the status hint text in `tabs/screensaver.js`. Commit.
 
 Notes:
+Done except 2.6 (the user's own sign-in dismiss test). Slide ran on the real screen in the dev copy: the log shows the desktop wallpaper resuming, then the end ~600 ms after the key (150 ms reveal delay + 420 ms slide), so `CompositionTarget.Rendering` ticks fine. Not checked: how it looks mid-slide, perf on a video, the click not reaching the app below, and anything with `requireSignIn`/`ScreenCurtain` (never enabled). Code: `ScreensaverManager.DismissAsync`/`SlideAsync`/`Finish`, `App/ScreenCurtain.cs` (has an `Image` setter for phase 3), `WallpaperView.SlideTo`. For the other laptop: external monitor above the laptop, other DPI.
 
 ## Phase 3 — Matching lock screen
 

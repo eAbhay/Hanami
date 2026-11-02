@@ -21,6 +21,27 @@ public class ScreensaverPolicyTests
     }
 
     [Fact]
+    public void SlideOffset_StartsAtZero_EndsAtFullHeight_AndNeverGoesBackwards()
+    {
+        Assert.Equal(0, ScreensaverPolicy.SlideOffset(0, 1200));
+        Assert.Equal(1200, ScreensaverPolicy.SlideOffset(1, 1200));
+        var last = 0;
+        for (var i = 0; i <= 100; i++)
+        {
+            var o = ScreensaverPolicy.SlideOffset(i / 100.0, 1200);
+            Assert.InRange(o, last, 1200);
+            last = o;
+        }
+        Assert.True(ScreensaverPolicy.SlideOffset(0.5, 1200) > 600);   // ease-out: more than half done halfway through
+    }
+
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(2, 1200)]
+    [InlineData(double.NaN, 0)]
+    public void SlideOffset_ClampsItsInput(double t, int expected) => Assert.Equal(expected, ScreensaverPolicy.SlideOffset(t, 1200));
+
+    [Fact]
     public void NeverOnBattery()
     {
         var (start, status) = ScreensaverPolicy.Evaluate(new ScreensaverSettings(), Idle(60, battery: true));

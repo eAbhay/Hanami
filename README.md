@@ -41,7 +41,7 @@ system tray as a single self-contained `.exe`.
   font: the bundled [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) (SIL Open Font License,
   `web/wallpaper/fonts/`), any installed Windows font, or a `.ttf`/`.otf`/`.woff`/`.woff2` you import
   (kept in `Library/fonts/` and carried by packs exported with settings). A
-  key press or mouse click ends it; moving the mouse doesn't. On battery,
+  key press or mouse click slides it up off the screen; moving the mouse doesn't end it. On battery,
   or when Hanami isn't running, Windows' own screen-off and sleep timers apply. Hanami never
   changes Windows power settings, and closing the lid always follows your Windows lid setting.
 - **Uninstall.** General → *Uninstall Hanami…*, or Windows' own Settings → Apps (and the Start menu's right-click

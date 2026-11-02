@@ -13,7 +13,7 @@ export function createScreensaverTab(ctx) {
   const statusText = h("span.ss-status-text");
   const activeBadge = h("span.ss-badge", { hidden: true }, "Active");
   const status = h("div.ss-status-line", statusDot, statusText, activeBadge,
-    h("span.ss-status-hint", "Preview shows it right now — press any key or click to exit."));
+    h("span.ss-status-hint", "Preview shows it right now — press any key or click and it slides up and away."));
 
   async function preview() {
     previewBtn.disabled = true;
