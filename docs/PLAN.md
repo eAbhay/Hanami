@@ -110,12 +110,15 @@ Not run: lock picture across the update (`syncLockScreen` was off: real lock scr
 
 Read: `tools/build.ps1`, `.github/workflows/release.yml`, `CHANGELOG.md`, README "Download".
 
-- [ ] D.1 **`tools/build.ps1`:** its check rejects anything but `1.2.3`, so prerelease tags would fail. Accept `1.2.3-rc.1`. Check `AppPaths.Version` returns the prerelease text and the file version still builds.
-- [ ] D.2 **`release.yml`:** a tag with `-` gets `--prerelease`. Bump the pinned actions off Node 20, pinned to commits as now, checking each new major's changes.
-- [ ] D.3 **Docs:** README "Updating" now describes the in-app route, with the manual route as the fallback. Write down how to cut a stable and a beta release. `CHANGELOG.md` needs a section per tag, or the workflow stops.
-- [ ] D.4 **With the user's yes:** push, run the dry run. Commit.
+- [x] D.1 **`tools/build.ps1`:** its check rejects anything but `1.2.3`, so prerelease tags would fail. Accept `1.2.3-rc.1`. Check `AppPaths.Version` returns the prerelease text and the file version still builds.
+- [x] D.2 **`release.yml`:** a tag with `-` gets `--prerelease`. Bump the pinned actions off Node 20, pinned to commits as now, checking each new major's changes.
+- [x] D.3 **Docs:** README "Updating" now describes the in-app route, with the manual route as the fallback. Write down how to cut a stable and a beta release. `CHANGELOG.md` needs a section per tag, or the workflow stops.
+- [x] D.4 **With the user's yes:** push, run the dry run. Commit.
 
-Notes:
+Notes: D.1-D.3 done (5 Nov 2026), D.4: pushed and dry run started with the user's yes.
+- `build.ps1 -SkipTests -Version v9.9.9-rc.1` built: FileVersion 9.9.9.0, ProductVersion `9.9.9-rc.1+<sha>`, so `AppPaths.Version` (split on `+`) gives `9.9.9-rc.1`. `1.2` is still rejected. `dist/` now holds that 9.9.9-rc.1 exe: rebuild before using it.
+- `release.yml`: `--prerelease` when the tag contains `-` (`@extra` splat on `gh release create`; not run yet, the dry run doesn't reach it, so the first real run is rc.1). Actions now checkout v7.0.1, setup-dotnet v6.1.0, upload-artifact v7.0.2, all Node 24, pinned to commit SHAs. Release notes of each new major read: ESM move, Node 24, upload-artifact `archive` option; nothing affects this workflow.
+- README gained "Releasing" under Build (stable vs beta, dry run, frozen items). `CHANGELOG.md` has `0.1.0-rc.1` and `0.1.0-rc.2` sections already so those tags can build; they are stub texts to tidy in E.5.
 
 ## Phase E — Rehearsal, then `v0.1.0`
 

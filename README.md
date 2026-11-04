@@ -123,6 +123,29 @@ powershell -ExecutionPolicy Bypass -File tools\build.ps1 -Version 0.2.0   # the 
 dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj         # tests only
 ```
 
+### Releasing
+
+Pushing a tag runs `.github/workflows/release.yml`: it runs the tests, builds `Hanami.exe` stamped with the tag's version and
+publishes a GitHub release with `Hanami.exe` and `Hanami.exe.sha256` attached and the matching `CHANGELOG.md` section as notes.
+Each step below needs the tag and changelog heading to agree, or the workflow stops.
+
+1. Add a section to the top of [CHANGELOG.md](CHANGELOG.md) whose heading is exactly the version without the `v` (`## 0.2.0`,
+   `## 0.3.0-beta.1`). Write it for people using Hanami. Commit and push to `main`.
+2. Tag and push: `git tag v0.2.0` then `git push origin v0.2.0`.
+3. Watch the run under the repo's **Actions** tab, then check the release page and, on a spare folder, that the downloaded exe's
+   hash matches `Hanami.exe.sha256`.
+
+- **Stable release:** a plain version tag (`v0.2.0`, `v0.2.1`). Everyone on Stable or Beta is offered it, and the README's
+  *latest release* link moves to it.
+- **Beta release:** a tag with a prerelease suffix (`v0.3.0-beta.1`, `v0.1.0-rc.2`). GitHub marks it as a prerelease, so only
+  people on the **Beta** channel are offered it and the *latest release* link is unchanged. Use betas for small or risky changes
+  and promote one by tagging the plain version when it has proved itself. Versions order as in semver: `0.1.0-rc.2` < `0.1.0`
+  and `rc.2` < `rc.10`.
+- **Dry run:** Actions → Release → *Run workflow* does the same tests and build but only uploads the exe as a workflow artifact.
+- **Never reuse or move a tag:** installed copies compare versions, so fix a bad release with a new, higher version.
+- **Frozen for old copies:** the repo's releases URL, the asset names `Hanami.exe` and `Hanami.exe.sha256`, the checksum format and
+  the `--apply-update` flag (see [docs/CONTRACTS.md](docs/CONTRACTS.md)). Changing them strands every installed version.
+
 ## Develop
 
 ```powershell

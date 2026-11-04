@@ -1,6 +1,7 @@
 # Builds the single-file, self-contained Hanami.exe into dist/, with dist/Hanami.exe.sha256 beside it.
 # Usage: powershell -ExecutionPolicy Bypass -File tools\build.ps1 [-SkipTests] [-Version 1.2.3]
-#   -Version  stamps the exe (a leading "v" is dropped, so a tag name works); without it the csproj's version is used.
+#   -Version  stamps the exe (a leading "v" is dropped, so a tag name works); 1.2.3-rc.1 style prereleases are accepted.
+#             Without it the csproj's version is used.
 param([switch]$SkipTests, [string]$Version = "")
 $ErrorActionPreference = "Stop"
 $repo = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -9,7 +10,7 @@ $dist = Join-Path $repo "dist"
 $versionArgs = @()
 if ($Version -ne "") {
     $Version = $Version -replace '^v', ''
-    if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must look like 1.2.3 (got '$Version')" }
+    if ($Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$') { throw "Version must look like 1.2.3 or 1.2.3-rc.1 (got '$Version')" }
     $versionArgs = @("-p:Version=$Version")
 }
 
