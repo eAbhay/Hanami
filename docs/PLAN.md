@@ -125,13 +125,16 @@ Notes: D.1-D.3 done (5 Nov 2026), D.4: pushed and dry run started with the user'
 
 Prereleases don't become GitHub's "latest", so the README's download link is unaffected. Release tests can't run on this laptop (Application Control) but CI runs them; Debug tests pass locally.
 
-- [ ] E.1 **With the user's yes:** tag `v0.1.0-rc.1`. This is the first real tagged run of `release.yml`. Download it, check the checksum, install.
-- [ ] E.2 **With the user's yes:** tag `v0.1.0-rc.2`. On Beta, rc.1 finds it and installs it with one click. Confirm the version, settings and library. On Stable, rc.1 must not offer it.
-- [ ] E.3 **Application Control:** note whether Windows blocks the unsigned exe here, and that the fallback appears if it does.
+- [x] E.1 **With the user's yes:** tag `v0.1.0-rc.1`. This is the first real tagged run of `release.yml`. Download it, check the checksum, install.
+- [x] E.2 **With the user's yes:** tag `v0.1.0-rc.2`. On Beta, rc.1 finds it and installs it with one click. Confirm the version, settings and library. On Stable, rc.1 must not offer it.
+- [x] E.3 **Application Control:** note whether Windows blocks the unsigned exe here, and that the fallback appears if it does.
 - [ ] E.4 **With the user's yes:** tag `v0.1.0`. rc.2 on Stable finds it and installs. This ticks round 7's 3.7. Check the release page and the README link.
 - [ ] E.5 Ask the user about GitHub's immutable releases setting (check how it affects `gh release create` first, and that tags can't be reused), 2FA, and whether to delete the rc releases. Then a final pass over stale docs.
 
-Notes:
+Notes: E.1-E.3 done 4 Nov 2026 (user's yes for each tag and the temp install).
+- rc.1 and rc.2 builds passed on CI and are published as prereleases with both assets; downloaded rc.1's SHA-256 matched. The first real HTTPS check/download from GitHub worked: Stable said "up to date" with rc.2 out, Beta offered rc.2 (82.6 MB), one click downloaded, verified, swapped and restarted. Version 0.1.0-rc.2 in the exe and Apps & features, settings (channel beta) and Library kept, no settings window after the restart, `update/` gone.
+- Application Control did not block the unsigned downloaded exe (rc.1 install or the rc.2 swap) on this laptop, so the `Win32Exception` fallback banner was not seen here.
+- Test install lives in the session scratchpad `rc1-install\Hanami` (HKCU\Software\Hanami + Uninstall key, no Run key): still installed, to be removed after E.4.
 
 ---
 
