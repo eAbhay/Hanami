@@ -77,7 +77,7 @@ export function createScreensaverTab(ctx) {
     h("span", "Lock screen settings…"));
   const lockCard = card("Lock screen", null,
     row("lock", "Match the lock screen to the screensaver",
-      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame, near the start unless you pick another below, and it stays the same until you change it or the wallpaper or theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Your lock screen must be set to Picture, not Windows Spotlight.",
+      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame, near the start unless you pick another below, and it stays the same until you change it or the wallpaper or theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Turning this off, or quitting Hanami, puts your previous lock screen picture back. Your lock screen must be set to Picture, not Windows Spotlight.",
       syncToggle),
     lockStatus,
     lockFrame.el,
@@ -87,7 +87,7 @@ export function createScreensaverTab(ctx) {
     if (on) {
       const ok = await dialog({
         title: "Replace your lock screen picture?",
-        body: "Hanami will set your Windows lock screen picture to the screensaver's wallpaper and keep a copy of your current one. It never changes it back by itself; you can restore it here. Windows Spotlight overrides this, so set your lock screen to Picture in Windows first.",
+        body: "Hanami will set your Windows lock screen picture to the screensaver's wallpaper and keep a copy of your current one. It puts your picture back when you turn this off or quit Hanami (or use Restore here if Hanami ever crashes). Windows Spotlight overrides this, so set your lock screen to Picture in Windows first.",
         confirmLabel: "Turn on",
       });
       if (!ok) { syncToggle.set(false); return; }

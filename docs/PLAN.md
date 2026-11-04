@@ -97,6 +97,7 @@ Notes: the user confirmed on the real desktop (4 Nov 2026) that the flash is gon
 - The host always shows wallpapers as `cover`, so `contain` can't occur yet; drawing for it exists and was checked numerically only.
 - `_blocked` was removed (it only avoided a capture window). Unused now: `Win32.SetLayeredWindowAttributes`. No stills are remade if the primary monitor's resolution changes.
 - Stills are not made for a wallpaper whose video fails to load (logged, not retried that session). A null screensaver wallpaper id stays `waiting`.
+- Changed after the user's test (4 Nov 2026): Hanami now puts the previous lock picture back by itself when the option is turned off, on quit, and at the next start after a crash (the persisted signature marks "our picture is in place"). Round 6's "never restored automatically" no longer holds; *Restore my previous picture* stays for when that didn't happen. Code: `LockScreenSync.RevertAsync/RevertOnExitAsync`, `HanamiHost.QuitAsync`; tests in `LockScreenSyncTests`.
 - `devroot/config/settings.json` had `syncLockScreen` on; it was set to off for the automated checks (backup was in the session scratchpad), so a dev start no longer writes the real lock screen by itself.
 
 ## Phase 2 — Choose the frame (on hold until the user asks)

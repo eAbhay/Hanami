@@ -9,8 +9,9 @@ namespace Hanami.App;
 /// <summary>
 /// "Match the lock screen to the screensaver": makes the lock picture saved ahead of time for the primary monitor's screensaver wallpaper
 /// (<see cref="Library.LockStillPath"/>, made by the settings page) the Windows lock screen picture. It photographs nothing and opens no
-/// window. Off by default, never restores anything by itself: the first time it writes it keeps a copy of the previous picture, which the
-/// user can put back. Needs the lock screen set to Picture in Windows (Spotlight overrides it). Everything Windows-specific goes through
+/// window. Off by default. The first time it writes it keeps a copy of the previous picture and puts it back when the option is turned
+/// off and when Hanami quits (the persisted signature also lets the next start undo a crash); the user can also put it back by hand
+/// (<see cref="RestoreAsync"/>). Needs the lock screen set to Picture in Windows (Spotlight overrides it). Everything Windows-specific goes through
 /// <see cref="ILockScreenImage"/>. See docs/CONTRACTS.md, "Lock screen".
 /// </summary>
 public sealed class LockScreenSync : IDisposable
@@ -25,6 +26,7 @@ public sealed class LockScreenSync : IDisposable
     private readonly DispatcherTimer _debounce;
     private string? _lastSignature;            // what current.jpg shows; persisted so an app start doesn't rewrite the picture
     private bool _busy, _again;
+    private Task _revert = Task.CompletedTask;  // a put-back in progress: a new write waits for it
     private BitmapSource? _systemImage;        // what Windows showed before Hanami, for the curtain when sync is off
 
     public string Status { get; private set; } = "off";
@@ -48,6 +50,8 @@ public sealed class LockScreenSync : IDisposable
     private string PreviousPath => Path.Combine(_paths.LockScreenDir, "previous.jpg");
     private string SignaturePath => Path.Combine(_paths.LockScreenDir, "signature.txt");
     public bool HasBackup => File.Exists(PreviousPath);
+    /// <summary>Hanami's picture is what Windows shows now: written and not put back yet (survives a crash, so the next start can undo it).</summary>
+    public bool OwnsPicture => _lastSignature is not null;
     public bool Enabled => _settings().Screensaver.SyncLockScreen;
 
     private static MonitorInfo? Primary() => Monitors.Enumerate().FirstOrDefault(m => m.IsPrimary);
@@ -58,7 +62,7 @@ public sealed class LockScreenSync : IDisposable
         if (!Enabled)
         {
             _debounce.Stop();
-            ForgetSignature();   // turning it on again must write once, whatever Windows shows by then
+            if (OwnsPicture) { _revert = RevertAsync("the option is off"); return; }   // sets the status and raises Changed itself
             if (Status != "off") { Status = "off"; Error = null; Changed?.Invoke(); }
             return;
         }
@@ -76,6 +80,8 @@ public sealed class LockScreenSync : IDisposable
         _busy = true;
         try
         {
+            await _revert;
+            if (!Enabled) return;
             var dark = _dark();
             var id = _settings().ScreensaverWallpaperFor(monitor.Key, dark);
             var still = id is null ? null : _library.LockStillPath(id);
@@ -142,7 +148,38 @@ public sealed class LockScreenSync : IDisposable
         Changed?.Invoke();
     }
 
-    /// <summary>Puts the picture the lock screen had before Hanami's first write back. The option should be off first; Hanami does not do this by itself.</summary>
+    /// <summary>
+    /// Puts the picture the lock screen had before Hanami's first write back, if Hanami's is what Windows shows. Used when the option is
+    /// turned off, when Hanami quits and at the start after a crash; never throws. With no copy to put back (Windows gave none) the
+    /// picture stays and Hanami forgets that it wrote it.
+    /// </summary>
+    private async Task<bool> RevertAsync(string why)
+    {
+        if (!OwnsPicture) return true;
+        if (!HasBackup)
+        {
+            Log.Info($"Lock screen: no previous picture to put back ({why}).");
+            ForgetSignature();
+            SetStatus(Enabled ? "idle" : "off");
+            return false;
+        }
+        Log.Info($"Lock screen: putting the previous picture back ({why}).");
+        return await RestoreAsync();
+    }
+
+    /// <summary>Hanami is closing: put the previous picture back (waits for it, at most a few seconds, and never throws).</summary>
+    public async Task RevertOnExitAsync()
+    {
+        try
+        {
+            _debounce.Stop();
+            var done = Task.WhenAll(_revert, RevertAsync("Hanami is closing"));
+            await Task.WhenAny(done, Task.Delay(TimeSpan.FromSeconds(3)));
+        }
+        catch (Exception ex) { Log.Warn($"Lock screen: could not put the previous picture back on exit: {ex.Message}"); }
+    }
+
+    /// <summary>Puts the picture the lock screen had before Hanami's first write back (the Restore button; also the revert above).</summary>
     public async Task<bool> RestoreAsync()
     {
         if (!HasBackup) return false;

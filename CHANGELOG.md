@@ -16,7 +16,7 @@ First public release. Hanami is a tray app for Windows 11 that puts a live wallp
 - **Live screensaver:** after a few idle minutes (plugged in) the wallpaper covers every monitor with a glass clock. A key press or
   click slides it away, or locks Windows if you ask it to.
 - **Matching lock screen (optional):** your Windows lock screen can show a still of the screensaver's wallpaper, with a
-  frame picker for videos. Hanami never changes it unless you turn this on, and can put your old picture back.
+  frame picker for videos. Hanami never changes it unless you turn this on, and puts your old picture back when you turn it off or quit Hanami.
 - **Battery-aware:** pause or reduce the wallpaper on battery, Energy Saver, or when a window is maximized or fullscreen.
 - **Export and import** your library and settings as a `.hanamipack` file to move to another PC.
 

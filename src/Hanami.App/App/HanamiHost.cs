@@ -135,8 +135,14 @@ public sealed class HanamiHost
     {
         if (_quitting) return;
         _quitting = true;
+        _ = QuitAsync();
+    }
+
+    private async Task QuitAsync()
+    {
         Log.Info("Quitting");
         _settingsWindow?.Close();
+        if (_lockSync is not null) await _lockSync.RevertOnExitAsync();   // the lock screen gets its previous picture back
         _pets?.Dispose();
         _theme?.Dispose();
         _lockSync?.Dispose();
