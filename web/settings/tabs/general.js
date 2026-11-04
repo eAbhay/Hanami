@@ -117,7 +117,7 @@ export function createGeneralTab(ctx) {
     const when = u.lastCheck ? `Last checked ${new Date(u.lastCheck).toLocaleString()}.` : "Not checked yet.";
     const msg = u.status === "checking" ? "Checking…"
       : u.status === "failed" ? u.error
-      : u.status === "available" ? `Version ${u.version} is available. ${when}`
+      : u.status === "available" ? (u.error ? `${u.error} Version ${u.version} is still available.` : `Version ${u.version} is available. ${when}`)
       : u.status === "downloading" ? `Updating to ${u.version}…`
       : u.status === "upToDate" ? `You're up to date. ${when}`
       : when;

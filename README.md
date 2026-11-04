@@ -10,7 +10,8 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 
 - **Requirements:** Windows 11 (64-bit). The WebView2 runtime Hanami draws with is built into Windows 11, so there is
   nothing else to install.
-- **Updating:** when Hanami tells you about a new version, press **Update** in Settings → General. It downloads the new exe over HTTPS,
+- **Updating:** when a new version is waiting, the tray icon and the General tab show a small dot until you update or skip it. Choose
+  **Update available: install x.y.z** at the top of the tray menu, or press **Update** in Settings → General. It downloads the new exe over HTTPS,
   checks its size and SHA-256 against the release's `Hanami.exe.sha256`, swaps it in and restarts Hanami; your settings and library are kept.
   If anything fails, Hanami keeps running and the banner offers **Open download page**. Or download the new `Hanami.exe` yourself and run it:
   it offers to replace the installed copy. What changed is in the [changelog](CHANGELOG.md).
@@ -102,8 +103,9 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 [Develop](#develop)). It uses the repo's `devroot/` folder and doesn't touch the registry or
 startup.
 
-**Updating:** Hanami tells you when a newer release is out (Settings → General → Updates; the check contacts GitHub and sends nothing
-else). Press **Update** and it downloads, verifies and installs the new version, then restarts. Or run a newer `Hanami.exe` from
+**Updating:** Hanami tells you when a newer release is out, with a dot on the tray icon and the General tab (the check contacts GitHub and
+sends nothing else). Choose **Update available: install x.y.z** in the tray menu or press **Update** in Settings → General, and it downloads,
+verifies and installs the new version, then restarts. Or run a newer `Hanami.exe` from
 anywhere: it offers to replace the installed copy, then restarts Hanami. Your settings and library are kept either way.
 
 **Moving to another PC:** Settings → Export / Import → choose items → *Export*. On the other

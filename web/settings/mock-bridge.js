@@ -504,7 +504,8 @@ export function createMockHost(post) {
       const u = state.update, cfg = state.settings.updates;
       u.status = "checking"; u.error = null; emitState();
       await sleep(600);
-      if (!mockOnline) { u.status = "failed"; u.error = "Couldn't reach GitHub. Check the connection."; emitState(); return snapshot(); }
+      // Like the host: a version already on offer stays on offer (and keeps its dot) when a later check fails.
+      if (!mockOnline) { u.status = u.version ? "available" : "failed"; u.error = "Couldn't reach GitHub. Check the connection."; emitState(); return snapshot(); }
       cfg.lastCheckUtc = u.lastCheck = new Date().toISOString();
       const version = cfg.channel === "beta" ? "0.3.0-beta.1" : "0.2.0";
       if (cfg.skippedVersion === version) { Object.assign(u, { status: "upToDate", version: null, notes: null, sizeBytes: null, url: null }); }
@@ -519,7 +520,7 @@ export function createMockHost(post) {
     skipUpdate: () => {
       const u = state.update;
       if (u.version) state.settings.updates.skippedVersion = u.version;
-      Object.assign(u, { status: "upToDate", version: null, notes: null, sizeBytes: null, url: null });
+      Object.assign(u, { status: "upToDate", version: null, notes: null, sizeBytes: null, url: null, error: null });
       emitState();
       return snapshot();
     },

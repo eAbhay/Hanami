@@ -37,6 +37,7 @@ public static partial class Win32
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern bool LockWorkStation();
+    [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr hIcon);
 
     /// <summary>Tick count (ms, wraps) of the last keyboard/mouse input in this session.</summary>
     public static uint LastInputTick()

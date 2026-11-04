@@ -3,6 +3,15 @@
 **Current scope (user's decision, 4 Nov 2026): round 8, phases A to E in order.** Round 7 below is finished except for
 what round 8 takes over; it stays for its Notes.
 
+## Round 9 — "update available" is hard to miss (ships as `0.1.1`)
+
+Code and docs done 4 Nov 2026; not pushed or tagged. **Open for the user:** re-show the balloon once after about 3 days if still pending (changes round 8's "one notification per version"; not built).
+Notes: the rule is in `Core/UpdateAttention`; tray in `App/TrayIcon` (`ShowUpdate`, `WithDot`) and `HanamiHost.OnUpdateChanged` / `InstallUpdateFromTray`; tab dot in `web/settings/app.js`.
+Differed from the brief: a failed **Check now** used to drop the offer, which would have removed the dots, so it now keeps the offer (status `available` + `error`). An automatic check finishing during a download no longer overwrites `downloading`. Added an "Updating Hanami" balloon when the tray click starts an install, because the click otherwise shows nothing.
+Checked in the dev copy with a local feed and a throttled asset server (wrong checksum, so no handover): dot on the icon, tooltip, menu items, newer version after a skip, failed check, tray install with progress in the menu, failure balloon, *View details*. Mock bridge: all tab dot states.
+Unverified: the download and failure tooltip lines on screen (unit-tested; only the "available" line was read back), a real tray-started install through to the restart, a tray click on a real release.
+Trap: Windows 11 puts Hanami's icon in the hidden-icons flyout unless the user pins it, so the dot is only seen on the taskbar once pinned. Hanami doesn't touch that setting.
+
 How to use this file (for a fresh chat, e.g. Sonnet):
 1. Read `CLAUDE.md`, then this file. In `docs/CONTRACTS.md`, read the sections your phase names and search it
    for any setting or message you change. Read `docs/TESTING.md` before testing.

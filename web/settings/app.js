@@ -267,6 +267,17 @@ async function boot() {
       svg(t.icon), h("span", t.label)));
   }
 
+  // The General tab's dot: on while a version is offered (the same rule as the tray icon's dot), until the user updates or skips.
+  const generalBtn = nav.querySelector('[data-tab="general"]');
+  const updateDot = h("span.nav-dot", { hidden: true, title: "Update available" });
+  generalBtn.append(updateDot);
+  ctx.onState((s) => {
+    const offered = !!s.update?.version;
+    updateDot.hidden = !offered;
+    if (offered) generalBtn.setAttribute("aria-label", `General, update ${s.update.version} available`);
+    else generalBtn.removeAttribute("aria-label");
+  });
+
   app.append(buildSidebar(nav), main);
 
   // One shared "<Effect> settings" drawer; tabs open it from an effect tile's gear.

@@ -10,7 +10,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Hanami</AssemblyName>
     <RootNamespace>Hanami</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Product>Hanami</Product>
     <Description>Live wallpapers, interactive effects and desktop companions</Description>
     <ApplicationIcon>Assets\hanami.ico</ApplicationIcon>

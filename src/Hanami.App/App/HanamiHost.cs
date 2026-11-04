@@ -27,6 +27,7 @@ public sealed class HanamiHost
     private LockScreenSync _lockSync = null!;
     private TrayIcon _tray = null!;
     private UpdateService _updates = null!;
+    private string _lastUpdateStatus = "idle";
     private ThemeWatch _theme = null!;
     private PetManager _pets = null!;
     private SettingsWindow? _settingsWindow;
@@ -67,7 +68,7 @@ public sealed class HanamiHost
 
         _theme = new ThemeWatch();
         _theme.Changed += () => _ui.BeginInvoke(OnThemeChanged);
-        _tray = new TrayIcon(OpenSettings, () => OpenSettingsTab("general"), () => _ = SetPausedAsync(!_store.Current.Paused), TogglePets, SetThemeMode, Quit);
+        _tray = new TrayIcon(OpenSettings, () => OpenSettingsTab("general"), InstallUpdateFromTray, () => _ = SetPausedAsync(!_store.Current.Paused), TogglePets, SetThemeMode, Quit);
         _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, IsDark, _library);
         _wallpapers.StatusChanged += OnStatusChanged;
         await _wallpapers.StartAsync();
@@ -229,8 +230,18 @@ public sealed class HanamiHost
 
     private void OnUpdateChanged()
     {
-        _tray.UpdateAvailable(_updates.Status == "available" ? _updates.Offer?.Version : null);
+        var (status, version) = (_updates.Status, _updates.Offer?.Version);
+        _tray.ShowUpdate(UpdateAttention.For(status, version, _updates.Progress));
+        if (status == "failed" && version is not null && _lastUpdateStatus != "failed") _tray.NotifyUpdateFailed(version, _updates.Error);
+        _lastUpdateStatus = status;
         BroadcastState();
+    }
+
+    /// <summary>The tray's "install" item: its click is the user's click, the same as the Update button.</summary>
+    private void InstallUpdateFromTray()
+    {
+        _ = _updates.InstallAsync();   // sets "downloading" before its first await; the rest reports through Changed
+        if (_updates.Status == "downloading" && _updates.Offer is { } offer) _tray.NotifyUpdateStarted(offer.Version);
     }
 
     private (Mode mode, string reason) SummaryMode()

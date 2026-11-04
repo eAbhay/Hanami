@@ -94,6 +94,7 @@ public sealed class UpdateService : IDisposable
         {
             var releases = await FetchAsync();
             _store.Patch(new JsonObject { ["updates"] = new JsonObject { ["lastCheckUtc"] = DateTime.UtcNow } });
+            if (Status == "downloading") return;   // the install was clicked during an automatic check: don't overwrite its status
             var offer = UpdatePolicy.PickRelease(releases, current, Settings.Channel);
             Log.Info(offer is null ? "Updates: up to date." : $"Updates: {offer.Version} is available.");
             Apply(offer);
@@ -101,7 +102,14 @@ public sealed class UpdateService : IDisposable
         catch (Exception ex)
         {
             Log.Warn($"Updates: check failed: {ex.Message}");
-            if (manual) { Offer = null; Fail(Describe(ex)); }   // a failed check leaves nothing to install
+            if (manual && Offer is null) Fail(Describe(ex));
+            else if (manual)
+            {
+                // The version found earlier is still on offer: its tray and tab dots stay until the user updates or skips.
+                Status = "available";
+                Error = Describe(ex);
+                Changed?.Invoke();
+            }
             else if (Status == "checking") { Status = before; Changed?.Invoke(); }
         }
         finally { _checking = false; }
@@ -173,6 +181,7 @@ public sealed class UpdateService : IDisposable
         _store.Patch(new JsonObject { ["updates"] = new JsonObject { ["skippedVersion"] = offer.Version } });
         Offer = null;
         Status = "upToDate";
+        Error = null;
         Changed?.Invoke();
     }
 

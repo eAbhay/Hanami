@@ -4,6 +4,13 @@ One section per version, newest first. The section for a version is used as that
 for people using Hanami, not for developers. The heading is just the version number (`## 0.1.0`, `## 0.2.0-beta.1`), and a tag
 without a matching section stops the release. Versions with a `-` (release candidates, betas) are prereleases.
 
+## 0.1.1
+
+- **Updates are harder to miss:** while a new version is waiting, the tray icon has a small dot and its tooltip names the version. The dot stays until you update or skip that version.
+- **Update from the tray:** the top of the tray menu now offers **Update available: install x.y.z**, which downloads and installs in one click. The tooltip shows the progress, and a notification tells you if it fails. **View details** opens Settings → General.
+- **Settings:** the General tab's button has a matching dot.
+- A failed **Check now** no longer hides a version Hanami has already found.
+
 ## 0.1.0
 
 First public release. Hanami is a tray app for Windows 11 that puts a live wallpaper behind your desktop icons.

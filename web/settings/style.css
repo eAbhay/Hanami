@@ -162,6 +162,9 @@ h1, h2 { margin: 0; font-family: var(--font-display); }
   animation: navbar-in 0.25s var(--ease);
 }
 .nav-item.active .ico { color: var(--accent); }
+/* An update is on offer. #E8366F is the tray icon's dot too (TrayIcon.WithDot). */
+.nav-dot { width: 8px; height: 8px; margin-left: auto; flex: none; border-radius: 50%; background: #E8366F; box-shadow: 0 0 0 2px color-mix(in srgb, #E8366F 25%, transparent); }
+.nav-dot[hidden] { display: none; }
 @keyframes navbar-in { from { transform: scaleY(0.2); opacity: 0; } }
 
 .spacer { flex: 1; min-height: 12px; }

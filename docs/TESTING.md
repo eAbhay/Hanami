@@ -9,7 +9,7 @@ in the running app. Use these recipes; they were all used during development and
 powershell -ExecutionPolicy Bypass -File tools\dev\quit.ps1
 dotnet build src\Hanami.App\Hanami.App.csproj -c Debug
 $env:HANAMI_DEBUG_PORT = "9333"     # enables the DevTools bridge below (dev mode only)
-Start-Process src\Hanami.App\bin\Debug\net10.0-windows\win-x64\Hanami.exe -ArgumentList "--dev"
+Start-Process src\Hanami.App\bin\Debug\net10.0-windows10.0.19041.0\win-x64\Hanami.exe -ArgumentList "--dev"
 ```
 
 - `--dev` uses `devroot/` as the install folder and serves `web/` live from the repo, so HTML/JS
@@ -84,6 +84,12 @@ confirm box's *Yes*), and dismiss the helper's final box (a Win32 `#32770` title
 `config/` and `Library/` are gone only for *delete*, and the shortcut, `HKCU\Software\Hanami`, the Uninstall key and the Run
 value are gone. Careful: this writes the real `HKCU\Software\Hanami` key (and removes the browser cache and, for *delete*,
 the log folder), so only do it when no real install is registered.
+
+### Tray menu and tooltip
+
+The tray icon is usually in the hidden-icons flyout, which is awkward to automate. To open the menu without touching the mouse, post the icon's own callback to Hanami's `WindowsForms10.Window.0*`
+windows: `PostMessage(hwnd, 0x800, 0, 0x205)`. Its items are UIA `MenuItem`s of the process (read `Name` and `IsEnabled`, click with `InvokePattern`); Esc closes it. While the flyout is open, the icon's UIA `Name` is its tooltip.
+To test a download without a handover, use `--update-feed` with assets from a local server whose `.sha256` doesn't match: it fails at the check, with the file deleted. Back up `devroot/config/settings.json` first (a check writes `updates`).
 
 ## 7. Browser-only checks
 

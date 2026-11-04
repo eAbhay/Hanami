@@ -347,11 +347,12 @@ type State = {
   theme: { active: "light" | "dark"; windows: "light" | "dark" };   // the theme in use (mode applied) · Windows' own
   update: {                     // see "Updates"
     status: "idle" | "checking" | "upToDate" | "available" | "downloading" | "failed";
-    version: string | null;     // the offered version, no leading "v" (status available/downloading, and failed after a download)
+    version: string | null;     // the offered version, no leading "v". Set from the moment it is offered until the user updates or skips, through
+                                // checking, downloading and failing; the General tab's dot and the tray's follow it. Null with status failed = a check failed with nothing on offer
     notes: string | null;       // the release notes, from the network: show as plain text only, never HTML
     sizeBytes: number | null; url: string | null;   // the Hanami.exe asset · the release page
     progress: number | null;    // 0–1 while downloading; 1 once the new version was started and Hanami is about to restart
-    error: string | null;       // why a manual check (or the install) failed
+    error: string | null;       // why a manual check or the install failed. A failed check with a version on offer: status stays available, with this set
     lastCheck: string | null;   // ISO time of the last successful check
   };
   screensaver: {
@@ -439,11 +440,19 @@ The newest wins. Nobody is offered a lower version: someone moving from Beta to 
 **When:** about 60 s after start (always, if `autoCheck` is on, because the answer isn't kept across restarts and an unchanged one is free),
 then a tick about hourly runs a check once 24 h have passed since `lastCheckUtc`. Never in `--dev` unless `--update-feed <url or file>` is
 given (see "Test feed" below for where it is honored), which swaps the address so the check can be tried with no real release. A failed *automatic* check only
-writes a log line; **Check now** shows the message in `update.error`.
-**Telling the user:** one tray notification per version (`updates.notifiedVersion`; clicking it opens the General tab), a lasting
-"Update to x.y.z" tray item while one is available, and a banner on the General tab with the notes, size, *Update* and
-*Skip this version*; while downloading it shows a progress bar, and after a failure the message with *Try again* and *Open download page*.
-A skip holds only for that version.
+writes a log line; **Check now** shows the message in `update.error`. Neither takes away a version already on offer.
+**Telling the user:** while a version is on offer (`Core/UpdateAttention`; `update.version` set), until the user updates or skips:
+- a dot on the tray icon, and "Update x.y.z available" first in its tooltip (progress or failure replaces that line, `UpdateAttention.For`);
+- at the top of the tray menu, a bold "Update available: install x.y.z", which starts the install at once and counts as the user's click, and "View details", which
+  opens the General tab. During a download the first item shows the progress and is disabled; after a failure it reads "Update failed: try x.y.z again";
+- a dot on the General tab's button in Settings;
+- a banner on the General tab with the notes, size, *Update* and *Skip this version*; while downloading it shows a progress bar, and after a failure the message with
+  *Try again* and *Open download page*.
+
+Balloons (Windows may hide them, and doesn't keep them in the notification center; clicking one opens the General tab): one per version when it is first offered
+(`updates.notifiedVersion`), one when an install started from the tray begins, and one each time an install fails.
+A skip holds only for that version: a newer one brings all of this back. The offer isn't kept across restarts, so after a start it returns with the first check, about 60 s later
+(with `autoCheck` off, only after **Check now**).
 The update choices belong to the install: importing a pack's settings keeps this PC's `updates`. The `SetupWindow` checkbox sets `updates.autoCheck`.
 
 **Installing** (`installUpdate`, only after the click; `UpdateService.InstallAsync`, pure parts in `Core/UpdateInstall`):
