@@ -3,6 +3,21 @@
 Live wallpapers for Windows 11 with interactive particle effects. It runs from the
 system tray as a single self-contained `.exe`.
 
+## Download
+
+Get `Hanami.exe` from the [latest release](https://github.com/eAbhay/Hanami/releases/latest) and run it. It asks where to
+install, copies itself there and lives in the tray. See [Install](#install) for what it does.
+
+- **Requirements:** Windows 11 (64-bit). The WebView2 runtime Hanami draws with is built into Windows 11, so there is
+  nothing else to install.
+- **Updating:** download the new `Hanami.exe` and run it. It offers to replace the installed copy, then restarts Hanami;
+  your settings and library are kept. What changed is in the [changelog](CHANGELOG.md).
+- **Windows SmartScreen:** the exe isn't code-signed, so Windows may say "Windows protected your PC" the first time. Choose
+  **More info → Run anyway**. To check you have the file the release published, compare the hash: running
+  `Get-FileHash .\Hanami.exe -Algorithm SHA256` in PowerShell should print the value in `Hanami.exe.sha256` on the same release page.
+
+![Hanami's settings window](docs/img/settings.jpg)
+
 - **Video, image or built-in animated scenes** play behind your desktop icons, one per monitor.
 - **Interactive effects** draw over the wallpaper: sakura petals, snow, autumn leaves, fireflies,
   rain, sparkles and flame embers. They react to the mouse (repel, attract, or a gust of wind),
@@ -97,7 +112,8 @@ Requires the .NET 10 SDK (`winget install Microsoft.DotNet.SDK.10`). ffmpeg is o
 only used by the asset scripts in `tools/`.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\build.ps1          # runs tests, then publishes dist\Hanami.exe
+powershell -ExecutionPolicy Bypass -File tools\build.ps1          # runs tests, then publishes dist\Hanami.exe and Hanami.exe.sha256
+powershell -ExecutionPolicy Bypass -File tools\build.ps1 -Version 0.2.0   # the same, stamped with that version (a release does this from its tag)
 dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj         # tests only
 ```
 
@@ -158,5 +174,7 @@ tools/             build, icon and demo-asset scripts, CDP helper
 Hanami is released under the [MIT licence](LICENSE).
 
 - The bundled clock font [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) is under the SIL Open Font License (`web/wallpaper/fonts/OFL.txt`).
+- Licences and credits for everything else Hanami includes (.NET, WebView2, Shimeji-ee's frame timings) are in
+  [THIRD-PARTY-NOTICES.md](web/THIRD-PARTY-NOTICES.md), which is also built into the exe and shown in Settings → General.
 - Pet packs and wallpapers you import are not part of Hanami: they keep their authors' licences, so check the terms of each pack before sharing it.
 - Hanami reads Shimeji image sets but contains no code from Shimeji-ee; its frame table is a record of that project's default frame numbering.

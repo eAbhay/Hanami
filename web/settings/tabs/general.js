@@ -14,6 +14,23 @@ export function createGeneralTab(ctx) {
   const libraryPath = h("code.path");
   const version = h("span");
 
+  // Open-source notices: web/THIRD-PARTY-NOTICES.md (built into the exe), fetched the first time the section opens.
+  const noticesText = h("pre.notices-text", "Loading…");
+  const notices = h("details.card.pad.notices", h("summary", "Open-source notices"), noticesText);
+  let noticesLoaded = false;
+  notices.addEventListener("toggle", async () => {
+    if (!notices.open || noticesLoaded) return;
+    noticesLoaded = true;
+    try {
+      const res = await fetch(new URL("../../THIRD-PARTY-NOTICES.md", import.meta.url));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      noticesText.textContent = await res.text();
+    } catch {
+      noticesLoaded = false;
+      noticesText.textContent = "Couldn't load the notices. They are also in THIRD-PARTY-NOTICES.md in the Hanami repository.";
+    }
+  });
+
   const copyBtn = (getText) => h("button.icon-btn", { type: "button", title: "Copy path",
     onclick: async () => {
       try { await navigator.clipboard.writeText(getText()); ctx.toast("Path copied", "success", 1600); }
@@ -61,7 +78,8 @@ export function createGeneralTab(ctx) {
       row("trash", "Remove Hanami from this PC", "Removes the app, its Start menu shortcut and the start-with-Windows entry. You choose whether to keep or delete your wallpapers, pet packs and settings.", uninstallBtn)),
     h("div.card.pad.about",
       h("div.about-brand", h("span", { html: LOGO }), h("div", h("div.about-name", "Hanami"), h("div.muted", "Version ", version))),
-      quitBtn));
+      quitBtn),
+    notices);
 
   function update(s) {
     startup.set(s.settings.startWithWindows);

@@ -954,3 +954,7 @@ code.path {
 .row-actions { display: flex; align-items: center; gap: 6px; }
 .pet-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .pet-chips .chip { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: var(--violet-soft, rgba(125, 99, 214, 0.18)); color: var(--text-2, inherit); }
+
+/* General tab: open-source notices */
+.notices > summary { cursor: pointer; font-weight: 500; font-size: 13px; }
+.notices-text { margin: 10px 0 0; max-height: 280px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 var(--font-mono, ui-monospace, Consolas, monospace); color: var(--text-2); }

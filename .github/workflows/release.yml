@@ -1,0 +1,61 @@
+# Builds Hanami.exe on a clean Windows runner.
+#  - Pushing a tag like v0.1.0 runs the tests, builds the exe stamped with that version, and publishes a GitHub release named
+#    after the tag, with the matching CHANGELOG.md section as notes and Hanami.exe + Hanami.exe.sha256 attached.
+#  - "Run workflow" (workflow_dispatch) is a dry run: same tests and build, uploaded as a workflow artifact, no release.
+# tools\build.ps1 runs the tests first, so a failing test means no exe and no release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # only the release step uses it
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9   # v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test and build
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { ./tools/build.ps1 -Version $env:GITHUB_REF_NAME }
+          else { ./tools/build.ps1 }
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: Hanami-build-${{ github.run_number }}   # ref names can contain "/", which artifact names forbid
+          path: |
+            dist/Hanami.exe
+            dist/Hanami.exe.sha256
+          if-no-files-found: error
+
+      - name: Release notes from CHANGELOG.md
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $notes = @(); $inside = $false
+          foreach ($line in Get-Content CHANGELOG.md) {
+            if ($line -match '^## ') { if ($inside) { break }; $inside = ($line -match ('^## ' + [regex]::Escape($version) + '\s*$')); continue }
+            if ($inside) { $notes += $line }
+          }
+          $text = ($notes -join "`n").Trim()
+          if ($text -eq '') { throw "CHANGELOG.md has no '## $version' section (or it is empty)" }
+          Set-Content release-notes.md $text -Encoding utf8
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME dist/Hanami.exe dist/Hanami.exe.sha256 `
+            --title $env:GITHUB_REF_NAME --notes-file release-notes.md --verify-tag
