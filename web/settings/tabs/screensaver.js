@@ -2,6 +2,7 @@
 import { h, svg, toggle, dialog } from "../util.js";
 import { scopeSelector } from "../scope.js";
 import { pageHeader, card, row, wallpaperPicker, effectPicker, createClockCard, slotSwitch } from "../components/index.js";
+import { createLockFrame } from "../components/lockFrame.js";
 
 export function createScreensaverTab(ctx) {
   const save = (patch) => ctx.mutate("updateSettings", { screensaver: patch }).catch(() => {});
@@ -70,14 +71,16 @@ export function createScreensaverTab(ctx) {
   // A still of the primary monitor's screensaver wallpaper as the Windows lock screen picture. Off by default.
   const syncToggle = toggle(false, onSyncToggle, "Match the lock screen to the screensaver");
   const lockStatus = h("p.field-hint.lock-status");
+  const lockFrame = createLockFrame(ctx);   // which frame of a video the lock screen shows
   const restoreBtn = h("button.btn.small", { type: "button", hidden: true, onclick: restoreLock }, svg("reset"), h("span", "Restore my previous picture"));
   const settingsBtn = h("button.btn.subtle.small", { type: "button", onclick: () => ctx.call("openLockScreenSettings").catch((e) => ctx.toastError(e)) },
     h("span", "Lock screen settings…"));
   const lockCard = card("Lock screen", null,
     row("lock", "Match the lock screen to the screensaver",
-      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame near the start, the same each time, and it updates when the wallpaper or the theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Your lock screen must be set to Picture, not Windows Spotlight.",
+      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame, near the start unless you pick another below, and it stays the same until you change it or the wallpaper or theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Your lock screen must be set to Picture, not Windows Spotlight.",
       syncToggle),
     lockStatus,
+    lockFrame.el,
     h("div.slot-switch", restoreBtn, settingsBtn));
 
   async function onSyncToggle(on) {
@@ -144,7 +147,13 @@ export function createScreensaverTab(ctx) {
       : lock.status === "waiting" ? "Preparing the picture for this wallpaper…"
       : cfg.syncLockScreen ? "Waiting to update" : "";
     restoreBtn.hidden = !lock.hasBackup || !!cfg.syncLockScreen;
+    lockFrame.update(s);
   }
 
-  return { el, update, hide: backgrounds.hide };
+  return {
+    el,
+    update,
+    show: () => lockFrame.setActive(true),
+    hide: () => { backgrounds.hide(); lockFrame.setActive(false); },   // hiding unloads the preview video
+  };
 }

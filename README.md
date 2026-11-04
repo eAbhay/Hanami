@@ -49,7 +49,7 @@ system tray as a single self-contained `.exe`.
   changes Windows power settings, and closing the lid always follows your Windows lid setting.
 - **Matching lock screen (optional).** Screensaver → *Lock screen*: sets your Windows lock screen to a still picture of the
   screensaver's wallpaper (no clock; Windows can't show a live wallpaper there). Hanami saves that picture ahead of time, when
-  you import or pick the wallpaper (for a video, one frame near the start, the same every time), so nothing flashes on screen
+  you import or pick the wallpaper (for a video, one frame near the start, or the frame you choose with the slider in that card), so nothing flashes on screen
   when the lock screen is updated; it changes when the wallpaper or the theme changes, not each time the screensaver starts.
   Off by default. It needs the lock screen set to *Picture* in Windows (Windows Spotlight
   overrides it, and apps can't switch Spotlight). Hanami keeps a copy of your previous picture and never puts it back by itself:

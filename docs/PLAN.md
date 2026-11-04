@@ -103,14 +103,18 @@ Notes: the user confirmed on the real desktop (4 Nov 2026) that the flash is gon
 
 Read: `web/settings/tabs/screensaver.js` (the Lock screen card), `web/settings/lockstills.js`, `web/settings/style.css` (existing slider rows).
 
-- [ ] 2.1 **Contract:** `lockFrameSec` is exposed on `WallpaperInfo`; document the picker.
-- [ ] 2.2 In the Lock screen card, when sync is on and the primary monitor's screensaver wallpaper is a **video**: a live `<video>` preview (shown with the wallpaper's fit, primary monitor's aspect), a range slider over its duration, and **Use this frame** / **Reset**.
+- [x] 2.1 **Contract:** `lockFrameSec` is exposed on `WallpaperInfo`; document the picker.
+- [x] 2.2 In the Lock screen card, when sync is on and the primary monitor's screensaver wallpaper is a **video**: a live `<video>` preview (shown with the wallpaper's fit, primary monitor's aspect), a range slider over its duration, and **Use this frame** / **Reset**.
       Dragging seeks, dropping pending seeks so it stays smooth on 4K. Save only on the button: a full-resolution draw plus `saveLockStill {frameSec}`, which triggers a refresh. For images and built-in scenes, show the picture with no slider.
-- [ ] 2.3 Light and dark: the picker follows the wallpaper the current theme uses. Frames are per wallpaper, so nothing else to store.
-- [ ] 2.4 Unload the preview `<video>` when the tab or card goes away (`thumbs.js` shows how), so a 4K decode doesn't run in the background.
+- [x] 2.3 Light and dark: the picker follows the wallpaper the current theme uses. Frames are per wallpaper, so nothing else to store.
+- [x] 2.4 Unload the preview `<video>` when the tab or card goes away (`thumbs.js` shows how), so a 4K decode doesn't run in the background.
 - [ ] 2.5 Mock bridge support. Check in the browser (mock) and the dev app. With the user: pick a frame, Win+L. Commit.
 
-Notes:
+Notes: 2.5 is left unticked: the browser (mock) check is done, the real Win+L check is still for the user.
+- New `web/settings/components/lockFrame.js` (created from the Screensaver tab, which now has `show`/`hide` to load/unload the preview) and `makeLockStill`, `lockWallpaperId`, `primarySize`, `lockFit` exported from `lockstills.js`. No host change was needed: `lockStill.frameSec` was already in `WallpaperInfo` (phase 1).
+- Checked in the browser on the mock with a real local video: starts on the default frame, drag seeks (pending seeks dropped), *Use this frame* saves `frameSec`, *Reset* saves without it, leaving the tab unloads the `<video>`, image and built-in show a picture without a slider.
+- Not checked on the real host: turning sync on in the dev app writes the real lock screen. Try: Screensaver tab, pick a frame, *Use this frame*, Win+L.
+- Trap: seeking only works on a server that supports HTTP Range. `python -m http.server` doesn't, so a browser check of this needs a Range-capable server (WebView2's virtual host is fine).
 
 ## Phase 3 — First GitHub release (on hold until the user asks)
 
