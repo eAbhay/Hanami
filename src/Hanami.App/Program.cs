@@ -51,7 +51,9 @@ public static class Program
         using var quitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, Installer.QuitEventName);
 
         var openSettings = args.Contains("--first-run") || (!args.Contains("--startup") && !args.Contains("--updated"));
-        var host = new HanamiHost(paths, openSettings);
+        var feedIndex = Array.IndexOf(args, "--update-feed");   // dev only: UpdateService ignores it elsewhere
+        var updateFeed = feedIndex >= 0 && feedIndex + 1 < args.Length ? args[feedIndex + 1] : null;
+        var host = new HanamiHost(paths, openSettings, updateFeed);
         StartSignalListener(showEvent, app.Dispatcher, host.OpenSettings);
         StartSignalListener(quitEvent, app.Dispatcher, host.Quit);
 

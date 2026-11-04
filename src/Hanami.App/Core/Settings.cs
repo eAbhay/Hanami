@@ -43,6 +43,9 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; } = true;
     public bool Paused { get; set; }
 
+    /// <summary>Update checks. Missing in older files, which simply get the defaults.</summary>
+    public UpdateSettings Updates { get; set; } = new();
+
     public Assignment AssignmentFor(string monitorKey) =>
         !SameOnAllMonitors && Assignments.TryGetValue(monitorKey, out var a) ? a : Assignments["*"];
 
@@ -190,6 +193,24 @@ public sealed class PowerSettings
     public Mode EnergySaver { get; set; } = Mode.Reduced;
     public Mode WhenMaximized { get; set; } = Mode.Paused;
     public Mode WhenFullscreen { get; set; } = Mode.Paused;
+}
+
+public sealed class UpdateSettings
+{
+    /// <summary>Check for updates by itself (about a minute after start, then daily). <c>Check now</c> always works.</summary>
+    public bool AutoCheck { get; set; } = true;
+
+    /// <summary>"stable" (normal releases only) or "beta" (those plus prereleases).</summary>
+    public string Channel { get; set; } = UpdatePolicy.Stable;
+
+    /// <summary>The version the user chose to skip; a newer one is offered again.</summary>
+    public string? SkippedVersion { get; set; }
+
+    /// <summary>When the last successful check finished.</summary>
+    public DateTime? LastCheckUtc { get; set; }
+
+    /// <summary>The version the user was last told about by a tray notification (once per version).</summary>
+    public string? NotifiedVersion { get; set; }
 }
 
 public sealed class PerformanceSettings
@@ -485,6 +506,11 @@ public sealed class SettingsStore
         s.SettingsVersion = AppSettings.CurrentVersion;
         s.Power ??= new();
         s.Performance ??= new();
+        s.Updates ??= new();
+        s.Updates.Channel = UpdatePolicy.NormalizeChannel(s.Updates.Channel);
+        if (string.IsNullOrWhiteSpace(s.Updates.SkippedVersion)) s.Updates.SkippedVersion = null;
+        if (string.IsNullOrWhiteSpace(s.Updates.NotifiedVersion)) s.Updates.NotifiedVersion = null;
+        if (s.Updates.LastCheckUtc is { } last) s.Updates.LastCheckUtc = last.ToUniversalTime();
         s.Screensaver.IdleMinutes = Math.Clamp(s.Screensaver.IdleMinutes, 1, 120);
         s.Screensaver.StopAfterHours = Math.Clamp(s.Screensaver.StopAfterHours, 0, 48);
         s.Power.LowBatteryThreshold = Math.Clamp(s.Power.LowBatteryThreshold, 0, 100);

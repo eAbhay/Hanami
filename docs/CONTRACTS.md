@@ -176,6 +176,10 @@ Events: host posts `{event: "<name>", data}`.
 | `getFonts` | – | `{bundled: FontInfo[], system: string[], imported: FontInfo[]}` (`system` = installed family names, sorted; the bundled entry has `id: ""`) |
 | `importFont` | – (file dialog: .ttf .otf .woff .woff2; copied to `Library/fonts/<id>`) | `{imported: FontInfo}` or `{cancelled: true}` |
 | `deleteFont` | `{id}` (if it is the selected clock font, `clock.font` resets to null) | `State` |
+| `checkForUpdates` | – (a manual check: always runs, even with `autoCheck` off; a failure is reported in `update.error`, not thrown) | `State` |
+| `installUpdate` | – (download, verify, swap and restart; **until the download phase exists it opens the release page**) | `State` |
+| `skipUpdate` | – (the offered version is not offered or announced again; a newer one is) | `State` |
+| `openUpdatePage` | – (opens the offered release's page in the browser; only an `https` link) | `{ok: true}` |
 | `uninstall` | – (the host shows a native dialog: **Keep my data** / **Delete my data too** (asks again) / Cancel; unavailable in the dev copy) | `{started: true}` (the app then quits and a helper removes it) or `{cancelled: true}` |
 | `quit` | – | – |
 
@@ -302,6 +306,13 @@ type Settings = {
   // Items whose pack is gone are dropped on load; bad ids and duplicate item ids are repaired.
   startWithWindows: boolean;    // default true
   paused: boolean;              // manual pause from tray/UI, default false
+  updates: {                    // see "Updates"; files without it get these defaults (no settings migration)
+    autoCheck: boolean;         // default true; off stops automatic checks only, "Check now" always works
+    channel: "stable" | "beta"; // default "stable"; anything else reads as stable
+    skippedVersion: string | null;   // the version the user skipped; a newer one is offered again
+    lastCheckUtc: string | null;     // ISO time of the last successful check
+    notifiedVersion: string | null;  // the version the tray last announced (once per version)
+  };
 };
 
 type ClockSettings = {          // the screensaver clock of one wallpaper (looks[id].screensaver.clock)
@@ -330,6 +341,15 @@ type State = {
   wallpapers: WallpaperInfo[];                              // builtins first
   petPacks: PetPackInfo[];
   theme: { active: "light" | "dark"; windows: "light" | "dark" };   // the theme in use (mode applied) · Windows' own
+  update: {                     // see "Updates"
+    status: "idle" | "checking" | "upToDate" | "available" | "downloading" | "failed";
+    version: string | null;     // the offered version, no leading "v" (status available/downloading)
+    notes: string | null;       // the release notes, from the network: show as plain text only, never HTML
+    sizeBytes: number | null; url: string | null;   // the Hanami.exe asset · the release page
+    progress: number | null;    // 0–1 while downloading
+    error: string | null;       // why a manual check (or the install) failed
+    lastCheck: string | null;   // ISO time of the last successful check
+  };
   screensaver: {
     active: boolean;            // showing right now
     status: string;             // human-readable, e.g. "Starts after 2 min idle", "Off on battery",
@@ -401,6 +421,25 @@ picture stays and Hanami forgets it wrote it. After a crash with the option stil
 succeeds, Spotlight still shows), and an app can't switch Spotlight off or on, so the user must set the lock screen to *Picture* in Windows; the
 confirm dialog says so. With `requireSignIn`, the sign-in curtain under the sliding
 screensaver shows `current.jpg` (sync on) or the picture the lock screen had at start (sync off), else black.
+
+### Updates
+
+Hanami finds out about new releases by itself and never installs one without a click. `App/UpdateService` asks
+`GET https://api.github.com/repos/eAbhay/Hanami/releases?per_page=30` (the list, not `/releases/latest`, which can't see prereleases) with a
+`User-Agent` and `If-None-Match` (an unchanged answer, a 304, is free and doesn't count against the 60 requests an hour limit), 20 s timeout.
+It sends nothing about the user. No releases = up to date. **Frozen once `v0.1.0` is out** (old copies depend on them): the repo's releases
+URL, the asset names `Hanami.exe` and `Hanami.exe.sha256`, the checksum format and the `--apply-update` flag.
+**Which release** (`Core/UpdatePolicy.PickRelease`, versions compared as semver with prerelease rules, `Core/SemVer`): not a draft, a tag that
+parses, not a prerelease on Stable (a tag with `-` counts as one even if GitHub didn't flag it), both assets present, and newer than this copy.
+The newest wins. Nobody is offered a lower version: someone moving from Beta to Stable stays put until Stable passes them.
+**When:** about 60 s after start (always, if `autoCheck` is on, because the answer isn't kept across restarts and an unchanged one is free),
+then a tick about hourly runs a check once 24 h have passed since `lastCheckUtc`. Never in `--dev` unless `--update-feed <url or file>` is
+given (dev only; ignored elsewhere), which swaps the address so the check can be tried with no real release. A failed *automatic* check only
+writes a log line; **Check now** shows the message in `update.error`.
+**Telling the user:** one tray notification per version (`updates.notifiedVersion`; clicking it opens the General tab), a lasting
+"Update to x.y.z" tray item while one is available, and a banner on the General tab with the notes, size, *Open release page* and
+*Skip this version*. A skip holds only for that version.
+The update choices belong to the install: importing a pack's settings keeps this PC's `updates`. The `SetupWindow` checkbox sets `updates.autoCheck`.
 
 ### Desktop pets
 

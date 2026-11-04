@@ -11,8 +11,9 @@ public sealed class TrayIcon : IDisposable
     private readonly WinForms.ToolStripMenuItem _petsItem;
     private readonly WinForms.ToolStripMenuItem _theme;
     private readonly WinForms.ToolStripSeparator _themeSep = new();
+    private readonly WinForms.ToolStripMenuItem _updateItem;
 
-    public TrayIcon(Action openSettings, Action togglePause, Action togglePets, Action<string> setThemeMode, Action quit)
+    public TrayIcon(Action openSettings, Action openUpdate, Action togglePause, Action togglePets, Action<string> setThemeMode, Action quit)
     {
         using var stream = typeof(TrayIcon).Assembly.GetManifestResourceStream("hanami.ico")!;
         _status = new WinForms.ToolStripMenuItem("Running") { Enabled = false };
@@ -20,6 +21,8 @@ public sealed class TrayIcon : IDisposable
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add(new WinForms.ToolStripMenuItem("Open Hanami", null, (_, _) => openSettings()) { Font = new System.Drawing.Font(menu.Font, System.Drawing.FontStyle.Bold) });
         menu.Items.Add(_status);
+        _updateItem = new WinForms.ToolStripMenuItem("Update", null, (_, _) => openUpdate()) { Visible = false };
+        menu.Items.Add(_updateItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add(_pause);
         _petsItem = new WinForms.ToolStripMenuItem("Hide pets", null, (_, _) => togglePets()) { Visible = false };
@@ -40,7 +43,19 @@ public sealed class TrayIcon : IDisposable
             Visible = true,
         };
         _icon.MouseClick += (_, e) => { if (e.Button == WinForms.MouseButtons.Left) openSettings(); };
+        _icon.BalloonTipClicked += (_, _) => openUpdate();   // the only balloon Hanami shows is the update one
     }
+
+    /// <summary>"Update to x.y.z" stays in the menu while an update is available (null hides it).</summary>
+    public void UpdateAvailable(string? version)
+    {
+        _updateItem.Visible = version is not null;
+        if (version is not null) _updateItem.Text = $"Update to {version}";
+    }
+
+    /// <summary>The once-per-version notification; clicking it opens the update in the settings window.</summary>
+    public void NotifyUpdate(string version) =>
+        _icon.ShowBalloonTip(10_000, "Hanami update available", $"Version {version} is ready. Click to see what's new.", WinForms.ToolTipIcon.Info);
 
     /// <summary>"Hide pets / Show pets" (this session only) exists while any pet is set up.</summary>
     public void UpdatePets(bool any, bool hidden)

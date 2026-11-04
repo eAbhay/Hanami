@@ -12,6 +12,9 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
   nothing else to install.
 - **Updating:** download the new `Hanami.exe` and run it. It offers to replace the installed copy, then restarts Hanami;
   your settings and library are kept. What changed is in the [changelog](CHANGELOG.md).
+- **Update checks:** by default Hanami asks GitHub's public releases list for a newer version about once a day and tells you in the tray;
+  it never installs anything without your click. That request is all it sends: nothing about you or your PC. Turn it off, or
+  switch between **Stable** and **Beta** (which also offers early releases), in Settings → General → Updates.
 - **Windows SmartScreen:** the exe isn't code-signed, so Windows may say "Windows protected your PC" the first time. Choose
   **More info → Run anyway**. To check you have the file the release published, compare the hash: running
   `Get-FileHash .\Hanami.exe -Algorithm SHA256` in PowerShell should print the value in `Hanami.exe.sha256` on the same release page.
@@ -98,7 +101,8 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 startup.
 
 **Updating:** run a newer `Hanami.exe` from anywhere. It offers to replace the installed copy,
-then restarts Hanami. Your settings and library are kept.
+then restarts Hanami. Your settings and library are kept. Hanami also tells you when a newer release is out (Settings → General →
+Updates; the check contacts GitHub and sends nothing else).
 
 **Moving to another PC:** Settings → Export / Import → choose items → *Export*. On the other
 PC, install Hanami and use *Import pack*.

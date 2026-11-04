@@ -958,3 +958,15 @@ code.path {
 /* General tab: open-source notices */
 .notices > summary { cursor: pointer; font-weight: 500; font-size: 13px; }
 .notices-text { margin: 10px 0 0; max-height: 280px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 var(--font-mono, ui-monospace, Consolas, monospace); color: var(--text-2); }
+
+/* Update banner (General tab). Notes come from the network and are only ever shown as text. */
+.update-banner { display: flex; flex-direction: column; gap: 6px; border-color: var(--accent, #d58ab8); }
+.update-banner[hidden] { display: none; }
+.update-title { font: 600 17px/1.2 var(--font-display); }
+.update-meta { color: var(--text-2); font-size: 12.5px; }
+.update-notes {
+  margin: 4px 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  font: 12.5px/1.5 var(--mono); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+}
+.update-notes[hidden] { display: none; }
+.update-actions { display: flex; gap: 8px; margin-top: 4px; }

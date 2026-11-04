@@ -15,6 +15,7 @@ public sealed class HanamiHost
 {
     private readonly AppPaths _paths;
     private readonly bool _openSettingsOnStart;
+    private readonly string? _updateFeed;
     private readonly Dispatcher _ui = Dispatcher.CurrentDispatcher;
     private SettingsStore _store = null!;
     private Library _library = null!;
@@ -25,16 +26,18 @@ public sealed class HanamiHost
     private bool _petsSawScreensaver;
     private LockScreenSync _lockSync = null!;
     private TrayIcon _tray = null!;
+    private UpdateService _updates = null!;
     private ThemeWatch _theme = null!;
     private PetManager _pets = null!;
     private SettingsWindow? _settingsWindow;
     private DispatcherTimer? _displayDebounce;
     private bool _quitting;
 
-    public HanamiHost(AppPaths paths, bool openSettingsOnStart)
+    public HanamiHost(AppPaths paths, bool openSettingsOnStart, string? updateFeed = null)
     {
         _paths = paths;
         _openSettingsOnStart = openSettingsOnStart;
+        _updateFeed = updateFeed;
     }
 
     public async Task StartAsync()
@@ -64,7 +67,7 @@ public sealed class HanamiHost
 
         _theme = new ThemeWatch();
         _theme.Changed += () => _ui.BeginInvoke(OnThemeChanged);
-        _tray = new TrayIcon(OpenSettings, () => _ = SetPausedAsync(!_store.Current.Paused), TogglePets, SetThemeMode, Quit);
+        _tray = new TrayIcon(OpenSettings, () => OpenSettingsTab("general"), () => _ = SetPausedAsync(!_store.Current.Paused), TogglePets, SetThemeMode, Quit);
         _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, IsDark, _library);
         _wallpapers.StatusChanged += OnStatusChanged;
         await _wallpapers.StartAsync();
@@ -80,6 +83,10 @@ public sealed class HanamiHost
         _pets = new PetManager(_petLibrary, () => _store.Current, () => ModeResolver.Resolve(_store.Current, _wallpapers.Power, default, _wallpapers.SessionLocked).Mode, () => OpenSettingsTab("pets"));
         _pets.Changed += OnStatusChanged;
         _pets.Sync();
+        _updates = new UpdateService(_paths, _store, _updateFeed);
+        _updates.Changed += OnUpdateChanged;
+        _updates.Announce += offer => _tray.NotifyUpdate(offer.Version);
+        _updates.Start();
         OnStatusChanged();
 
         SystemEvents.DisplaySettingsChanged += (_, _) => _ui.BeginInvoke(ScheduleRebuild);
@@ -145,6 +152,7 @@ public sealed class HanamiHost
         if (_lockSync is not null) await _lockSync.RevertOnExitAsync();   // the lock screen gets its previous picture back
         _pets?.Dispose();
         _theme?.Dispose();
+        _updates?.Dispose();
         _lockSync?.Dispose();
         _screensaver?.Dispose();
         _wallpapers?.Dispose();
@@ -219,6 +227,12 @@ public sealed class HanamiHost
         BroadcastState();
     }
 
+    private void OnUpdateChanged()
+    {
+        _tray.UpdateAvailable(_updates.Status == "available" ? _updates.Offer?.Version : null);
+        BroadcastState();
+    }
+
     private (Mode mode, string reason) SummaryMode()
     {
         var modes = _wallpapers.Modes.Values.ToList();
@@ -266,6 +280,7 @@ public sealed class HanamiHost
         ["wallpapers"] = Json.ToNode(_library.List()),
         ["petPacks"] = Json.ToNode(_petLibrary.List()),
         ["screensaver"] = ScreensaverState(),
+        ["update"] = _updates?.ToState(),
         ["theme"] = new JsonObject
         {
             ["active"] = IsDark() ? ThemeSettings.Dark : ThemeSettings.Light,
@@ -419,6 +434,22 @@ public sealed class HanamiHost
                 if (!Uninstaller.PromptAndStart(_settingsWindow, _paths.InstallDir)) return new JsonObject { ["cancelled"] = true };
                 _ = _ui.BeginInvoke(Quit);   // the helper waits for this copy to exit, then removes it
                 return new JsonObject { ["started"] = true };
+
+            case "checkForUpdates":
+                await _updates.CheckAsync(manual: true);
+                return BuildState();
+
+            case "installUpdate":
+                _updates.OpenPage();   // until the download-and-install phase, the release page is the way to update
+                return BuildState();
+
+            case "skipUpdate":
+                _updates.Skip();
+                return BuildState();
+
+            case "openUpdatePage":
+                _updates.OpenPage();
+                return new JsonObject { ["ok"] = true };
 
             case "quit":
                 _ = _ui.BeginInvoke(Quit);
@@ -619,6 +650,7 @@ public sealed class HanamiHost
         {
             // Keep this PC's own run state; take everything else from the pack.
             settings.Paused = _store.Current.Paused;
+            settings.Updates = _store.Current.Updates;   // update choices belong to this install
             foreach (var a in settings.Assignments.Values)
             {
                 if (a.WallpaperId is { } wid && !_library.Exists(wid)) a.WallpaperId = "builtin:twilight";

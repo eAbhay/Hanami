@@ -154,6 +154,7 @@ function initialState() {
       screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, syncLockScreen: false, stopAfterHours: 0 },
       startWithWindows: true,
       paused: false,
+      updates: { autoCheck: true, channel: "stable", skippedVersion: null, lastCheckUtc: null },
     },
     monitors: [
       { key: MON1, name: "Built-in display", isPrimary: true,  width: 2560, height: 1600, scale: 1.5 },
@@ -165,6 +166,7 @@ function initialState() {
     // Windows' plugged-in timers (the real host reads them from the active power plan).
     screensaver: { active: false, status: "", windowsDisplayOffMinutes: 10, windowsSleepMinutes: 30, lockScreen: { status: "off", hasBackup: false } },
     theme: { active: "light", windows: "light" },
+    update: { status: "idle", version: null, notes: null, sizeBytes: null, url: null, progress: null, error: null, lastCheck: null },
     petPacks: [],
   };
 }
@@ -177,6 +179,7 @@ const defaultLook = () => ({
 
 export function createMockHost(post) {
   const state = initialState();
+  let mockOnline = true;
   const windowState = { [MON1]: null, [MON2]: null };   // null | "maximized" | "fullscreen"
   const failures = new Map();
   const importNames = [
@@ -495,6 +498,34 @@ export function createMockHost(post) {
 
     openLockScreenSettings: () => ({ ok: true }),
 
+    // The mock "GitHub" has 0.2.0 on Stable and 0.3.0-beta.1 on Beta; hanamiMock.setUpdateFeed(false) makes the next check fail.
+    checkForUpdates: async () => {
+      const u = state.update, cfg = state.settings.updates;
+      u.status = "checking"; u.error = null; emitState();
+      await sleep(600);
+      if (!mockOnline) { u.status = "failed"; u.error = "Couldn't reach GitHub. Check the connection."; emitState(); return snapshot(); }
+      cfg.lastCheckUtc = u.lastCheck = new Date().toISOString();
+      const version = cfg.channel === "beta" ? "0.3.0-beta.1" : "0.2.0";
+      if (cfg.skippedVersion === version) { Object.assign(u, { status: "upToDate", version: null, notes: null, sizeBytes: null, url: null }); }
+      else Object.assign(u, { status: "available", version, sizeBytes: 79_400_000, url: `https://github.com/eAbhay/Hanami/releases/tag/v${version}`,
+        notes: `What's new in ${version}
+- A made-up change
+- <b>Notes are shown as plain text</b>` });
+      emitState();
+      return snapshot();
+    },
+
+    skipUpdate: () => {
+      const u = state.update;
+      if (u.version) state.settings.updates.skippedVersion = u.version;
+      Object.assign(u, { status: "upToDate", version: null, notes: null, sizeBytes: null, url: null });
+      emitState();
+      return snapshot();
+    },
+
+    installUpdate: () => ({ ok: true }),
+    openUpdatePage: () => ({ ok: true }),
+
     previewScreensaver: () => {
       // Real host: shows it now, ending on input. Mock: "show" it for a few seconds.
       state.screensaver.active = true;
@@ -537,6 +568,7 @@ export function createMockHost(post) {
     setWindowsTheme(t) { state.theme.windows = t === "dark" ? "dark" : "light"; emitState(); },
     setWindowsTimers(displayOff, sleep) { Object.assign(state.screensaver, { windowsDisplayOffMinutes: displayOff, windowsSleepMinutes: sleep }); emitState(); },
     setWindowState(key, s) { windowState[key] = s; emitState(); },
+    setUpdateFeed(online) { mockOnline = !!online; },
     failNext(method, message = "Simulated host error") { failures.set(method, message); },
   };
   console.info("[Hanami] running with the mock bridge (no WebView2 host). See window.hanamiMock.");

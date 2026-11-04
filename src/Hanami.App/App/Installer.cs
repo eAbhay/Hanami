@@ -56,7 +56,7 @@ public static class Installer
         if (setup.ShowDialog() != true) return null;
         try
         {
-            Install(exe, setup.InstallDir, setup.StartWithWindows);
+            Install(exe, setup.InstallDir, setup.StartWithWindows, setup.CheckForUpdates);
         }
         catch (Exception ex)
         {
@@ -68,17 +68,20 @@ public static class Installer
         return null;
     }
 
-    private static void Install(string exe, string dir, bool startWithWindows)
+    private static void Install(string exe, string dir, bool startWithWindows, bool checkForUpdates)
     {
         Directory.CreateDirectory(dir);
         var paths = AppPaths.Installed(dir);
         File.Copy(exe, paths.ExePath, overwrite: true);
         Directory.CreateDirectory(paths.LibraryDir);
 
-        // Seed settings with the choice made in setup; a reinstall keeps the existing file.
+        // Seed settings with the choices made in setup; a reinstall keeps the rest of the existing file.
         var store = new SettingsStore(paths.ConfigPath);
-        if (!File.Exists(paths.ConfigPath) || store.Current.StartWithWindows != startWithWindows)
-            store.Patch(new System.Text.Json.Nodes.JsonObject { ["startWithWindows"] = startWithWindows });
+        var exists = File.Exists(paths.ConfigPath);
+        var patch = new System.Text.Json.Nodes.JsonObject();
+        if (!exists || store.Current.StartWithWindows != startWithWindows) patch["startWithWindows"] = startWithWindows;
+        if (!exists || store.Current.Updates.AutoCheck != checkForUpdates) patch["updates"] = new System.Text.Json.Nodes.JsonObject { ["autoCheck"] = checkForUpdates };
+        if (!exists || patch.Count > 0) store.Patch(patch);
 
         Registration.InstallDir = dir;
         Registration.SetStartWithWindows(startWithWindows, paths.ExePath);
@@ -132,9 +135,11 @@ public sealed class SetupWindow : Window
 {
     private readonly TextBox _folder;
     private readonly CheckBox _startup;
+    private readonly CheckBox _updates;
 
     public string InstallDir => _folder.Text.Trim();
     public bool StartWithWindows => _startup.IsChecked == true;
+    public bool CheckForUpdates => _updates.IsChecked == true;
 
     public SetupWindow(string defaultDir)
     {
@@ -170,6 +175,8 @@ public sealed class SetupWindow : Window
 
         _startup = new CheckBox { Content = "Start Hanami when I sign in to Windows", IsChecked = true, Margin = new Thickness(0, 16, 0, 0) };
         root.Children.Add(_startup);
+        _updates = new CheckBox { Content = "Tell me when updates are available (checks GitHub, sends nothing about you)", IsChecked = true, Margin = new Thickness(0, 8, 0, 0) };
+        root.Children.Add(_updates);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 24, 0, 0) };
         var install = new Button { Content = "Install", IsDefault = true, Padding = new Thickness(20, 6, 20, 6), Margin = new Thickness(0, 0, 8, 0) };

@@ -8,6 +8,24 @@ export function createGeneralTab(ctx) {
   const split = toggle(false, (v) => ctx.mutate("updateSettings", { theme: { split: v } }).catch(() => split.set(!v)), "Different wallpapers for light and dark mode");
   const mode = segmented([{ value: "system", label: "Follow Windows" }, { value: "light", label: "☀ Light" }, { value: "dark", label: "☾ Dark" }],
     "system", (v) => ctx.mutate("updateSettings", { theme: { mode: v } }).catch(() => {}), { ariaLabel: "Theme" });
+  const autoCheck = toggle(true, (v) => ctx.mutate("updateSettings", { updates: { autoCheck: v } }).catch(() => autoCheck.set(!v)), "Tell me when updates are available");
+  const channel = segmented([{ value: "stable", label: "Stable" }, { value: "beta", label: "Beta" }],
+    "stable", (v) => ctx.mutate("updateSettings", { updates: { channel: v } }).catch(() => {}), { ariaLabel: "Update channel" });
+  const checkBtn = h("button.btn", { type: "button", onclick: async () => {
+    checkBtn.disabled = true;
+    try { await ctx.mutate("checkForUpdates"); } catch (err) { ctx.toastError(err); }
+    finally { checkBtn.disabled = false; }
+  } }, svg("reset"), h("span", "Check now"));
+  const checkRow = row("reset", "Check for updates", null, checkBtn, { rule: true });
+  const checkStatus = h("div.row-sub");
+  checkRow.text.append(checkStatus);
+  // The banner: notes come from the network, so they are only ever set as text.
+  const bannerTitle = h("div.update-title");
+  const bannerMeta = h("div.update-meta");
+  const bannerNotes = h("pre.update-notes");
+  const openPage = h("button.btn.primary", { type: "button", onclick: () => ctx.call("openUpdatePage").catch((err) => ctx.toastError(err)) }, h("span", "Open release page"));
+  const skipBtn = h("button.btn", { type: "button", onclick: () => ctx.mutate("skipUpdate").catch((err) => ctx.toastError(err)) }, h("span", "Skip this version"));
+  const banner = h("div.card.pad.update-banner", { hidden: true }, bannerTitle, bannerMeta, bannerNotes, h("div.update-actions", openPage, skipBtn));
   const windowsNow = h("p.field-hint");
   const modeBox = h("div.field", mode, windowsNow);
   const installPath = h("code.path");
@@ -64,9 +82,14 @@ export function createGeneralTab(ctx) {
     h("div.row-actions", copyBtn(() => codeEl.textContent), extra));
 
   const el = h("section",
-    pageHeader("General", "Startup, storage and app info."),
+    pageHeader("General", "Startup, updates, storage and app info."),
+    banner,
     card(null, null,
       row("rocket", "Start with Windows", "Launch Hanami quietly in the tray when you sign in.", startup)),
+    card("Updates", null, h("div.rules",
+      row("download", "Tell me when updates are available", "Hanami asks GitHub for new releases about once a day. It sends nothing about you.", autoCheck, { rule: true }),
+      row("sparkles", "Channel", "Stable is for normal releases. Beta also includes early releases that may be rougher.", channel, { rule: true }),
+      checkRow)),
     card("Light and dark", null,
       row("moon", "Different wallpapers for light and dark mode", "Hanami switches with Windows' light/dark setting. Pick each one on the Wallpaper and Screensaver tabs.", split),
       modeBox),
@@ -81,8 +104,31 @@ export function createGeneralTab(ctx) {
       quitBtn),
     notices);
 
+  function updateUi(s) {
+    const u = s.update ?? {}, cfg = s.settings.updates ?? {};
+    autoCheck.set(cfg.autoCheck !== false);
+    channel.set(cfg.channel === "beta" ? "beta" : "stable");
+    checkBtn.disabled = u.status === "checking";
+    const when = u.lastCheck ? `Last checked ${new Date(u.lastCheck).toLocaleString()}.` : "Not checked yet.";
+    const msg = u.status === "checking" ? "Checking…"
+      : u.status === "failed" ? u.error
+      : u.status === "available" ? `Version ${u.version} is available. ${when}`
+      : u.status === "upToDate" ? `You're up to date. ${when}`
+      : when;
+    checkStatus.textContent = msg;
+    banner.hidden = u.status !== "available";
+    if (u.status === "available") {
+      bannerTitle.textContent = `Hanami ${u.version} is available`;
+      const mb = u.sizeBytes ? ` · ${(u.sizeBytes / 1e6).toFixed(1)} MB` : "";
+      bannerMeta.textContent = `You have ${s.version}${mb}`;
+      bannerNotes.textContent = u.notes || "";
+      bannerNotes.hidden = !u.notes;
+    }
+  }
+
   function update(s) {
     startup.set(s.settings.startWithWindows);
+    updateUi(s);
     split.set(s.settings.theme?.split);
     modeBox.hidden = !s.settings.theme?.split;
     mode.set(s.settings.theme?.mode ?? "system");
