@@ -14,13 +14,19 @@ public sealed class WallpaperManifest
     public int? Height { get; set; }
     public double? DurationSec { get; set; }
     public bool HasThumbnail { get; set; }
+    /// <summary>The video frame the lock picture shows (null = the default frame, the thumbnail time) and the fit it was drawn with; see "Lock screen" in docs/CONTRACTS.md.</summary>
+    public double? LockFrameSec { get; set; }
+    public string? LockFit { get; set; }
 }
 
 /// <summary>What the settings UI lists (WallpaperInfo in docs/CONTRACTS.md).</summary>
 public sealed record WallpaperInfo(
     string Id, string Name, string Type, bool Builtin, string? Src,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Thumbnail,
-    long SizeBytes, int? Width, int? Height, double? DurationSec, DateTime? CreatedAt);
+    long SizeBytes, int? Width, int? Height, double? DurationSec, DateTime? CreatedAt, LockStillInfo? LockStill = null);
+
+/// <summary>A saved lock picture: the fit it was drawn with and the video frame (null = default).</summary>
+public sealed record LockStillInfo(string Fit, double? FrameSec);
 
 /// <summary>What a wallpaper page renders (WallpaperRef in docs/CONTRACTS.md).</summary>
 public sealed record WallpaperRef(string Id, string Name, string Type, string? Src, string? Scene, string Fit = "cover");
@@ -38,6 +44,9 @@ public sealed class Library
 
     public string Root { get; }
     public string WallpapersDir => Path.Combine(Root, "wallpapers");
+
+    /// <summary>Where the built-in scenes' lock pictures live (<c>builtin-&lt;scene&gt;.jpg</c>); null = not wired (tests).</summary>
+    public string? BuiltinStillDir { get; set; }
 
     public Library(string root)
     {
@@ -59,7 +68,8 @@ public sealed class Library
     public List<WallpaperInfo> List()
     {
         var list = Builtins
-            .Select(b => new WallpaperInfo($"builtin:{b.Scene}", b.Name, "builtin", true, null, null, 0, null, null, null, null))
+            .Select(b => new WallpaperInfo($"builtin:{b.Scene}", b.Name, "builtin", true, null, null, 0, null, null, null, null,
+                File.Exists(LockStillPath($"builtin:{b.Scene}")) ? new LockStillInfo("cover", null) : null))
             .ToList();
         list.AddRange(Manifests().OrderByDescending(m => m.CreatedAt).Select(ToInfo));
         return list;
@@ -130,15 +140,47 @@ public sealed class Library
     public void SaveThumbnail(string id, string dataUrl, int? width, int? height, double? durationSec)
     {
         var m = RequireManifest(id);
-        var comma = dataUrl.IndexOf(',');
-        if (!dataUrl.StartsWith("data:image/", StringComparison.Ordinal) || comma < 0)
-            throw new ArgumentException("Expected an image data URL.");
-        File.WriteAllBytes(Path.Combine(DirOf(id), "thumb.jpg"), Convert.FromBase64String(dataUrl[(comma + 1)..]));
+        File.WriteAllBytes(Path.Combine(DirOf(id), "thumb.jpg"), DecodeImageDataUrl(dataUrl));
         m.HasThumbnail = true;
         m.Width = width ?? m.Width;
         m.Height = height ?? m.Height;
         m.DurationSec = durationSec ?? m.DurationSec;
         WriteManifest(m);
+    }
+
+    /// <summary>Where the lock picture of a wallpaper or built-in scene is (or would be) saved; null for an unknown scene or an unwired built-in folder.</summary>
+    public string? LockStillPath(string id)
+    {
+        if (!IsBuiltin(id)) return Path.Combine(DirOf(id), "lock.jpg");
+        var scene = id["builtin:".Length..];
+        return BuiltinStillDir is null || Builtins.All(b => b.Scene != scene) ? null : Path.Combine(BuiltinStillDir, $"builtin-{scene}.jpg");
+    }
+
+    /// <summary>Saves the lock picture (a JPEG data URL): written to a temp file, then moved. <paramref name="frameSec"/> null = the default frame.</summary>
+    public void SaveLockStill(string id, string dataUrl, double? frameSec, string? fit)
+    {
+        var bytes = DecodeImageDataUrl(dataUrl);
+        var path = LockStillPath(id) ?? throw new InvalidOperationException($"No lock picture for {id}.");
+        fit = fit is "cover" or "contain" or "fill" ? fit : "cover";
+        if (frameSec is { } f && (!double.IsFinite(f) || f < 0)) frameSec = null;
+        var manifest = IsBuiltin(id) ? null : RequireManifest(id);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temp = path + ".tmp";
+        File.WriteAllBytes(temp, bytes);
+        File.Move(temp, path, overwrite: true);
+        if (manifest is null) return;
+        manifest.LockFrameSec = frameSec;
+        manifest.LockFit = fit;
+        WriteManifest(manifest);
+    }
+
+    private static byte[] DecodeImageDataUrl(string dataUrl)
+    {
+        var comma = dataUrl.IndexOf(',');
+        if (!dataUrl.StartsWith("data:image/", StringComparison.Ordinal) || comma < 0)
+            throw new ArgumentException("Expected an image data URL.");
+        try { return Convert.FromBase64String(dataUrl[(comma + 1)..]); }
+        catch (FormatException) { throw new ArgumentException("The image data is not valid base64."); }
     }
 
     public long SizeOf(string id) =>
@@ -180,7 +222,8 @@ public sealed class Library
     private WallpaperInfo ToInfo(WallpaperManifest m) => new(
         m.Id, m.Name, m.Type, false, MediaUrl(m),
         m.HasThumbnail ? $"{Origin}/wallpapers/{Uri.EscapeDataString(m.Id)}/thumb.jpg?v={File.GetLastWriteTimeUtc(Path.Combine(DirOf(m.Id), "thumb.jpg")).Ticks}" : null,
-        SizeOf(m.Id), m.Width, m.Height, m.DurationSec, m.CreatedAt);
+        SizeOf(m.Id), m.Width, m.Height, m.DurationSec, m.CreatedAt,
+        File.Exists(Path.Combine(DirOf(m.Id), "lock.jpg")) ? new LockStillInfo(m.LockFit ?? "cover", m.LockFrameSec) : null);
 
     private static string MediaUrl(WallpaperManifest m) =>
         $"{Origin}/wallpapers/{Uri.EscapeDataString(m.Id)}/{Uri.EscapeDataString(m.File)}";

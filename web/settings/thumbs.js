@@ -29,7 +29,7 @@ export function ensureThumbnails(wallpapers, call, onDone) {
   }
 }
 
-function withTimeout(promise, what) {
+export function withTimeout(promise, what) {
   return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out`)), TIMEOUT_MS))]);
 }
 
@@ -44,7 +44,7 @@ function draw(source, sw, sh) {
   return c.toDataURL("image/jpeg", 0.8);   // throws if the canvas is tainted (missing CORS on library.hanami)
 }
 
-function once(target, ok, bad = "error") {
+export function once(target, ok, bad = "error") {
   return new Promise((resolve, reject) => {
     const onOk = () => { cleanup(); resolve(); };
     const onBad = () => { cleanup(); reject(target.error ?? new Error(`media ${bad}`)); };
@@ -54,7 +54,14 @@ function once(target, ok, bad = "error") {
   });
 }
 
-async function grabVideo(src) {
+/** The frame thumbnails and the default lock picture use: 1 s or 10% in, whichever is earlier (not frame 0: many loops open on black). */
+export const thumbnailTime = (duration) => (Number.isFinite(duration) && duration > 0 ? Math.min(1, duration * 0.1) : 0);
+
+/**
+ * Loads a library video into a hidden <video> (it decodes with the same engine as the wallpaper, so anything that plays works).
+ * Resolves {video, duration (null if unknown), close()}; call close() to release the decoder.
+ */
+export async function openVideo(src) {
   const v = document.createElement("video");
   v.muted = true;
   v.playsInline = true;
@@ -62,6 +69,11 @@ async function grabVideo(src) {
   v.crossOrigin = "anonymous";   // library.hanami is a different origin from app.hanami
   v.style.cssText = "position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
   document.body.append(v);
+  const close = () => {
+    v.removeAttribute("src");
+    v.load();
+    v.remove();
+  };
   try {
     const loaded = once(v, "loadeddata");
     v.src = src;
@@ -74,20 +86,32 @@ async function grabVideo(src) {
       await withTimeout(changed, "duration probe").catch(() => {});
       d = v.duration;
     }
-    const target = Number.isFinite(d) && d > 0 ? Math.min(1, d * 0.1) : 0;
-    const seeked = once(v, "seeked");
-    v.currentTime = target;
-    await withTimeout(seeked, "video seek");
-    if (!v.videoWidth) throw new Error("video has no frames");
+    return { video: v, duration: Number.isFinite(d) && d > 0 ? d : null, close };
+  } catch (err) {
+    close();
+    throw err;
+  }
+}
+
+/** Seeks to `t` seconds and waits until that frame can be drawn. */
+export async function seekVideo(v, t) {
+  const seeked = once(v, "seeked");
+  v.currentTime = t;
+  await withTimeout(seeked, "video seek");
+  if (!v.videoWidth) throw new Error("video has no frames");
+}
+
+async function grabVideo(src) {
+  const { video: v, duration: d, close } = await openVideo(src);
+  try {
+    await seekVideo(v, thumbnailTime(d));
     return {
       dataUrl: draw(v, v.videoWidth, v.videoHeight),
       width: v.videoWidth, height: v.videoHeight,
-      ...(Number.isFinite(d) && d > 0 ? { durationSec: Math.round(d * 100) / 100 } : {}),
+      ...(d ? { durationSec: Math.round(d * 100) / 100 } : {}),
     };
   } finally {
-    v.removeAttribute("src");
-    v.load();
-    v.remove();
+    close();
   }
 }
 

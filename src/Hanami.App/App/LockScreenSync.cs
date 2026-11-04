@@ -3,31 +3,27 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Hanami.Core;
 using Hanami.Platform;
-using Microsoft.Web.WebView2.Core;
 
 namespace Hanami.App;
 
 /// <summary>
-/// "Match the lock screen to the screensaver": photographs the primary monitor's screensaver wallpaper (without clock or
-/// particles) and makes it the Windows lock screen picture. Off by default, never restores anything by itself: the first time it
-/// writes it keeps a copy of the previous picture, which the user can put back. Needs the lock screen set to Picture in
-/// Windows (Spotlight overrides it). Everything Windows-specific goes through <see cref="ILockScreenImage"/>.
-/// See docs/CONTRACTS.md, "Lock screen".
+/// "Match the lock screen to the screensaver": makes the lock picture saved ahead of time for the primary monitor's screensaver wallpaper
+/// (<see cref="Library.LockStillPath"/>, made by the settings page) the Windows lock screen picture. It photographs nothing and opens no
+/// window. Off by default, never restores anything by itself: the first time it writes it keeps a copy of the previous picture, which the
+/// user can put back. Needs the lock screen set to Picture in Windows (Spotlight overrides it). Everything Windows-specific goes through
+/// <see cref="ILockScreenImage"/>. See docs/CONTRACTS.md, "Lock screen".
 /// </summary>
 public sealed class LockScreenSync : IDisposable
 {
     private static readonly TimeSpan RefreshDebounce = TimeSpan.FromSeconds(1.5);
-    private static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(10);
 
-    private readonly CoreWebView2Environment _env;
     private readonly AppPaths _paths;
     private readonly Func<AppSettings> _settings;
     private readonly Func<bool> _dark;
     private readonly Library _library;
     private readonly ILockScreenImage _api;
-    private readonly Func<bool> _blocked;      // the screensaver shows or Windows is locked: no background refresh now
     private readonly DispatcherTimer _debounce;
-    private string? _lastSignature;
+    private string? _lastSignature;            // what current.jpg shows; persisted so an app start doesn't rewrite the picture
     private bool _busy, _again;
     private BitmapSource? _systemImage;        // what Windows showed before Hanami, for the curtain when sync is off
 
@@ -38,61 +34,31 @@ public sealed class LockScreenSync : IDisposable
     /// <summary>Raised when the status or the picture changed (the host broadcasts state; the curtains swap their image).</summary>
     public event Action? Changed;
 
-    public LockScreenSync(CoreWebView2Environment env, AppPaths paths, Func<AppSettings> settings, Func<bool> dark, Library library,
-        ILockScreenImage api, Func<bool> blocked)
+    public LockScreenSync(AppPaths paths, Func<AppSettings> settings, Func<bool> dark, Library library, ILockScreenImage api)
     {
-        _env = env; _paths = paths; _settings = settings; _dark = dark; _library = library; _api = api; _blocked = blocked;
+        _paths = paths; _settings = settings; _dark = dark; _library = library; _api = api;
         _debounce = new DispatcherTimer { Interval = RefreshDebounce };
         _debounce.Tick += async (_, _) => { _debounce.Stop(); await RefreshAsync(); };
         Status = _settings().Screensaver.SyncLockScreen ? "idle" : "off";
+        try { _lastSignature = File.Exists(SignaturePath) ? File.ReadAllText(SignaturePath) : null; }
+        catch (IOException) { }
     }
 
     private string CurrentPath => Path.Combine(_paths.LockScreenDir, "current.jpg");
     private string PreviousPath => Path.Combine(_paths.LockScreenDir, "previous.jpg");
+    private string SignaturePath => Path.Combine(_paths.LockScreenDir, "signature.txt");
     public bool HasBackup => File.Exists(PreviousPath);
     public bool Enabled => _settings().Screensaver.SyncLockScreen;
 
-    private MonitorInfo? Primary() => Monitors.Enumerate().FirstOrDefault(m => m.IsPrimary);
+    private static MonitorInfo? Primary() => Monitors.Enumerate().FirstOrDefault(m => m.IsPrimary);
 
-    private (string Signature, string Type) Describe(MonitorInfo m)
-    {
-        var s = _settings();
-        var dark = _dark();
-        var id = s.ScreensaverWallpaperFor(m.Key, dark);
-        return (LockImagePolicy.Signature(id, dark), _library.Resolve(id)?.Type ?? "builtin");
-    }
-
-    // ---- screensaver start -----------------------------------------------------------------------
-
-    /// <summary>Whether the screensaver about to show must hold its clock and particles back so its first frames can be photographed.</summary>
-    public bool WantsCaptureOnStart(MonitorInfo primary)
-    {
-        if (!Enabled) return false;
-        var (sig, type) = Describe(primary);
-        return LockImagePolicy.ShouldCapture(true, LockTrigger.ScreensaverStart, _lastSignature, sig, type);
-    }
-
-    /// <summary>The primary screensaver page says its plain background is up: photograph it and set it. Never throws.</summary>
-    public async Task CaptureFromScreensaverAsync(WallpaperView view)
-    {
-        try
-        {
-            var (sig, _) = Describe(view.Monitor);
-            var temp = Path.Combine(_paths.LockScreenDir, "capture.jpg");
-            await view.CaptureAsync(temp);
-            await ApplyAsync(temp, sig);
-        }
-        catch (Exception ex) { Fail($"Capture failed: {ex.Message}"); }
-    }
-
-    // ---- refresh without a screensaver -----------------------------------------------------------
-
-    /// <summary>The option was turned on, or the screensaver wallpaper or the theme changed: refresh the picture soon (debounced).</summary>
+    /// <summary>The option was turned on, the screensaver wallpaper or the theme changed, or a lock picture was saved: refresh soon (debounced).</summary>
     public void RequestRefresh()
     {
         if (!Enabled)
         {
             _debounce.Stop();
+            ForgetSignature();   // turning it on again must write once, whatever Windows shows by then
             if (Status != "off") { Status = "off"; Error = null; Changed?.Invoke(); }
             return;
         }
@@ -105,34 +71,50 @@ public sealed class LockScreenSync : IDisposable
     {
         if (!Enabled) return;
         if (_busy) { _again = true; return; }
-        if (_blocked()) { _debounce.Start(); return; }   // try again later; a screensaver start captures by itself
         if (Primary() is not { } monitor) return;
-        var (sig, type) = Describe(monitor);
-        if (!LockImagePolicy.ShouldCapture(true, LockTrigger.SettingsChange, _lastSignature, sig, type)) return;
 
         _busy = true;
-        WallpaperView? view = null;
         try
         {
-            view = await WallpaperView.CreateCaptureAsync(_env, monitor, _paths);
-            var ready = new TaskCompletionSource();
-            view.MessageReceived += (_, msg) => { if ((string?)msg["type"] == "readyForCapture") ready.TrySetResult(); };
-            var s = _settings();
             var dark = _dark();
-            view.SendConfig(_library.Resolve(s.ScreensaverWallpaperFor(monitor.Key, dark)), s.ScreensaverEffectFor(monitor.Key, dark), s.Performance.FpsCap, null, holdForCapture: false);
-            await view.SetModeAsync(new ResolvedMode(Mode.Full, "Lock screen capture", false));
-            if (await Task.WhenAny(ready.Task, Task.Delay(CaptureTimeout)) != ready.Task) throw new TimeoutException("The wallpaper did not finish loading.");
-            var temp = Path.Combine(_paths.LockScreenDir, "capture.jpg");
-            await view.CaptureAsync(temp);
-            await ApplyAsync(temp, sig);
+            var id = _settings().ScreensaverWallpaperFor(monitor.Key, dark);
+            var still = id is null ? null : _library.LockStillPath(id);
+            if (still is null || !File.Exists(still))
+            {
+                SetStatus("waiting");   // keep the current picture; the settings page is making this wallpaper's
+                return;
+            }
+            var signature = LockImagePolicy.Signature(id, dark, File.GetLastWriteTimeUtc(still).Ticks);
+            if (!LockImagePolicy.ShouldWrite(true, _lastSignature, signature))
+            {
+                if (Status != "ok" && File.Exists(CurrentPath)) { UpdatedAt ??= File.GetLastWriteTime(CurrentPath); SetStatus("ok"); }
+                return;
+            }
+            Directory.CreateDirectory(_paths.LockScreenDir);
+            var temp = CurrentPath + ".tmp";
+            File.Copy(still, temp, overwrite: true);
+            await ApplyAsync(temp, signature);
         }
-        catch (Exception ex) { Fail($"Capture failed: {ex.Message}"); }
+        catch (Exception ex) { Fail($"Could not use the saved picture: {ex.Message}"); }
         finally
         {
-            view?.Dispose();
             _busy = false;
             if (_again) { _again = false; _debounce.Start(); }
         }
+    }
+
+    private void SetStatus(string status)
+    {
+        if (Status == status && Error is null) return;
+        Status = status;
+        Error = null;
+        Changed?.Invoke();
+    }
+
+    private void ForgetSignature()
+    {
+        _lastSignature = null;
+        try { File.Delete(SignaturePath); } catch (IOException) { }
     }
 
     // ---- writing the picture ---------------------------------------------------------------------
@@ -144,6 +126,7 @@ public sealed class LockScreenSync : IDisposable
         File.Move(captured, CurrentPath, overwrite: true);
         if (await _api.SetAsync(CurrentPath) is { } error) { Fail(error); return; }
         _lastSignature = signature;
+        try { File.WriteAllText(SignaturePath, signature); } catch (IOException ex) { Log.Warn($"Lock screen: could not save the signature: {ex.Message}"); }
         Status = "ok";
         Error = null;
         UpdatedAt = DateTime.Now;
@@ -164,7 +147,7 @@ public sealed class LockScreenSync : IDisposable
     {
         if (!HasBackup) return false;
         if (await _api.SetAsync(PreviousPath) is { } error) { Fail(error); return false; }
-        _lastSignature = null;
+        ForgetSignature();
         Status = Enabled ? "idle" : "off";
         Error = null;
         Log.Info("Lock screen: previous picture restored");

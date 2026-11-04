@@ -66,21 +66,21 @@ Read: `App/LockScreenSync.cs`, `Core/LockImagePolicy.cs`, `App/ScreensaverManage
 `App/WallpaperView.cs` (`CreateCaptureAsync`, `CaptureAsync`, `holdForCapture`), `web/wallpaper/wallpaper.js` (capture handshake),
 `web/settings/thumbs.js`, `Core/Library.cs` (`SaveThumbnail`), `web/wallpaper/scenes.js` (`Scene`), CONTRACTS "Lock screen".
 
-- [ ] 1.1 **Contract first.** New bridge method `saveLockStill {id, dataUrl, frameSec?}`; `<wallpaper dir>/lock.jpg`; manifest `lockFrameSec` and `lockFit`; state status
+- [x] 1.1 **Contract first.** New bridge method `saveLockStill {id, dataUrl, frameSec?}`; `<wallpaper dir>/lock.jpg`; manifest `lockFrameSec` and `lockFit`; state status
       `"waiting"` (no picture for the chosen wallpaper yet). Rewrite "Lock screen"; remove `holdForCapture`, `captureDone`, `readyForCapture`, `&capture=1`.
-- [ ] 1.2 **Settings page, new `web/settings/lockstills.js`,** sharing the helpers in `thumbs.js` (export `once`, `withTimeout`, seek): for every video and image without a current
+- [x] 1.2 **Settings page, new `web/settings/lockstills.js`,** sharing the helpers in `thumbs.js` (export `once`, `withTimeout`, seek): for every video and image without a current
       still, queued one at a time like `ensureThumbnails`, draw at the primary monitor's pixel size honouring the wallpaper's `fit` (black bars for `contain`), JPEG quality about 0.92,
       send `saveLockStill`. A wallpaper whose `fit` differs from `lockFit` is redone at its `lockFrameSec`. Call it wherever `ensureThumbnails` is called, so imports (media and packs) and existing libraries are both covered.
-- [ ] 1.3 **Built-in scenes:** draw with `Scene` from `/wallpaper/scenes.js` on an unattached canvas, one frame (its layers are seeded, so it is repeatable). Saved under
+- [x] 1.3 **Built-in scenes:** draw with `Scene` from `/wallpaper/scenes.js` on an unattached canvas, one frame (its layers are seeded, so it is repeatable). Saved under
       `<config>/lockscreen/builtin-<scene>.jpg`. If `Scene` needs layout (`clientWidth`), give the canvas an off-page size rather than changing the wallpaper's behaviour.
-- [ ] 1.4 **Host:** `Library.SaveLockStill` (validate the data URL as `SaveThumbnail` does; write to a temp file, then move). Deleting a wallpaper removes it with the folder. Packs don't export `lock.jpg` (the importer regenerates it), but do carry `lockFrameSec` in the manifest if that's no extra work.
-- [ ] 1.5 **`LockScreenSync`:** no capturing. `RefreshAsync` finds the still of the primary monitor's screensaver wallpaper; none → status `"waiting"`, keep the current picture, write nothing. Otherwise copy to `current.jpg` and call `ApplyAsync`.
+- [x] 1.4 **Host:** `Library.SaveLockStill` (validate the data URL as `SaveThumbnail` does; write to a temp file, then move). Deleting a wallpaper removes it with the folder. Packs don't export `lock.jpg` (the importer regenerates it), but do carry `lockFrameSec` in the manifest if that's no extra work.
+- [x] 1.5 **`LockScreenSync`:** no capturing. `RefreshAsync` finds the still of the primary monitor's screensaver wallpaper; none → status `"waiting"`, keep the current picture, write nothing. Otherwise copy to `current.jpg` and call `ApplyAsync`.
       `saveLockStill` calls `RequestRefresh`. Persist the signature (`<config>/lockscreen/`) so an app start doesn't rewrite the picture. Signature = wallpaper id + dark + the still's write time.
-- [ ] 1.6 **Remove the capture path:** `CreateCaptureAsync`, `CaptureAsync`, `holdForCapture`, `CaptureForLockScreenAsync`, `WantsCaptureOnStart`, `CaptureFromScreensaverAsync`, `LockTrigger`, page `isCapture`/hold/`captureDone`, the clock's `hold`/`release` if nothing else uses them. Check `_blocked` still earns its place.
-- [ ] 1.7 **Tests:** replace `LockImagePolicyTests` for the signature-only rule (no rewrite when unchanged, rewrite when the id, theme or still changes, none when off). Library: `SaveLockStill` rejects bad data, manifest round trip. Mock bridge: `saveLockStill`.
-- [ ] 1.8 **Copy:** Screensaver tab card and confirm dialog drop "updated each time it starts"; add a `"waiting"` line. README section.
-- [ ] 1.9 **Check, automated in dev (sync off):** still files look right for a video, an image, each built-in scene, and a `contain` wallpaper. Screensaver shows its clock at once. Tracing the window list while changing wallpaper shows no new Hanami window.
-- [ ] 1.10 **The user tests the bug. Stop here and wait.** Build, start the app for them (`--dev`, see `docs/TESTING.md`) and give them these steps. This writes to their real lock screen, so ask first, and they turn the option on themselves:
+- [x] 1.6 **Remove the capture path:** `CreateCaptureAsync`, `CaptureAsync`, `holdForCapture`, `CaptureForLockScreenAsync`, `WantsCaptureOnStart`, `CaptureFromScreensaverAsync`, `LockTrigger`, page `isCapture`/hold/`captureDone`, the clock's `hold`/`release` if nothing else uses them. Check `_blocked` still earns its place.
+- [x] 1.7 **Tests:** replace `LockImagePolicyTests` for the signature-only rule (no rewrite when unchanged, rewrite when the id, theme or still changes, none when off). Library: `SaveLockStill` rejects bad data, manifest round trip. Mock bridge: `saveLockStill`.
+- [x] 1.8 **Copy:** Screensaver tab card and confirm dialog drop "updated each time it starts"; add a `"waiting"` line. README section.
+- [x] 1.9 **Check, automated in dev (sync off):** still files look right for a video, an image, each built-in scene, and a `contain` wallpaper. Screensaver shows its clock at once. Tracing the window list while changing wallpaper shows no new Hanami window.
+- [x] 1.10 **The user tests the bug. Stop here and wait.** Build, start the app for them (`--dev`, see `docs/TESTING.md`) and give them these steps. This writes to their real lock screen, so ask first, and they turn the option on themselves:
       1. Screensaver tab: turn on "Match the lock screen to the screensaver". No flash.
       2. Change the screensaver wallpaper a few times (video, image, built-in scene). No flash, and the status line updates.
       3. Flip the theme, if light and dark use different screensaver wallpapers. No flash.
@@ -89,9 +89,15 @@ Read: `App/LockScreenSync.cs`, `Core/LockImagePolicy.cs`, `App/ScreensaverManage
       6. Win+L: the lock screen shows the right picture, with no clock or particles. Repeat for an image and a built-in scene.
       7. Let the screensaver start (or Preview): its clock appears at once, with no flash.
       If they still see a flash, ask what it looked like and when, and fix that. Don't commit, and don't tick this box. The diagnosis above was read from the code, so it may be incomplete.
-- [ ] 1.11 **Only after the user says the bug is gone:** tick the boxes, write the Notes and make one commit. Don't push. Then stop: phases 2 and 3 stay on hold.
+- [x] 1.11 **Only after the user says the bug is gone:** tick the boxes, write the Notes and make one commit. Don't push. Then stop: phases 2 and 3 stay on hold.
 
-Notes:
+Notes: the user confirmed on the real desktop (4 Nov 2026) that the flash is gone.
+- Stills are made by the settings page, so the settings window has to have been opened once after an update for existing wallpapers (status `waiting` until then). `ensureLockStills` runs from `wallpaperPicker` (manage mode), next to `ensureThumbnails`.
+- `WallpaperInfo.lockStill {fit, frameSec}` is new; `frameSec` is phase 2's 2.1 item, pulled forward because redoing a still needs it. Built-in stills are `config/lockscreen/builtin-<scene>.jpg` (`Library.BuiltinStillDir`).
+- The host always shows wallpapers as `cover`, so `contain` can't occur yet; drawing for it exists and was checked numerically only.
+- `_blocked` was removed (it only avoided a capture window). Unused now: `Win32.SetLayeredWindowAttributes`. No stills are remade if the primary monitor's resolution changes.
+- Stills are not made for a wallpaper whose video fails to load (logged, not retried that session). A null screensaver wallpaper id stays `waiting`.
+- `devroot/config/settings.json` had `syncLockScreen` on; it was set to off for the automated checks (backup was in the session scratchpad), so a dev start no longer writes the real lock screen by itself.
 
 ## Phase 2 — Choose the frame (on hold until the user asks)
 

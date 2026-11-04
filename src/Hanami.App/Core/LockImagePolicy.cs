@@ -1,31 +1,16 @@
 namespace Hanami.Core;
 
-public enum LockTrigger
-{
-    /// <summary>A screensaver (not a preview) just started.</summary>
-    ScreensaverStart,
-    /// <summary>The option was turned on, or the screensaver's wallpaper or the theme changed.</summary>
-    SettingsChange,
-}
-
-/// <summary>When the Windows lock screen picture has to be photographed from the screensaver again (docs/CONTRACTS.md, "Lock screen").</summary>
+/// <summary>When the Windows lock screen picture has to be written again (docs/CONTRACTS.md, "Lock screen").</summary>
 public static class LockImagePolicy
 {
-    /// <summary>Identifies what the picture shows: the primary monitor's screensaver wallpaper and the theme slot it came from.</summary>
-    public static string Signature(string? wallpaperId, bool dark) => $"{wallpaperId ?? "-"}|{(dark ? "dark" : "light")}";
-
     /// <summary>
-    /// A screensaver start always refreshes a video or built-in scene (they move, so the picture is a new frame); an image only when its
-    /// signature changed. A settings or theme change refreshes only when the signature changed. Never when the option is off.
+    /// Identifies what the picture shows: the primary monitor's screensaver wallpaper, the theme slot it came from and
+    /// when its saved still was last written (a newly chosen frame changes it).
     /// </summary>
-    public static bool ShouldCapture(bool enabled, LockTrigger trigger, string? lastSignature, string signature, string wallpaperType)
-    {
-        if (!enabled) return false;
-        var changed = lastSignature != signature;
-        return trigger switch
-        {
-            LockTrigger.ScreensaverStart => changed || wallpaperType is "video" or "builtin",
-            _ => changed,
-        };
-    }
+    public static string Signature(string? wallpaperId, bool dark, long stillWrittenTicks) =>
+        $"{wallpaperId ?? "-"}|{(dark ? "dark" : "light")}|{stillWrittenTicks}";
+
+    /// <summary>Write the picture only when the option is on and the signature differs from the one last written (null = never).</summary>
+    public static bool ShouldWrite(bool enabled, string? lastSignature, string signature) =>
+        enabled && lastSignature != signature;
 }

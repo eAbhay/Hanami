@@ -101,6 +101,78 @@ public sealed class StorageTests : IDisposable
     public void ExportPath_AlwaysEndsInExactlyHanamipack(string typed, string expected) =>
         Assert.Equal(expected, PackService.NormalizeExportPath(typed));
 
+    private static string Jpeg(params byte[] bytes) => "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
+
+    [Fact]
+    public async Task LockStill_SavesAndRoundTripsInTheManifest()
+    {
+        var lib = new Library(Path.Combine(_dir, "Library"));
+        var w = await lib.ImportAsync(MakeFile("clip.mp4", 500), null);
+        Assert.Null(lib.List().Single(x => x.Id == w.Id).LockStill);
+
+        lib.SaveLockStill(w.Id, Jpeg(1, 2, 3), 3.5, "contain");
+
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(lib.DirOf(w.Id), "lock.jpg")));
+        Assert.False(File.Exists(Path.Combine(lib.DirOf(w.Id), "lock.jpg.tmp")));
+        var info = lib.List().Single(x => x.Id == w.Id).LockStill;
+        Assert.Equal(new LockStillInfo("contain", 3.5), info);
+        Assert.Equal(info, new Library(lib.Root).List().Single(x => x.Id == w.Id).LockStill);   // read back from disk
+
+        lib.SaveLockStill(w.Id, Jpeg(9), null, "bogus");   // default frame again; an unknown fit becomes cover
+        Assert.Equal(new LockStillInfo("cover", null), lib.List().Single(x => x.Id == w.Id).LockStill);
+    }
+
+    [Fact]
+    public async Task LockStill_RejectsBadData_AndKeepsTheOldPicture()
+    {
+        var lib = new Library(Path.Combine(_dir, "Library"));
+        var w = await lib.ImportAsync(MakeFile("a.png", 100), null);
+        lib.SaveLockStill(w.Id, Jpeg(7, 7), null, null);
+
+        Assert.Throws<ArgumentException>(() => lib.SaveLockStill(w.Id, "not a data url", null, null));
+        Assert.Throws<ArgumentException>(() => lib.SaveLockStill(w.Id, "data:text/plain;base64,AAAA", null, null));
+        Assert.Throws<ArgumentException>(() => lib.SaveLockStill(w.Id, "data:image/jpeg;base64,@@@@", null, null));
+        Assert.Throws<InvalidOperationException>(() => lib.SaveLockStill("nosuchid", Jpeg(1), null, null));
+        Assert.Equal([7, 7], File.ReadAllBytes(Path.Combine(lib.DirOf(w.Id), "lock.jpg")));
+    }
+
+    [Fact]
+    public void LockStill_BuiltinScenesLiveInTheirOwnFolder()
+    {
+        var stills = Path.Combine(_dir, "lockscreen");
+        var lib = new Library(Path.Combine(_dir, "Library")) { BuiltinStillDir = stills };
+        Assert.All(lib.List().Take(3), w => Assert.Null(w.LockStill));
+
+        lib.SaveLockStill("builtin:dawn", Jpeg(5), null, null);
+
+        Assert.True(File.Exists(Path.Combine(stills, "builtin-dawn.jpg")));
+        Assert.Equal(new LockStillInfo("cover", null), lib.List().Single(w => w.Id == "builtin:dawn").LockStill);
+        Assert.Null(lib.List().Single(w => w.Id == "builtin:night").LockStill);
+        Assert.Throws<InvalidOperationException>(() => lib.SaveLockStill("builtin:nope", Jpeg(1), null, null));
+        Assert.Null(new Library(Path.Combine(_dir, "Library2")).LockStillPath("builtin:dawn"));   // no folder wired (tests, other hosts)
+    }
+
+    [Fact]
+    public async Task LockStill_DeletedWithTheWallpaper_AndNotExportedInPacks()
+    {
+        var source = new Library(Path.Combine(_dir, "A"));
+        var w = await source.ImportAsync(MakeFile("clip.mp4", 500), null);
+        source.SaveLockStill(w.Id, Jpeg(1, 2), 2.0, "cover");
+
+        var pack = Path.Combine(_dir, "lock" + PackService.Extension);
+        await PackService.ExportAsync(source, null, [w.Id], pack, "test", null);
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(pack))
+            Assert.DoesNotContain(zip.Entries, e => e.Name == "lock.jpg");
+
+        var target = new Library(Path.Combine(_dir, "B"));
+        await PackService.ImportAsync(target, pack, null);
+        Assert.Null(target.List().Single(x => x.Id == w.Id).LockStill);   // the importer's settings page makes a new one at the same frame
+        Assert.Equal(2.0, Library.ReadManifest(target.DirOf(w.Id))!.LockFrameSec);
+
+        source.Delete(w.Id);
+        Assert.False(Directory.Exists(source.DirOf(w.Id)));
+    }
+
     [Fact]
     public async Task Pack_RoundTrip_SelectedItemsOnly()
     {

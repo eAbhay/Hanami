@@ -209,7 +209,9 @@ export function createMockHost(post) {
   function computeScreensaver() {
     const cfg = state.settings.screensaver, ss = state.screensaver;
     const ls = ss.lockScreen;
-    if (!cfg.syncLockScreen) ls.status = ls.status === "ok" ? "off" : ls.status;
+    const background = findWp(cfg.wallpaperId ?? state.settings.assignments["*"].wallpaperId);
+    if (!cfg.syncLockScreen) ls.status = ls.status === "ok" || ls.status === "waiting" ? "off" : ls.status;
+    else if (!background?.lockStill) ls.status = "waiting";   // like the host: the chosen wallpaper has no lock picture yet
     else if (ls.status !== "ok") { ls.status = "ok"; ls.updatedAt = new Date().toISOString(); ls.hasBackup = true; }
     if (ss.active) ss.status = "Showing";
     else if (!cfg.enabled) ss.status = "Off";
@@ -408,6 +410,16 @@ export function createMockHost(post) {
       if (width) w.width = width;
       if (height) w.height = height;
       if (durationSec && Number.isFinite(durationSec)) w.durationSec = durationSec;
+      emitState();
+      return { ok: true };
+    },
+
+    saveLockStill: ({ id, dataUrl, frameSec, fit }) => {
+      const w = findWp(id);
+      if (!w) throw new Error("Wallpaper not found");
+      if (!String(dataUrl).startsWith("data:image/jpeg")) throw new Error("Expected a JPEG data URL");
+      w.lockStill = { fit: ["cover", "contain", "fill"].includes(fit) ? fit : "cover", frameSec: Number.isFinite(frameSec) && frameSec >= 0 ? frameSec : null };
+      w.lockStillUrl = dataUrl;   // mock only: lets the browser check show what was drawn
       emitState();
       return { ok: true };
     },

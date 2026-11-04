@@ -3,6 +3,7 @@
 //   pick   — compact tiles (Screensaver tab), optionally led by a "Same as desktop" tile.
 import { h, svg, formatBytes, formatDuration, resLabel, dialog, debounce } from "../util.js";
 import { ensureThumbnails, thumbnailFailed } from "../thumbs.js";
+import { ensureLockStills } from "../lockstills.js";
 import { wallpaperThumb as thumbFor, TYPE_LABEL, isBuiltin } from "../wallthumb.js";
 
 const SCENE_BLURB = { twilight: "Violet dusk fading to amber", dawn: "Pink sunrise, golden haze", night: "Deep blue sky, quiet stars" };
@@ -193,6 +194,7 @@ export function wallpaperPicker(ctx, { onSelect, onImport, manage = false, allow
         if (ok) refetch();
         else if (ctx.wallpaper(id)) render(ctx.state);
       });
+      ensureLockStills(s, ctx.call, (_id, ok) => { if (ok) refetch(); });   // so State shows the new lockStill
     };
   } else {
     el = h("div.pick-grid", { role: "radiogroup", "aria-label": "Wallpaper" });

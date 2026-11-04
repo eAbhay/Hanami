@@ -105,18 +105,11 @@ public sealed class ScreensaverManager : IDisposable
     }
     private LockScreenSync? _lock;
 
-    private void SendConfig(WallpaperView view, AppSettings s, string monitorKey, int fps, bool holdForCapture = false)
+    private void SendConfig(WallpaperView view, AppSettings s, string monitorKey, int fps)
     {
         var dark = _dark();
         view.SendConfig(_library.Resolve(s.ScreensaverWallpaperFor(monitorKey, dark)), s.ScreensaverEffectFor(monitorKey, dark), fps,
-            new FontLibrary(_library).ClockMessage(s.ScreensaverClockFor(monitorKey, dark)), holdForCapture);
-    }
-
-    /// <summary>The primary page's plain background is up: photograph it for the lock screen, then let the page show its clock.</summary>
-    private async Task CaptureForLockScreenAsync(WallpaperView view)
-    {
-        try { if (_lock is not null) await _lock.CaptureFromScreensaverAsync(view); }
-        finally { view.Post(new System.Text.Json.Nodes.JsonObject { ["type"] = "captureDone" }); }
+            new FontLibrary(_library).ClockMessage(s.ScreensaverClockFor(monitorKey, dark)));
     }
 
     /// <summary>A setting or the theme changed while the screensaver shows: re-send each page its configuration.</summary>
@@ -192,7 +185,7 @@ public sealed class ScreensaverManager : IDisposable
             foreach (var m in Monitors.Enumerate())
             {
                 var view = await WallpaperView.CreateScreensaverAsync(_env, m, _paths);
-                SendConfig(view, s, m.Key, fps, holdForCapture: !preview && m.IsPrimary && _lock?.WantsCaptureOnStart(m) == true);
+                SendConfig(view, s, m.Key, fps);
                 await view.SetModeAsync(new ResolvedMode(Mode.Full, "Screensaver", false));
                 view.MessageReceived += OnPageMessage;
                 _views.Add(view);
@@ -234,7 +227,6 @@ public sealed class ScreensaverManager : IDisposable
             Log.Warn($"Clock font {(string?)msg["font"]} failed to load: {(string?)msg["message"]}");
             return;
         }
-        if ((string?)msg["type"] == "readyForCapture") { _ = CaptureForLockScreenAsync(view); return; }
         if (!_showing || (string?)msg["type"] != "dismiss") return;
         if (DateTime.UtcNow - _shownAt < Grace) return;
         _ = DismissAsync((string?)msg["input"] ?? "input");

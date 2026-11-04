@@ -75,7 +75,7 @@ export function createScreensaverTab(ctx) {
     h("span", "Lock screen settings…"));
   const lockCard = card("Lock screen", null,
     row("lock", "Match the lock screen to the screensaver",
-      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock), updated each time the screensaver starts and when its wallpaper or the theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Your lock screen must be set to Picture, not Windows Spotlight.",
+      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame near the start, the same each time, and it updates when the wallpaper or the theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Your lock screen must be set to Picture, not Windows Spotlight.",
       syncToggle),
     lockStatus,
     h("div.slot-switch", restoreBtn, settingsBtn));
@@ -141,6 +141,7 @@ export function createScreensaverTab(ctx) {
     lockStatus.hidden = !cfg.syncLockScreen && !lock.error;
     lockStatus.textContent = lock.status === "failed" ? `Couldn't update it: ${lock.error ?? "unknown error"}`
       : lock.status === "ok" ? `Updated ${new Date(lock.updatedAt).toLocaleString()}`
+      : lock.status === "waiting" ? "Preparing the picture for this wallpaper…"
       : cfg.syncLockScreen ? "Waiting to update" : "";
     restoreBtn.hidden = !lock.hasBackup || !!cfg.syncLockScreen;
   }

@@ -13,7 +13,7 @@ public sealed class AppPaths
 
     public string LibraryDir => Path.Combine(InstallDir, "Library");
     public string ConfigPath => Path.Combine(InstallDir, "config", "settings.json");
-    /// <summary><c>current.jpg</c> (the picture Hanami last set) and <c>previous.jpg</c> (a copy of what the lock screen showed before the first time).</summary>
+    /// <summary><c>current.jpg</c> (the picture Hanami last set), <c>signature.txt</c>, <c>previous.jpg</c> (a copy of what the lock screen showed before the first time) and <c>builtin-&lt;scene&gt;.jpg</c> (the built-in scenes' lock pictures).</summary>
     public string LockScreenDir => Path.Combine(InstallDir, "config", "lockscreen");
     public string ExePath => Path.Combine(InstallDir, "Hanami.exe");
 

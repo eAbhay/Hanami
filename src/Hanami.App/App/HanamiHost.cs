@@ -42,7 +42,7 @@ public sealed class HanamiHost
         Log.Info($"Hanami {AppPaths.Version} starting from {_paths.InstallDir}{(_paths.IsDev ? " (dev)" : "")}");
         _paths.ExtractWebAssets();
         _store = new SettingsStore(_paths.ConfigPath);
-        _library = new Library(_paths.LibraryDir);
+        _library = new Library(_paths.LibraryDir) { BuiltinStillDir = _paths.LockScreenDir };
         if (!File.Exists(_paths.ConfigPath)) _store.Save();
         _petLibrary = new PetLibrary(_library);
         _store.PruneLooks(_library.Exists);
@@ -71,8 +71,7 @@ public sealed class HanamiHost
         _screensaver = new ScreensaverManager(_env, _paths, () => _store.Current, IsDark, _library,
             () => _wallpapers.Power, () => _wallpapers.SessionLocked);
         _screensaver.Changed += OnScreensaverChanged;
-        _lockSync = new LockScreenSync(_env, _paths, () => _store.Current, IsDark, _library, new Platform.LockScreenImage(),
-            () => _screensaver.Showing || _wallpapers.SessionLocked);
+        _lockSync = new LockScreenSync(_paths, () => _store.Current, IsDark, _library, new Platform.LockScreenImage());
         _lockSync.Changed += BroadcastState;
         _screensaver.Lock = _lockSync;
         _ = _lockSync.WarmCurtainAsync();
@@ -363,6 +362,11 @@ public sealed class HanamiHost
             case "saveThumbnail":
                 _library.SaveThumbnail(Required(p, "id"), Required(p, "dataUrl"),
                     (int?)p?["width"], (int?)p?["height"], (double?)p?["durationSec"]);
+                return new JsonObject { ["ok"] = true };
+
+            case "saveLockStill":
+                _library.SaveLockStill(Required(p, "id"), Required(p, "dataUrl"), (double?)p?["frameSec"], (string?)p?["fit"]);
+                _lockSync.RequestRefresh();
                 return new JsonObject { ["ok"] = true };
 
             case "setPaused":

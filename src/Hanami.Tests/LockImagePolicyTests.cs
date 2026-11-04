@@ -5,35 +5,29 @@ namespace Hanami.Tests;
 
 public class LockImagePolicyTests
 {
-    private static string Sig(string id = "w", bool dark = false) => LockImagePolicy.Signature(id, dark);
+    private static string Sig(string id = "w", bool dark = false, long still = 1) => LockImagePolicy.Signature(id, dark, still);
 
     [Fact]
-    public void Off_NeverCaptures()
+    public void Off_NeverWrites()
     {
-        Assert.False(LockImagePolicy.ShouldCapture(false, LockTrigger.ScreensaverStart, null, Sig(), "video"));
-        Assert.False(LockImagePolicy.ShouldCapture(false, LockTrigger.SettingsChange, null, Sig(), "image"));
-    }
-
-    [Theory]
-    [InlineData("video")]
-    [InlineData("builtin")]
-    public void ScreensaverStart_AlwaysRefreshesMovingWallpapers(string type) =>
-        Assert.True(LockImagePolicy.ShouldCapture(true, LockTrigger.ScreensaverStart, Sig(), Sig(), type));
-
-    [Fact]
-    public void ScreensaverStart_RefreshesAnImageOnlyWhenItChanged()
-    {
-        Assert.False(LockImagePolicy.ShouldCapture(true, LockTrigger.ScreensaverStart, Sig(), Sig(), "image"));
-        Assert.True(LockImagePolicy.ShouldCapture(true, LockTrigger.ScreensaverStart, Sig("a"), Sig("b"), "image"));
-        Assert.True(LockImagePolicy.ShouldCapture(true, LockTrigger.ScreensaverStart, null, Sig(), "image"));   // never captured yet
+        Assert.False(LockImagePolicy.ShouldWrite(false, null, Sig()));
+        Assert.False(LockImagePolicy.ShouldWrite(false, Sig("a"), Sig("b")));
     }
 
     [Fact]
-    public void SettingsChange_RefreshesOnlyWhenTheSignatureChanged()
+    public void Unchanged_IsNotRewritten() =>
+        Assert.False(LockImagePolicy.ShouldWrite(true, Sig(), Sig()));
+
+    [Fact]
+    public void NeverWritten_Writes() =>
+        Assert.True(LockImagePolicy.ShouldWrite(true, null, Sig()));
+
+    [Fact]
+    public void ChangedWallpaper_ThemeOrStill_Rewrites()
     {
-        Assert.False(LockImagePolicy.ShouldCapture(true, LockTrigger.SettingsChange, Sig(), Sig(), "video"));
-        Assert.True(LockImagePolicy.ShouldCapture(true, LockTrigger.SettingsChange, Sig("a"), Sig("b"), "video"));
-        Assert.True(LockImagePolicy.ShouldCapture(true, LockTrigger.SettingsChange, Sig(dark: false), Sig(dark: true), "image"));
+        Assert.True(LockImagePolicy.ShouldWrite(true, Sig("a"), Sig("b")));
+        Assert.True(LockImagePolicy.ShouldWrite(true, Sig(dark: false), Sig(dark: true)));
+        Assert.True(LockImagePolicy.ShouldWrite(true, Sig(still: 1), Sig(still: 2)));   // a newly chosen frame
     }
 
     [Fact]

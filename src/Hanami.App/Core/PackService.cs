@@ -56,7 +56,9 @@ public static class PackService
             .Select(id => (id, dir: library.DirOf(id)))
             .Where(x => Directory.Exists(x.dir))
             .ToList();
+        // lock.jpg is derived from the media (and the screen it was drawn for): the importer's settings page makes a new one
         var files = dirs.SelectMany(x => new DirectoryInfo(x.dir).EnumerateFiles("*", SearchOption.AllDirectories)
+            .Where(f => Path.GetRelativePath(x.dir, f.FullName) != "lock.jpg")
             .Select(f => (x.id, file: f))).ToList();
         var petFiles = petIds.SelectMany(id => new DirectoryInfo(petLib.DirOf(id)).EnumerateFiles("*", SearchOption.AllDirectories)
             .Select(f => (id, file: f))).ToList();
