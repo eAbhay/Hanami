@@ -1,10 +1,7 @@
-# Implementation plan — round 7: lock screen without the flash, frame picker, GitHub releases
+# Implementation plan — round 8: lock screen update fix, in-app updates, first release
 
-**Current scope (user's decision, 4 Nov 2026): do phase 1 only, the lock screen bug fix.**
-- Phases 2 and 3 are on hold. Don't start them, and don't offer to, until the user asks.
-- **Commit nothing until the user has tested the fix and said the bug is gone.** This overrides the usual "commit at the
-  end of each phase" rule. Leave the work uncommitted on the current branch, and don't create a commit "to save progress".
-- The user tests the bug themselves (step 1.10). Stop there and wait for them. Automated checks don't count as fixed.
+**Current scope (user's decision, 4 Nov 2026): round 8, phases A to E in order.** Round 7 below is finished except for
+what round 8 takes over; it stays for its Notes.
 
 How to use this file (for a fresh chat, e.g. Sonnet):
 1. Read `CLAUDE.md`, then this file. In `docs/CONTRACTS.md`, read the sections your phase names and search it
@@ -20,7 +17,118 @@ How to use this file (for a fresh chat, e.g. Sonnet):
 Earlier rounds are in git history (`git log -- docs/PLAN.md`). Still open from round 6, for the user on the real
 desktop: pets with a real pack, built-in scenes and a theme flip on the lock screen, second monitor and DPI.
 
-**Safety rules for this round**
+## Round 8 safety rules
+
+- Never call `SetImageFileAsync` on the user's real lock screen, or `LockWorkStation`, without asking in that chat first.
+  In dev, use a fake `ILockScreenImage` or `syncLockScreen` off.
+- Never push, tag, merge to `main` or publish a release without the user's yes in that chat. Each tag needs its own yes.
+- Installs touch `HKCU\Software\Hanami`, so ask first and follow `docs/TESTING.md`. Check each UI automation step
+  worked before clicking Install: round 7's test once installed to the real folder by accident.
+
+## Round 8 decisions (don't re-ask)
+
+- **Order:** the lock screen fix, then updates, then the release. Nothing is tagged until phase E, so `v0.1.0` ships with the updater.
+- **Channels split by stability, not by major or minor.** Stable gets every normal release (`v0.2.0`, `v0.2.1`). Beta gets those plus
+  prereleases (`v0.3.0-beta.1`). The user keeps Stable quiet by publishing small changes as betas. Nobody is offered a lower version:
+  someone moving from Beta to Stable stays put until Stable passes them.
+- **The check lives in the app:** no scheduled task or script. About 60 s after start, then once 24 h have passed since the saved last
+  check (a tick about hourly, so sleep doesn't matter). Never in `--dev` unless a test feed is given. No telemetry.
+- **Updates need a click:** no silent installs. One-click means download, verify, swap and restart. The notice is one tray notification per
+  version, a lasting tray menu item, and a settings banner with notes, size, **Update** and **Skip this version**.
+- **Setting:** "Tell me when updates are available", on by default, in General settings and as a ticked checkbox in `SetupWindow` under
+  the startup one. Off stops automatic checks only; **Check now** always works. There is also a Stable/Beta choice.
+- **Security for now:** HTTPS and SHA-256, plus 2FA on the user's GitHub account. The checksum catches corruption, not a hacked account.
+  Signed updates can come in a later version. No fixed list of download hosts: GitHub redirects assets to hosts it has changed before.
+- **Frozen once `v0.1.0` is out (old copies depend on them), recorded in `docs/CONTRACTS.md`:** the repo's releases URL, the asset names
+  `Hanami.exe` and `Hanami.exe.sha256`, the checksum format, and the `--apply-update` flag.
+
+---
+
+## Phase A — The lock screen really updates
+
+Read: `App/LockScreenSync.cs` (`RefreshAsync`, `ApplyAsync`, `RestoreAsync`), `Platform/LockScreenImage.cs`, `Core/LockImagePolicy.cs`, `Hanami.Tests/LockScreenSyncTests.cs` (`FakeLockScreen`), CONTRACTS "Lock screen".
+
+**Already diagnosed and tested on the real lock screen (4 Nov 2026), don't redo.** Windows ignores a file at a path it already knows unless
+the file's date is newer, and `SetImageFileAsync` still succeeds. `RefreshAsync` uses `File.Copy`, which keeps the still's old date, so the log says
+"updated" while Windows keeps its old picture. Results: same path + older date, not taken; same path + same date + different picture, not taken;
+same path + fresh date, taken; new path + older date, taken. A new filename each time isn't needed. Not tested: going back to a path
+Windows already knows with an unchanged date, which is what putting `previous.jpg` back does.
+
+Comparing pictures: read through `LockScreen.GetImageStream`, scaled to 32×20, mean RGB difference per channel. The right picture scored 0.2 to 0.7;
+the nearest wrong one in the library scored 45. Windows re-encodes, so bytes never match. Windows may also crop other aspect ratios (a 2200×1238 cached
+size scored 9.6, though the stream itself scored 0).
+
+- [ ] A.1 **Contract first:** add the date rule and the read-back to "Lock screen". Fix the `restoreLockScreen` row, which still says Hanami never restores by itself.
+- [ ] A.2 **Fresh date:** in `LockScreenSync`, set a fresh write time on the file just before every `_api.SetAsync`, in `ApplyAsync` and `RestoreAsync`. Keep it in `LockScreenSync`, not the wrapper, so the fake can test it. The signature uses the still's date, so it doesn't change.
+- [ ] A.3 **Read-back:** after each set, save the picture with `_api.BackupAsync` to a temp file and compare. A pure comparison goes in `LockImagePolicy`, decoding stays out of `Core/`. Threshold about 15; retry for up to about 5 s. No match: status `failed` with a plain message, no signature saved. If Windows gives no picture back, log it and carry on as unverified. Check how this behaves with Spotlight on, where the call succeeds but Spotlight shows; the message should mention the Picture setting if so.
+- [ ] A.4 **Tests:** make `FakeLockScreen` follow the date rule and return the picture it holds. Changing wallpaper must really change it. A fake that ignores the write must end as `failed`. Put-back is covered too.
+- [ ] A.5 **The user tests. Stop and wait.** Ask first, then give them these steps: Win+L after changing wallpaper (video, image, built-in scene), after a theme flip, after a restart, and after *Use this frame* (closes round 7's 2.5). Turn the option off and quit: is the previous picture back? Also ask if they expected the burning tree: Windows is in dark mode, so `the-burning-of-irminsul` is the right picture, and Furina Rain is the light-mode choice.
+- [ ] A.6 **Only after the user says it works:** tick the boxes, write Notes, one commit. Also tick round 7's 2.5.
+
+Notes:
+
+## Phase B — Check and notify
+
+Read: `App/HanamiHost.cs` (`StartAsync`, `BuildState`, bridge switch), `App/TrayIcon.cs`, `App/Installer.cs` (`SetupWindow`, `Install`), `Core/Settings.cs`, `App/AppPaths.cs` (`Version`, `IsDev`), `web/settings/tabs/general.js`, `web/settings/mock-bridge.js`, CONTRACTS "Settings bridge".
+
+- [ ] B.1 **Contract first:** settings `updates: {autoCheck: true, channel: "stable" | "beta", skippedVersion: null, lastCheckUtc: null}`, state `update: {status: "idle" | "checking" | "upToDate" | "available" | "downloading" | "failed", version, notes, sizeBytes, url, progress, error, lastCheck}`, and bridge methods `checkForUpdates`, `installUpdate`, `skipUpdate`, `openUpdatePage`. See if defaults cover old files; only bump `CurrentVersion` if a migration is really needed.
+- [ ] B.2 **`Core/UpdatePolicy.cs` (pure, tested):** version parse and compare with semver prerelease rules (`0.1.0-rc.2` < `0.1.0`, `rc.2` < `rc.10`). `System.Version` can't parse these. `PickRelease` skips drafts, prereleases on Stable, releases missing either asset, and anything not newer. Also when to check and when to notify (once per version, not for the skipped one; a newer version clears a skip).
+- [ ] B.3 **`App/UpdateService.cs`:** `GET https://api.github.com/repos/eAbhay/Hanami/releases?per_page=30`, not `/releases/latest`, which can't see prereleases. Send a `User-Agent` and `If-None-Match` (a 304 doesn't count against the 60 requests an hour limit). 20 s timeout. No releases means up to date. Offline or rate limited: only a log line on automatic checks, a message on **Check now**. In dev only, `--update-feed <url>` swaps the address, so B and C can be tested with no real release.
+- [ ] B.4 **Tray:** a notification once per version (clicking it opens settings), and a lasting "Update to x.y.z" menu item while one is available.
+- [ ] B.5 **Settings UI:** banner, setting, channel, **Check now**, last checked. Notes are shown as plain text, never HTML: they come from the network. Mock bridge support.
+- [ ] B.6 **`SetupWindow` checkbox**, saved in `Install` the same way as `startWithWindows`, including when reinstalling over an existing folder.
+- [ ] B.7 **README:** say the check contacts GitHub and sends nothing else.
+- [ ] B.8 **Check in dev** against a local fake feed: Stable and Beta pick correctly, skip, one notification per version, off means no automatic request. Commit.
+
+Notes:
+
+## Phase C — Download and install
+
+Read: `App/Installer.cs` (`Resolve`, `Update`, `Launch`), `Program.cs`, `App/HanamiHost.cs` (`Quit`), `App/Uninstaller.cs`, `Platform/Registration.cs`, CONTRACTS "Install registration and uninstall", "On-disk layout".
+
+The exe already replaces itself: `Resolve` asks the running copy to quit, `Update` copies over the installed exe, then starts it with `--updated`. Downloading and a flag are what's missing. The new version does the replacing, so later versions can fix that part; what the old version does (download, verify, start with the flag) can't be fixed for anyone who doesn't update.
+
+- [ ] C.1 **Contract first:** the frozen items above, and the download folder in "On-disk layout".
+- [ ] C.2 **Download** to `<install>/update/Hanami-<version>.exe`, so uninstalling removes it. HTTPS only, except a dev test feed. Progress shown in settings. Check the size against the asset and the SHA-256 against `Hanami.exe.sha256` (`<hash> *Hanami.exe`, see `tools/build.ps1`). On any failure delete the file and leave the app running. Don't download until the click. Delete leftovers on the next start.
+- [ ] C.3 **Handover:** the running copy starts the new exe with `--apply-update`, and it replaces the installed copy with no `MessageBox`. The new exe asks the old one to quit, so if Windows blocks it the old copy simply keeps running. A failed start (`Win32Exception`, as Application Control might do on this laptop; it already blocks fresh test DLLs) shows `failed` with **Open download page**.
+- [ ] C.4 **Safe replace:** `Update` uses `File.Copy` over the 80 MB exe, so a crash mid-copy breaks the install. Copy to `Hanami.exe.new`, then swap it in with a move. With the flag, a failure starts the old copy again instead of leaving nothing running.
+- [ ] C.5 **Trap in `Update`:** after `mutex.WaitOne(10 s)` times out, `ReleaseMutex` throws `ApplicationException`, which isn't caught. Handle the timeout, and allow for `QuitAsync`, which can take 3 s putting the lock picture back.
+- [ ] C.6 **Check:** does the Apps & features version change after an update? It doesn't re-register today; fix it if the version is stale.
+- [ ] C.7 **Tests:** the replace and checksum logic, pulled out so it can run without Windows prompts.
+- [ ] C.8 **Check with a local feed and a temp install, with the user's yes:** settings and library kept, restart with no settings window, lock picture right afterwards (quit puts it back, the next start sets it again), bad checksum, cut download, locked exe. Clean up. Commit.
+
+Notes:
+
+## Phase D — Release pipeline
+
+Read: `tools/build.ps1`, `.github/workflows/release.yml`, `CHANGELOG.md`, README "Download".
+
+- [ ] D.1 **`tools/build.ps1`:** its check rejects anything but `1.2.3`, so prerelease tags would fail. Accept `1.2.3-rc.1`. Check `AppPaths.Version` returns the prerelease text and the file version still builds.
+- [ ] D.2 **`release.yml`:** a tag with `-` gets `--prerelease`. Bump the pinned actions off Node 20, pinned to commits as now, checking each new major's changes.
+- [ ] D.3 **Docs:** README "Updating" now describes the in-app route, with the manual route as the fallback. Write down how to cut a stable and a beta release. `CHANGELOG.md` needs a section per tag, or the workflow stops.
+- [ ] D.4 **With the user's yes:** push, run the dry run. Commit.
+
+Notes:
+
+## Phase E — Rehearsal, then `v0.1.0`
+
+Prereleases don't become GitHub's "latest", so the README's download link is unaffected. Release tests can't run on this laptop (Application Control) but CI runs them; Debug tests pass locally.
+
+- [ ] E.1 **With the user's yes:** tag `v0.1.0-rc.1`. This is the first real tagged run of `release.yml`. Download it, check the checksum, install.
+- [ ] E.2 **With the user's yes:** tag `v0.1.0-rc.2`. On Beta, rc.1 finds it and installs it with one click. Confirm the version, settings and library. On Stable, rc.1 must not offer it.
+- [ ] E.3 **Application Control:** note whether Windows blocks the unsigned exe here, and that the fallback appears if it does.
+- [ ] E.4 **With the user's yes:** tag `v0.1.0`. rc.2 on Stable finds it and installs. This ticks round 7's 3.7. Check the release page and the README link.
+- [ ] E.5 Ask the user about GitHub's immutable releases setting (check how it affects `gh release create` first, and that tags can't be reused), 2FA, and whether to delete the rc releases. Then a final pass over stale docs.
+
+Notes:
+
+---
+
+# Round 7 (finished; kept for its Notes)
+
+**Scope when written:** phase 1 first, with no commit until the user tested it. Since done, apart from 2.5 and 3.7, which round 8 takes over (A.5, E.4).
+
+**Safety rules for that round**
 - Never call `SetImageFileAsync` on the user's real lock screen, and never call `LockWorkStation`, without asking
   in that chat first. In dev, test with `syncLockScreen` off or with a fake `ILockScreenImage`.
 - Never push, tag, merge to `main` or publish a release without the user's yes in that chat.
@@ -111,7 +219,7 @@ Read: `web/settings/tabs/screensaver.js` (the Lock screen card), `web/settings/l
 - [x] 2.4 Unload the preview `<video>` when the tab or card goes away (`thumbs.js` shows how), so a 4K decode doesn't run in the background.
 - [ ] 2.5 Mock bridge support. Check in the browser (mock) and the dev app. With the user: pick a frame, Win+L. Commit.
 
-Notes: 2.5 is left unticked: the browser (mock) check is done, the real Win+L check is still for the user.
+Notes: 2.5 is left unticked: the browser (mock) check is done, the real Win+L check is still for the user (now round 8's A.5).
 - New `web/settings/components/lockFrame.js` (created from the Screensaver tab, which now has `show`/`hide` to load/unload the preview) and `makeLockStill`, `lockWallpaperId`, `primarySize`, `lockFit` exported from `lockstills.js`. No host change was needed: `lockStill.frameSec` was already in `WallpaperInfo` (phase 1).
 - Checked in the browser on the mock with a real local video: starts on the default frame, drag seeks (pending seeks dropped), *Use this frame* saves `frameSec`, *Reset* saves without it, leaving the tab unloads the `<video>`, image and built-in show a picture without a slider.
 - Not checked on the real host: turning sync on in the dev app writes the real lock screen. Try: Screensaver tab, pick a frame, *Use this frame*, Win+L.
@@ -129,7 +237,7 @@ Read: `tools/build.ps1`, `src/Hanami.App/Hanami.App.csproj`, `App/AppPaths.cs` (
 - [x] 3.6 **With the user's yes:** merge `round-6` and this round into `main` (`main` has nothing `round-6` lacks, 9 commits behind today, so a fast-forward works), push, run the dry run, download its exe and test it from a temp folder per `docs/TESTING.md`.
 - [ ] 3.7 **With the user's yes:** tag `v0.1.0`, push the tag, check the published page and download. From now on: bump the changelog, tag, done.
 
-Notes: 3.1–3.6 are done; 3.7 (tag `v0.1.0`) is still waiting for the user's yes.
+Notes: 3.1–3.6 are done; 3.7 (tag `v0.1.0`) now happens in round 8's E.4, so the first release includes the updater.
 - 3.6 (4 Nov 2026, user's yes): `main` fast-forwarded to `round-6` and both pushed. Dry run (run 41834794087) passed on `windows-latest` in 1m11s with the tests, so tests do pass on a clean runner. Its exe: SHA-256 matched the `.sha256` file, version `0.1.0+d7dfa22`. Installing it ran fine (web assets extracted, notices file present, built-in lock stills made, uninstall keys written) and was cleaned up. The run warns that the pinned v4 actions use Node 20 (forced to Node 24); bump them to newer majors before it becomes an error.
 - Trap while testing: `uia.ps1`'s Edit lookup failed silently and the installer used its default folder (the real `%LocalAppData%\Programs\Hanami`). It was a fresh install, removed again (folder, `HKCU\Software\Hanami`, the Uninstall key, the Start menu shortcut). Check each UIA step succeeded before clicking Install, and stop on errors.
 - Notices live in `web/THIRD-PARTY-NOTICES.md` (so the exe embeds them with no csproj change); General tab shows them in an "Open-source notices" `<details>`, the README links them. The Shimeji-ee wording follows this plan's note ("New BSD" per its maintainer), not a licence text I read.
@@ -143,4 +251,4 @@ Notes: 3.1–3.6 are done; 3.7 (tag `v0.1.0`) is still waiting for the user's ye
 
 **Hanami's own Shimeji packs.** Feasible; the app needs nothing new. Format is `shime1.png`…`shime46.png` at 128×128 facing left, and any frame a pack lacks falls back to `shime1` (`PetBrain`), so a pack can start with about 12 key poses and grow. Plan: pick one original character (no existing anime characters, so it can be bundled and redistributed freely), write a pose sheet mapping frames to `ShimejiFrames`, make a small tool that turns a sprite sheet into a pack and previews it, and bundle a first pet as a starter. The hard part is art: keeping one character consistent across poses.
 
-**Other ideas, in the order suggested:** update check against GitHub Releases (tray notice, no silent installs) · code signing to remove the SmartScreen warning · a playlist per monitor, rotating wallpapers by time or time of day · drag and drop import onto the settings window · the in-wallpaper Live2D character, still not started.
+**Other ideas, in the order suggested:** signed updates and code signing to remove the SmartScreen warning · a playlist per monitor, rotating wallpapers by time or time of day · drag and drop import onto the settings window · the in-wallpaper Live2D character, still not started.
