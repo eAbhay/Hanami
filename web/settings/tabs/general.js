@@ -1,13 +1,10 @@
-// General tab — startup, folders, version, quit.
+// General tab — startup, updates, storage, uninstall, app info.
 import { h, svg, toggle, segmented, dialog, progressBar } from "../util.js";
 import { LOGO } from "../icons.js";
 import { pageHeader, card, row } from "../components/index.js";
 
 export function createGeneralTab(ctx) {
   const startup = toggle(true, (v) => ctx.mutate("updateSettings", { startWithWindows: v }).catch(() => startup.set(!v)), "Start with Windows");
-  const split = toggle(false, (v) => ctx.mutate("updateSettings", { theme: { split: v } }).catch(() => split.set(!v)), "Different wallpapers for light and dark mode");
-  const mode = segmented([{ value: "system", label: "Follow Windows" }, { value: "light", label: "☀ Light" }, { value: "dark", label: "☾ Dark" }],
-    "system", (v) => ctx.mutate("updateSettings", { theme: { mode: v } }).catch(() => {}), { ariaLabel: "Theme" });
   const autoCheck = toggle(true, (v) => ctx.mutate("updateSettings", { updates: { autoCheck: v } }).catch(() => autoCheck.set(!v)), "Tell me when updates are available");
   const channel = segmented([{ value: "stable", label: "Stable" }, { value: "beta", label: "Beta" }],
     "stable", (v) => ctx.mutate("updateSettings", { updates: { channel: v } }).catch(() => {}), { ariaLabel: "Update channel" });
@@ -31,8 +28,6 @@ export function createGeneralTab(ctx) {
   const skipBtn = h("button.btn", { type: "button", onclick: () => ctx.mutate("skipUpdate").catch((err) => ctx.toastError(err)) }, h("span", "Skip this version"));
   const actions = h("div.update-actions", installBtn, openPage, skipBtn);
   const banner = h("div.card.pad.update-banner", { hidden: true }, bannerTitle, bannerMeta, bannerProgress, bannerNotes, actions);
-  const windowsNow = h("p.field-hint");
-  const modeBox = h("div.field", mode, windowsNow);
   const installPath = h("code.path");
   const libraryPath = h("code.path");
   const version = h("span");
@@ -95,9 +90,6 @@ export function createGeneralTab(ctx) {
       row("download", "Tell me when updates are available", "Hanami asks GitHub for new releases about once a day. It sends nothing about you.", autoCheck, { rule: true }),
       row("sparkles", "Channel", "Stable is for normal releases. Beta also includes early releases that may be rougher.", channel, { rule: true }),
       checkRow)),
-    card("Light and dark", null,
-      row("moon", "Different wallpapers for light and dark mode", "Hanami switches with Windows' light/dark setting. Pick each one on the Wallpaper and Screensaver tabs.", split),
-      modeBox),
     card("Storage", null,
       pathRow("box", "Install folder", installPath),
       h("div.divider"),
@@ -145,12 +137,6 @@ export function createGeneralTab(ctx) {
   function update(s) {
     startup.set(s.settings.startWithWindows);
     updateUi(s);
-    split.set(s.settings.theme?.split);
-    modeBox.hidden = !s.settings.theme?.split;
-    mode.set(s.settings.theme?.mode ?? "system");
-    windowsNow.textContent = s.theme
-      ? `Windows is in ${s.theme.windows} mode right now${s.theme.active !== s.theme.windows ? ` · showing the ${s.theme.active} wallpapers` : ""}`
-      : "";
     installPath.textContent = s.installDir;
     installPath.title = s.installDir;
     libraryPath.textContent = s.libraryDir;

@@ -1,7 +1,37 @@
-# Implementation plan — round 8: lock screen update fix, in-app updates, first release
+# Implementation plan — round 10: reorganise the settings tabs
 
-**Current scope (user's decision, 4 Nov 2026): round 8, phases A to E in order.** Round 7 below is finished except for
-what round 8 takes over; it stays for its Notes.
+**Current scope (user's decision, 4 Nov 2026): round 10 below, on branch `round-10`.** Rounds 8 and 9 are finished and stay
+for their Notes. Round 7 is finished except for what round 8 took over.
+
+## Round 10 — settings tabs reorganised
+
+Settings UI only: no setting, message or host change, so `docs/CONTRACTS.md` should not need edits (search it to confirm).
+
+**Decisions (don't re-ask):**
+- Light and dark moves to Power because it is shared by the Wallpaper and Screensaver tabs, so it shouldn't sit on either. It goes last on the page, after Frame rate, so it doesn't interrupt the power flow or read as a power rule.
+- The tab stays named Power, with the same id and subtitle.
+- The Screensaver tab loses its link to Power and gets no replacement text. Wallpaper has no pointer to its power and frame rate settings either, and the two tabs should match. Screensaver on/off and timing stay on Power.
+- Pets get no battery option. They already follow the power rules (`PetManager.ModeOf`), so only the wording changes.
+
+**Rules:** work only on `round-10`. No commit, merge, push, tag or version bump without the user's yes in that chat.
+
+### Phase 1 — Move the settings
+
+- [x] 1.1 **Light and dark to Power.** In `web/settings/tabs/general.js`, `createGeneralTab`, take out `split`, `mode`, `windowsNow`, `modeBox`, the "Light and dark" card and their lines in `update`. Add them to `web/settings/tabs/power.js`, `createPowerTab`, as the last card, with the same copy and behaviour. Update both files' header comments if they go stale. General ends up as Startup, Updates, Storage, Uninstall, About, notices.
+- [x] 1.2 **Sign-in to the Lock screen card.** Move `signIn` and its row and `update` line from `createPowerTab` to `createScreensaverTab` in `web/settings/tabs/screensaver.js`. Save it with that tab's `save` helper. Make it the card's first row, followed by a divider, because the status, frame picker and buttons below all belong to the "Match" row. Drop "To match that lock screen to the screensaver, see the Screensaver tab." from its description. In Power, check that the Screensaver card's rows and rules still look right without it.
+- [x] 1.3 **Remove the Power link.** Remove `toPower` from `createScreensaverTab` and the `.link-row` styles from `web/settings/style.css`. `ctx.showTab` may then be unused: remove it only if nothing else calls it (check `web/settings/app.js`).
+- [x] 1.4 **Pets order.** In `web/settings/tabs/pets.js`, `createPetsTab`, the order becomes Your pets, Pet library, Behaviour.
+- [x] 1.5 **"Keep running on battery" wording.** In `createPowerTab`, `keepCard`, the description becomes: "By default Hanami pauses wallpapers and pets when you unplug to save battery. Turn this on to keep them running at full quality." The screensaver isn't mentioned because it never shows on battery.
+- [x] 1.6 **Docs.** `README.md`'s light and dark bullet says "Turn it on in General": change it to Power. Add a `CHANGELOG.md` entry following its format, with the version left for the user to decide.
+- [x] 1.7 **Check** with the mock bridge, in a plain browser (`docs/TESTING.md`):
+      - General, Power, Screensaver and Pets show the new layout, with no console errors.
+      - Turning light and dark on in Power shows the mode choice there and the Light | Dark switch on Wallpaper and Screensaver. Turning it off hides them.
+      - Require sign-in saves from its new place, and the Preview hint on the Screensaver tab still reads correctly.
+      - The update banner and General's tab dot still work.
+      - `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj` and the Debug build still pass (no C# should change).
+      - Then ask the user to look at it before any commit.
+
+Notes: 1.1-1.6 done; 1.7 checked on the mock (4 Nov 2026): General, Power, Screensaver and Pets layouts, light/dark toggle (mode choice on Power; switch on Wallpaper and Screensaver, gone when off), Require sign-in saves from the Lock screen card, Preview hint unchanged, update banner and General dot. 328 tests pass, Debug build clean (a running dev copy had to be quit first). `ctx.showTab` was unused after 1.3 and is removed; CONTRACTS.md needed no edit. Not committed: waiting for the user to look at it.
 
 ## Round 9 — "update available" is hard to miss (ships as `0.1.1`)
 

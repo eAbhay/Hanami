@@ -33,6 +33,8 @@ export function createPetsTab(ctx) {
 
   const el = h("section",
     pageHeader("Pets", "Little companions that live on your desktop.", actions),
+    card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
+    card("Pet library", h("span.card-meta", "Imported Shimeji packs"), empty, packList),
     card("Behaviour", null,
       row("sparkles", "Show pets", "Turn all pets off without removing them. The tray menu can also hide them for this session.", show),
       h("div.divider"),
@@ -41,9 +43,7 @@ export function createPetsTab(ctx) {
         h("p.field-hint", "Calm pets sit and nap more; lively ones run around and rarely sleep.")),
       h("div.divider"),
       row(null, "Climb windows", "Stand on the tops of your windows and climb their sides. Pets never move, resize or click your windows.", climb),
-      socialRow),
-    card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
-    card("Pet library", h("span.card-meta", "Imported Shimeji packs"), empty, packList));
+      socialRow));
 
   async function doImport(source) {
     actions.querySelectorAll("button").forEach((b) => { b.disabled = true; });

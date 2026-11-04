@@ -36,9 +36,9 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
   be *Same as desktop* (one set of settings for both) or its own. A wallpaper you pick for the
   first time starts from a copy of the look of the one it replaces. *Use as default for <effect>*
   in the effect drawer sets what wallpapers that haven't tuned it start from.
-- **Light and dark wallpapers (optional, off by default).** Turn it on in General and each slot
+- **Light and dark wallpapers (optional, off by default).** Turn it on in Power and each slot
   (every monitor's desktop, and the screensaver background) can hold a light and a dark wallpaper.
-  Hanami switches with Windows' light/dark setting, or you force Light or Dark from General or the
+  Hanami switches with Windows' light/dark setting, or you force Light or Dark from Power or the
   tray's Theme menu. Each wallpaper keeps its own look, so only the wallpaper changes.
 - **Desktop pets (Shimeji packs).** Import Shimeji image sets (`shime1.png … shime46.png`, from a
   folder or `.zip`) on the Pets tab and put up to 8 on the desktop. Pet packs are not included; find

@@ -69,6 +69,7 @@ export function createScreensaverTab(ctx) {
 
   // ---------------------------------------------------------------- lock screen
   // A still of the primary monitor's screensaver wallpaper as the Windows lock screen picture. Off by default.
+  const signIn = toggle(false, (v) => save({ requireSignIn: v }), "Require sign-in when it ends");
   const syncToggle = toggle(false, onSyncToggle, "Match the lock screen to the screensaver");
   const lockStatus = h("p.field-hint.lock-status");
   const lockFrame = createLockFrame(ctx);   // which frame of a video the lock screen shows
@@ -76,6 +77,8 @@ export function createScreensaverTab(ctx) {
   const settingsBtn = h("button.btn.subtle.small", { type: "button", onclick: () => ctx.call("openLockScreenSettings").catch((e) => ctx.toastError(e)) },
     h("span", "Lock screen settings…"));
   const lockCard = card("Lock screen", null,
+    row("lock", "Require sign-in when it ends", "Locks Windows the moment a key or click ends the screensaver, going straight to the lock screen instead of sliding up. Leave off if your desk is private.", signIn),
+    h("div.divider"),
     row("lock", "Match the lock screen to the screensaver",
       "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame, near the start unless you pick another below, and it stays the same until you change it or the wallpaper or theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Turning this off, or quitting Hanami, puts your previous lock screen picture back. Your lock screen must be set to Picture, not Windows Spotlight.",
       syncToggle),
@@ -99,9 +102,6 @@ export function createScreensaverTab(ctx) {
     catch (err) { ctx.toastError(err); }
   }
 
-  const toPower = h("button.link-row", { type: "button", onclick: () => ctx.showTab("power") },
-    svg("clock"), h("span", "Timing and power settings"), h("span.link-row-go", "Power →"));
-
   const el = h("section",
     pageHeader("Screensaver", "Your live wallpaper, fullscreen, while you're away from your desk.", previewBtn),
     status,
@@ -109,8 +109,7 @@ export function createScreensaverTab(ctx) {
     card("Background", slots, emptyDark, backgrounds.el),
     card("Effect", effectNote, effects),
     clockCard.el,
-    lockCard,
-    toPower);
+    lockCard);
 
   function update(s) {
     const cfg = s.settings.screensaver;
@@ -140,6 +139,7 @@ export function createScreensaverTab(ctx) {
     clockCard.update(s);
 
     const lock = st.lockScreen ?? { status: "off", hasBackup: false };
+    signIn.set(!!cfg.requireSignIn);
     syncToggle.set(!!cfg.syncLockScreen);
     lockStatus.hidden = !cfg.syncLockScreen && !lock.error;
     lockStatus.textContent = lock.status === "failed" ? `Couldn't update it: ${lock.error ?? "unknown error"}`

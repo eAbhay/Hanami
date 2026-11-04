@@ -1,4 +1,5 @@
 // Power tab — when things run: the desktop wallpaper per condition, the screensaver's timing, frame rates.
+// Light and dark mode is last: it is shared by the Wallpaper and Screensaver tabs, so it belongs to neither.
 import { h, svg, segmented, slider, toggle } from "../util.js";
 import { pageHeader, card, row } from "../components/index.js";
 
@@ -50,7 +51,7 @@ export function createPowerTab(ctx) {
     h("div.callout-art", svg("battery")),
     h("div.callout-text",
       h("div.callout-title", "Keep running on battery"),
-      h("div.callout-sub", "By default Hanami pauses when you unplug to save battery. Turn this on to keep wallpapers playing at full quality on battery.")),
+      h("div.callout-sub", "By default Hanami pauses wallpapers and pets when you unplug to save battery. Turn this on to keep them running at full quality.")),
     keepSwitch);
 
   // ---------------------------------------------------------------- desktop wallpaper rules
@@ -88,7 +89,6 @@ export function createPowerTab(ctx) {
   idleInput.addEventListener("change", commitIdle);
   idleInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { commitIdle(); idleInput.blur(); } });
   const stopSeg = segmented(STOP_OPTIONS, 0, (v) => saveSaver({ stopAfterHours: v }), { ariaLabel: "Stop after" });
-  const signIn = toggle(false, (v) => saveSaver({ requireSignIn: v }), "Require sign-in when it ends");
   const timers = h("div.ss-timers");
 
   const saverCard = card("Screensaver", saverStatus,
@@ -96,8 +96,7 @@ export function createPowerTab(ctx) {
       row("screensaver", "Live screensaver", "When plugged in and idle, shows your live wallpaper fullscreen with a clock and keeps the screen on. A key press or click ends it — moving the mouse doesn't.", saverEnabled, { rule: true }),
       row("clock", "Start after", "Minutes without mouse or keyboard input, while plugged in.",
         h("div.ss-idle", idleSeg, h("label.num-wrap", idleInput, h("span", "min"))), { rule: true }),
-      row("power", "Stop after", "After this, Hanami hides it and lets Windows turn the screen off and sleep as usual.", stopSeg, { rule: true }),
-      row("lock", "Require sign-in when it ends", "Locks Windows the moment a key or click ends the screensaver, going straight to the lock screen instead of sliding up. To match that lock screen to the screensaver, see the Screensaver tab. Leave off if your desk is private.", signIn, { rule: true })),
+      row("power", "Stop after", "After this, Hanami hides it and lets Windows turn the screen off and sleep as usual.", stopSeg, { rule: true })),
     timers,
     h("p.footnote", svg("info"),
       h("span", "On battery Hanami never shows the screensaver, so Windows' own timers apply. Closing the lid always follows your Windows lid setting.")));
@@ -126,6 +125,13 @@ export function createPowerTab(ctx) {
   const fpsAC = segmented(FPS.map((v) => ({ value: v, label: String(v) })), 60, (v) => ctx.mutate("updateSettings", { performance: { fpsCap: v } }).catch(() => {}), { ariaLabel: "FPS cap when plugged in" });
   const fpsBat = segmented(FPS.map((v) => ({ value: v, label: String(v) })), 30, (v) => ctx.mutate("updateSettings", { performance: { batteryFpsCap: v } }).catch(() => {}), { ariaLabel: "FPS cap on battery" });
 
+  // ---------------------------------------------------------------- light and dark
+  const split = toggle(false, (v) => ctx.mutate("updateSettings", { theme: { split: v } }).catch(() => split.set(!v)), "Different wallpapers for light and dark mode");
+  const mode = segmented([{ value: "system", label: "Follow Windows" }, { value: "light", label: "☀ Light" }, { value: "dark", label: "☾ Dark" }],
+    "system", (v) => ctx.mutate("updateSettings", { theme: { mode: v } }).catch(() => {}), { ariaLabel: "Theme" });
+  const windowsNow = h("p.field-hint");
+  const modeBox = h("div.field", mode, windowsNow);
+
   const el = h("section",
     pageHeader("Power", "Choose when Hanami runs, and how hard it works."),
     statusCard,
@@ -137,7 +143,10 @@ export function createPowerTab(ctx) {
     card("Frame rate", "Reduced mode is always capped at 30",
       row("plug", "FPS cap when plugged in", "Higher is smoother; 60 suits most screens.", fpsAC),
       h("div.divider"),
-      row("battery", "FPS cap on battery", "Used whenever you're unplugged and running Full.", fpsBat)));
+      row("battery", "FPS cap on battery", "Used whenever you're unplugged and running Full.", fpsBat)),
+    card("Light and dark", null,
+      row("moon", "Different wallpapers for light and dark mode", "Hanami switches with Windows' light/dark setting. Pick each one on the Wallpaper and Screensaver tabs.", split),
+      modeBox));
 
   function update(s) {
     const p = s.settings.power;
@@ -148,6 +157,12 @@ export function createPowerTab(ctx) {
       r.explain.dataset.mode = p[c.key];
       r.extra?.set(p.lowBatteryThreshold);
     }
+    split.set(s.settings.theme?.split);
+    modeBox.hidden = !s.settings.theme?.split;
+    mode.set(s.settings.theme?.mode ?? "system");
+    windowsNow.textContent = s.theme
+      ? `Windows is in ${s.theme.windows} mode right now${s.theme.active !== s.theme.windows ? ` · showing the ${s.theme.active} wallpapers` : ""}`
+      : "";
     keepSwitch.set(p.onBattery === "full");
     keepCard.classList.toggle("on", p.onBattery === "full");
     fpsAC.set(s.settings.performance.fpsCap);
@@ -161,7 +176,6 @@ export function createPowerTab(ctx) {
       if (document.activeElement !== idleInput) idleInput.value = cfg.idleMinutes;
       idleInput.classList.toggle("custom", !IDLE_PRESETS.includes(cfg.idleMinutes));
       stopSeg.set(cfg.stopAfterHours);
-      signIn.set(cfg.requireSignIn);
       renderTimers(s);
     }
 

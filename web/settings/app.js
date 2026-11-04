@@ -283,7 +283,6 @@ async function boot() {
   // One shared "<Effect> settings" drawer; tabs open it from an effect tile's gear.
   const drawer = createTuningDrawer(ctx);
   ctx.openTuning = drawer.open;
-  ctx.showTab = (id) => show(id);
   ctx.onState((s) => drawer.update(s));
 
   try {
