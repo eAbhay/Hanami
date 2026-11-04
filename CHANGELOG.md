@@ -8,6 +8,7 @@ without a matching section stops the release. Versions with a `-` (release candi
 
 - **Updates are harder to miss:** while a new version is waiting, the tray icon has a small dot and its tooltip names the version. The dot stays until you update or skip that version.
 - **Update from the tray:** the top of the tray menu now offers **Update available: install x.y.z**, which downloads and installs in one click. The tooltip shows the progress, and a notification tells you if it fails. **View details** opens Settings → General.
+- **One reminder:** if a new version is still waiting about 3 days after Hanami first told you, you get one more notification. Skipping the version or turning off **Tell me when updates are available** stops it.
 - **Settings:** the General tab's button has a matching dot.
 - A failed **Check now** no longer hides a version Hanami has already found.
 

@@ -171,6 +171,14 @@ public static class UpdatePolicy
         !IsSkipped(offerVersion, skippedVersion)
         && !(SemVer.TryParse(notifiedVersion, out var notified) && SemVer.TryParse(offerVersion, out var offer) && offer.Equals(notified));
 
+    /// <summary>How long a version waits after its first notification before the one reminder.</summary>
+    public static readonly TimeSpan RemindAfter = TimeSpan.FromDays(3);
+
+    /// <summary>The one reminder: the version on offer is the one already announced, its reminder is due, and the user still wants to be told.</summary>
+    public static bool ShouldRemind(string offerVersion, string? notifiedVersion, DateTime? remindAtUtc, bool autoCheck, DateTime nowUtc) =>
+        autoCheck && remindAtUtc is { } due && nowUtc >= due
+        && SemVer.TryParse(notifiedVersion, out var notified) && SemVer.TryParse(offerVersion, out var offer) && offer.Equals(notified);
+
     /// <summary>A skip only holds for the version it was made for: true when the offer is newer than the skipped one, so the skip can be forgotten.</summary>
     public static bool SkipIsStale(string offerVersion, string? skippedVersion) =>
         SemVer.TryParse(skippedVersion, out var skipped) && SemVer.TryParse(offerVersion, out var offer) && offer > skipped;

@@ -315,7 +315,8 @@ type Settings = {
     channel: "stable" | "beta"; // default "stable"; anything else reads as stable
     skippedVersion: string | null;   // the version the user skipped; a newer one is offered again
     lastCheckUtc: string | null;     // ISO time of the last successful check
-    notifiedVersion: string | null;  // the version the tray last announced (once per version)
+    notifiedVersion: string | null;  // the version the tray last announced
+    remindAtUtc: string | null;      // ISO time that version's one reminder is due; null once shown
   };
 };
 
@@ -449,8 +450,9 @@ writes a log line; **Check now** shows the message in `update.error`. Neither ta
 - a banner on the General tab with the notes, size, *Update* and *Skip this version*; while downloading it shows a progress bar, and after a failure the message with
   *Try again* and *Open download page*.
 
-Balloons (Windows may hide them, and doesn't keep them in the notification center; clicking one opens the General tab): one per version when it is first offered
-(`updates.notifiedVersion`), one when an install started from the tray begins, and one each time an install fails.
+Balloons (Windows may hide them, and doesn't keep them in the notification center; clicking one opens the General tab): one when a version is first offered
+(`updates.notifiedVersion`), one reminder about 3 days later if it is still waiting (`updates.remindAtUtc`, `UpdatePolicy.ShouldRemind`: checked on the hourly tick, only with status `available` and `autoCheck` on,
+late rather than lost if the PC was off), one when an install started from the tray begins, and one each time an install fails.
 A skip holds only for that version: a newer one brings all of this back. The offer isn't kept across restarts, so after a start it returns with the first check, about 60 s later
 (with `autoCheck` off, only after **Check now**).
 The update choices belong to the install: importing a pack's settings keeps this PC's `updates`. The `SetupWindow` checkbox sets `updates.autoCheck`.

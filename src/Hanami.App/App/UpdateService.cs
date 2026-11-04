@@ -41,7 +41,7 @@ public sealed class UpdateService : IDisposable
     /// <summary>Raised when anything the page or tray shows changed.</summary>
     public event Action? Changed;
 
-    /// <summary>Raised once per version (and never for a skipped one) when an automatic or manual check finds it.</summary>
+    /// <summary>Raised when a check first finds a version (never a skipped one), and once more as its reminder about 3 days later if it is still waiting.</summary>
     public event Action<UpdateOffer>? Announce;
 
     /// <param name="feed"><c>--update-feed</c>: an http(s) URL or a file path with the releases list, instead of GitHub. The dev copy takes any;
@@ -63,6 +63,7 @@ public sealed class UpdateService : IDisposable
             // The first check also runs when the last one was recent: the answer isn't kept across restarts, and an unchanged one costs nothing.
             if (_store.Current.Updates.AutoCheck && (first || UpdatePolicy.ShouldCheck(true, _store.Current.Updates.LastCheckUtc, DateTime.UtcNow)))
                 await CheckAsync(manual: false);
+            RemindIfDue();   // every tick, not only after a check, so it isn't up to a day late
         };
     }
 
@@ -161,10 +162,20 @@ public sealed class UpdateService : IDisposable
         Error = null;
         if (UpdatePolicy.ShouldNotify(offer.Version, Settings.SkippedVersion, Settings.NotifiedVersion))
         {
-            _store.Patch(new JsonObject { ["updates"] = new JsonObject { ["notifiedVersion"] = offer.Version } });
+            _store.Patch(new JsonObject { ["updates"] = new JsonObject { ["notifiedVersion"] = offer.Version, ["remindAtUtc"] = DateTime.UtcNow + UpdatePolicy.RemindAfter } });
             Announce?.Invoke(Offer);
         }
         Changed?.Invoke();
+    }
+
+    /// <summary>The one reminder for a version still waiting. Not during a download or after a failed install: those say so themselves.</summary>
+    private void RemindIfDue()
+    {
+        if (Status != "available" || Offer is not { } offer) return;
+        if (!UpdatePolicy.ShouldRemind(offer.Version, Settings.NotifiedVersion, Settings.RemindAtUtc, Settings.AutoCheck, DateTime.UtcNow)) return;
+        _store.Patch(new JsonObject { ["updates"] = new JsonObject { ["remindAtUtc"] = null } });
+        Log.Info($"Updates: reminding about {offer.Version}.");
+        Announce?.Invoke(offer);
     }
 
     private void Fail(string message)

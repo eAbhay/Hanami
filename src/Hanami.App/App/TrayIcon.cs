@@ -77,7 +77,7 @@ public sealed class TrayIcon : IDisposable
         ApplyTip();
     }
 
-    /// <summary>The once-per-version notification; clicking it opens the update in the settings window.</summary>
+    /// <summary>A version's notification and its one reminder; clicking it opens the update in the settings window.</summary>
     public void NotifyUpdate(string version) =>
         _icon.ShowBalloonTip(10_000, "Hanami update available", $"Version {version} is ready. Click to see what's new.", WinForms.ToolTipIcon.Info);
 

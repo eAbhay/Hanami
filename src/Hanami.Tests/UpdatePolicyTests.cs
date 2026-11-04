@@ -147,6 +147,20 @@ public class UpdatePolicyTests
     }
 
     [Fact]
+    public void Reminder_IsDueOnce_ForTheAnnouncedVersion()
+    {
+        var due = new DateTime(2026, 11, 7, 12, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(TimeSpan.FromDays(3), UpdatePolicy.RemindAfter);
+        Assert.False(UpdatePolicy.ShouldRemind("0.2.0", "0.2.0", due, true, due.AddMinutes(-1)));   // not yet
+        Assert.True(UpdatePolicy.ShouldRemind("0.2.0", "0.2.0", due, true, due));
+        Assert.True(UpdatePolicy.ShouldRemind("0.2.0", "0.2.0", due, true, due.AddDays(9)));        // the PC was off: late, but still once
+        Assert.False(UpdatePolicy.ShouldRemind("0.2.0", "0.2.0", null, true, due));                 // already shown, or announced before reminders
+        Assert.False(UpdatePolicy.ShouldRemind("0.2.1", "0.2.0", due, true, due));                  // a different version gets its own notification
+        Assert.False(UpdatePolicy.ShouldRemind("0.2.0", null, due, true, due));
+        Assert.False(UpdatePolicy.ShouldRemind("0.2.0", "0.2.0", due, false, due));                 // "Tell me when updates are available" is off
+    }
+
+    [Fact]
     public void ANewerVersion_ClearsASkip()
     {
         Assert.True(UpdatePolicy.IsSkipped("0.2.0", "v0.2.0"));

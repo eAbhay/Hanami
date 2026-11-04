@@ -211,6 +211,8 @@ public sealed class UpdateSettings
 
     /// <summary>The version the user was last told about by a tray notification (once per version).</summary>
     public string? NotifiedVersion { get; set; }
+    /// <summary>When the notified version's one reminder is due; null once it was shown (or for a version announced before reminders existed).</summary>
+    public DateTime? RemindAtUtc { get; set; }
 }
 
 public sealed class PerformanceSettings
@@ -511,6 +513,7 @@ public sealed class SettingsStore
         if (string.IsNullOrWhiteSpace(s.Updates.SkippedVersion)) s.Updates.SkippedVersion = null;
         if (string.IsNullOrWhiteSpace(s.Updates.NotifiedVersion)) s.Updates.NotifiedVersion = null;
         if (s.Updates.LastCheckUtc is { } last) s.Updates.LastCheckUtc = last.ToUniversalTime();
+        if (s.Updates.RemindAtUtc is { } remind) s.Updates.RemindAtUtc = remind.ToUniversalTime();
         s.Screensaver.IdleMinutes = Math.Clamp(s.Screensaver.IdleMinutes, 1, 120);
         s.Screensaver.StopAfterHours = Math.Clamp(s.Screensaver.StopAfterHours, 0, 48);
         s.Power.LowBatteryThreshold = Math.Clamp(s.Power.LowBatteryThreshold, 0, 100);

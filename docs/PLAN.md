@@ -5,7 +5,7 @@ what round 8 takes over; it stays for its Notes.
 
 ## Round 9 — "update available" is hard to miss (ships as `0.1.1`)
 
-Code and docs done 4 Nov 2026; not pushed or tagged. **Open for the user:** re-show the balloon once after about 3 days if still pending (changes round 8's "one notification per version"; not built).
+Code and docs done 4 Nov 2026; not pushed or tagged. **User's decision:** the balloon shows once more about 3 days after the first if the version is still waiting. This replaces round 8's "one notification per version". With `autoCheck` off there is no reminder.
 Notes: the rule is in `Core/UpdateAttention`; tray in `App/TrayIcon` (`ShowUpdate`, `WithDot`) and `HanamiHost.OnUpdateChanged` / `InstallUpdateFromTray`; tab dot in `web/settings/app.js`.
 Differed from the brief: a failed **Check now** used to drop the offer, which would have removed the dots, so it now keeps the offer (status `available` + `error`). An automatic check finishing during a download no longer overwrites `downloading`. Added an "Updating Hanami" balloon when the tray click starts an install, because the click otherwise shows nothing.
 Checked in the dev copy with a local feed and a throttled asset server (wrong checksum, so no handover): dot on the icon, tooltip, menu items, newer version after a skip, failed check, tray install with progress in the menu, failure balloon, *View details*. Mock bridge: all tab dot states.
