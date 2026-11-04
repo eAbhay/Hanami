@@ -118,6 +118,7 @@ Read: `tools/build.ps1`, `.github/workflows/release.yml`, `CHANGELOG.md`, README
 Notes: D.1-D.3 done (5 Nov 2026), D.4: pushed and dry run started with the user's yes.
 - `build.ps1 -SkipTests -Version v9.9.9-rc.1` built: FileVersion 9.9.9.0, ProductVersion `9.9.9-rc.1+<sha>`, so `AppPaths.Version` (split on `+`) gives `9.9.9-rc.1`. `1.2` is still rejected. `dist/` now holds that 9.9.9-rc.1 exe: rebuild before using it.
 - `release.yml`: `--prerelease` when the tag contains `-` (`@extra` splat on `gh release create`; not run yet, the dry run doesn't reach it, so the first real run is rc.1). Actions now checkout v7.0.1, setup-dotnet v6.1.0, upload-artifact v7.0.2, all Node 24, pinned to commit SHAs. Release notes of each new major read: ESM move, Node 24, upload-artifact `archive` option; nothing affects this workflow.
+- Dry run (run 41851586039, 5 Nov 2026) passed on windows-latest with the tests and no Node 20 warning. Phase D is pushed as c736762.
 - README gained "Releasing" under Build (stable vs beta, dry run, frozen items). `CHANGELOG.md` has `0.1.0-rc.1` and `0.1.0-rc.2` sections already so those tags can build; they are stub texts to tidy in E.5.
 
 ## Phase E — Rehearsal, then `v0.1.0`
