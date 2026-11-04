@@ -119,7 +119,7 @@ Notes: D.1-D.3 done (5 Nov 2026), D.4: pushed and dry run started with the user'
 - `build.ps1 -SkipTests -Version v9.9.9-rc.1` built: FileVersion 9.9.9.0, ProductVersion `9.9.9-rc.1+<sha>`, so `AppPaths.Version` (split on `+`) gives `9.9.9-rc.1`. `1.2` is still rejected. `dist/` now holds that 9.9.9-rc.1 exe: rebuild before using it.
 - `release.yml`: `--prerelease` when the tag contains `-` (`@extra` splat on `gh release create`; not run yet, the dry run doesn't reach it, so the first real run is rc.1). Actions now checkout v7.0.1, setup-dotnet v6.1.0, upload-artifact v7.0.2, all Node 24, pinned to commit SHAs. Release notes of each new major read: ESM move, Node 24, upload-artifact `archive` option; nothing affects this workflow.
 - Dry run (run 41851586039, 5 Nov 2026) passed on windows-latest with the tests and no Node 20 warning. Phase D is pushed as c736762.
-- README gained "Releasing" under Build (stable vs beta, dry run, frozen items). `CHANGELOG.md` has `0.1.0-rc.1` and `0.1.0-rc.2` sections already so those tags can build; they are stub texts to tidy in E.5.
+- README gained "Releasing" under Build (stable vs beta, dry run, frozen items). `CHANGELOG.md` got rc.1 and rc.2 stub sections so those tags could build (removed again once the rcs were deleted).
 
 ## Phase E — Rehearsal, then `v0.1.0`
 
@@ -128,13 +128,15 @@ Prereleases don't become GitHub's "latest", so the README's download link is una
 - [x] E.1 **With the user's yes:** tag `v0.1.0-rc.1`. This is the first real tagged run of `release.yml`. Download it, check the checksum, install.
 - [x] E.2 **With the user's yes:** tag `v0.1.0-rc.2`. On Beta, rc.1 finds it and installs it with one click. Confirm the version, settings and library. On Stable, rc.1 must not offer it.
 - [x] E.3 **Application Control:** note whether Windows blocks the unsigned exe here, and that the fallback appears if it does.
-- [ ] E.4 **With the user's yes:** tag `v0.1.0`. rc.2 on Stable finds it and installs. This ticks round 7's 3.7. Check the release page and the README link.
+- [x] E.4 **With the user's yes:** tag `v0.1.0`. rc.2 on Stable finds it and installs. This ticks round 7's 3.7. Check the release page and the README link.
 - [ ] E.5 Ask the user about GitHub's immutable releases setting (check how it affects `gh release create` first, and that tags can't be reused), 2FA, and whether to delete the rc releases. Then a final pass over stale docs.
 
 Notes: E.1-E.3 done 4 Nov 2026 (user's yes for each tag and the temp install).
 - rc.1 and rc.2 builds passed on CI and are published as prereleases with both assets; downloaded rc.1's SHA-256 matched. The first real HTTPS check/download from GitHub worked: Stable said "up to date" with rc.2 out, Beta offered rc.2 (82.6 MB), one click downloaded, verified, swapped and restarted. Version 0.1.0-rc.2 in the exe and Apps & features, settings (channel beta) and Library kept, no settings window after the restart, `update/` gone.
 - Application Control did not block the unsigned downloaded exe (rc.1 install or the rc.2 swap) on this laptop, so the `Win32Exception` fallback banner was not seen here.
-- Test install lives in the session scratchpad `rc1-install\Hanami` (HKCU\Software\Hanami + Uninstall key, no Run key): still installed, to be removed after E.4.
+- E.4: `v0.1.0` published as Latest (run on tag 3b40758), assets `Hanami.exe` + `.sha256`, `releases/latest` redirects to it. The test install on Stable (rc.2) was offered 0.1.0 and updated with one click (ARP shows 0.1.0). Test install then removed (registry keys, shortcut, folder); the dev copy runs again.
+- E.5 so far: user has 2FA on; rc.1 and rc.2 releases and tags were deleted (`gh release delete --cleanup-tag`), their CHANGELOG stubs removed. Open: GitHub's immutable-releases setting, which the user needs explained first (it would stop a release's tag and assets from ever being changed or reused, and may stop deleting).
+- The user confirmed (4 Nov 2026) the burning tree on the lock screen was expected: it is their screensaver wallpaper.
 
 ---
 
@@ -249,7 +251,7 @@ Read: `tools/build.ps1`, `src/Hanami.App/Hanami.App.csproj`, `App/AppPaths.cs` (
 - [x] 3.4 **`.github/workflows/release.yml`:** on a `v*` tag, on `windows-latest`: setup .NET per `global.json`, run `tools\build.ps1 -Version <tag>`, and create a release named after the tag, with the matching changelog section as notes and `Hanami.exe` plus the checksum attached. `permissions: contents: write`, actions pinned. Tests failing means no release. Also a `workflow_dispatch` dry run which uploads a build artifact without releasing. Confirm the tests pass on a clean runner (no `devroot`, no ffmpeg).
 - [x] 3.5 **README:** a **Download** section at the top linking to the latest release, requirements (Windows 11 x64, WebView2 runtime: built into Windows 11), and how to update (download the new exe and run it: `Installer` replaces the copy). Explain the SmartScreen warning: the exe isn't code-signed, so choose More info → Run anyway, and compare the checksum. Add a screenshot or short GIF (made from original or demo content only, not imported third-party art).
 - [x] 3.6 **With the user's yes:** merge `round-6` and this round into `main` (`main` has nothing `round-6` lacks, 9 commits behind today, so a fast-forward works), push, run the dry run, download its exe and test it from a temp folder per `docs/TESTING.md`.
-- [ ] 3.7 **With the user's yes:** tag `v0.1.0`, push the tag, check the published page and download. From now on: bump the changelog, tag, done.
+- [x] 3.7 **With the user's yes:** tag `v0.1.0`, push the tag, check the published page and download. From now on: bump the changelog, tag, done.
 
 Notes: 3.1–3.6 are done; 3.7 (tag `v0.1.0`) now happens in round 8's E.4, so the first release includes the updater.
 - 3.6 (4 Nov 2026, user's yes): `main` fast-forwarded to `round-6` and both pushed. Dry run (run 41834794087) passed on `windows-latest` in 1m11s with the tests, so tests do pass on a clean runner. Its exe: SHA-256 matched the `.sha256` file, version `0.1.0+d7dfa22`. Installing it ran fine (web assets extracted, notices file present, built-in lock stills made, uninstall keys written) and was cleaned up. The run warns that the pinned v4 actions use Node 20 (forced to Node 24); bump them to newer majors before it becomes an error.

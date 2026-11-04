@@ -1,18 +1,8 @@
 # Changelog
 
 One section per version, newest first. The section for a version is used as that release's notes on GitHub, so each is written
-for people using Hanami, not for developers. The heading is just the version number (`## 0.1.0`, `## 0.1.0-rc.1`), and a tag
+for people using Hanami, not for developers. The heading is just the version number (`## 0.1.0`, `## 0.2.0-beta.1`), and a tag
 without a matching section stops the release. Versions with a `-` (release candidates, betas) are prereleases.
-
-## 0.1.0-rc.2
-
-Release candidate for 0.1.0, published to rehearse updating. Nothing new since rc.1. If you are on the **Beta** channel in
-Settings → General → Updates, rc.1 offers this one.
-
-## 0.1.0-rc.1
-
-First release candidate for 0.1.0, published to rehearse the release and update process. It is the full 0.1.0 feature set
-below; install the final 0.1.0 instead unless you are testing updates.
 
 ## 0.1.0
 
