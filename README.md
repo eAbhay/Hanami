@@ -10,8 +10,10 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 
 - **Requirements:** Windows 11 (64-bit). The WebView2 runtime Hanami draws with is built into Windows 11, so there is
   nothing else to install.
-- **Updating:** download the new `Hanami.exe` and run it. It offers to replace the installed copy, then restarts Hanami;
-  your settings and library are kept. What changed is in the [changelog](CHANGELOG.md).
+- **Updating:** when Hanami tells you about a new version, press **Update** in Settings → General. It downloads the new exe over HTTPS,
+  checks its size and SHA-256 against the release's `Hanami.exe.sha256`, swaps it in and restarts Hanami; your settings and library are kept.
+  If anything fails, Hanami keeps running and the banner offers **Open download page**. Or download the new `Hanami.exe` yourself and run it:
+  it offers to replace the installed copy. What changed is in the [changelog](CHANGELOG.md).
 - **Update checks:** by default Hanami asks GitHub's public releases list for a newer version about once a day and tells you in the tray;
   it never installs anything without your click. That request is all it sends: nothing about you or your PC. Turn it off, or
   switch between **Stable** and **Beta** (which also offers early releases), in Settings → General → Updates.
@@ -100,9 +102,9 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 [Develop](#develop)). It uses the repo's `devroot/` folder and doesn't touch the registry or
 startup.
 
-**Updating:** run a newer `Hanami.exe` from anywhere. It offers to replace the installed copy,
-then restarts Hanami. Your settings and library are kept. Hanami also tells you when a newer release is out (Settings → General →
-Updates; the check contacts GitHub and sends nothing else).
+**Updating:** Hanami tells you when a newer release is out (Settings → General → Updates; the check contacts GitHub and sends nothing
+else). Press **Update** and it downloads, verifies and installs the new version, then restarts. Or run a newer `Hanami.exe` from
+anywhere: it offers to replace the installed copy, then restarts Hanami. Your settings and library are kept either way.
 
 **Moving to another PC:** Settings → Export / Import → choose items → *Export*. On the other
 PC, install Hanami and use *Import pack*.

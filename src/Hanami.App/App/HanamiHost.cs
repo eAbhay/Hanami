@@ -440,7 +440,7 @@ public sealed class HanamiHost
                 return BuildState();
 
             case "installUpdate":
-                _updates.OpenPage();   // until the download-and-install phase, the release page is the way to update
+                _ = _updates.InstallAsync();   // sets "downloading" before its first await; the rest reports through Changed
                 return BuildState();
 
             case "skipUpdate":

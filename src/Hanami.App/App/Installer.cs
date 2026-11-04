@@ -16,6 +16,8 @@ public static class Installer
     public const string QuitEventName = @"Local\Hanami.Quit";
     public const string ShowEventName = @"Local\Hanami.ShowSettings";
     public const string InstanceMutexName = @"Local\Hanami.Instance";
+    /// <summary>Frozen: old copies start a downloaded update with this flag.</summary>
+    public const string ApplyUpdateArg = "--apply-update";
 
     public static string DefaultInstallDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Hanami");
@@ -28,6 +30,7 @@ public static class Installer
             return AppPaths.Dev(devIndex + 1 < args.Length && !args[devIndex + 1].StartsWith("--") ? args[devIndex + 1] : null);
 
         var exe = Environment.ProcessPath!;
+        if (args.Contains(ApplyUpdateArg)) return ApplyUpdate(exe);   // frozen flag: started by an older Hanami that downloaded this exe
         var installDir = Registration.InstallDir;
         var installedExe = installDir is null ? null : Path.Combine(installDir, "Hanami.exe");
 
@@ -88,34 +91,79 @@ public static class Installer
         Log.Info($"Installed to {dir}");
     }
 
+    /// <summary>
+    /// Runs as the downloaded exe (<c>--apply-update</c>): stops the installed copy, swaps itself in and starts the installed copy again.
+    /// No message boxes. If the old copy won't leave, nothing is touched and it keeps running; if the swap fails the old exe is intact
+    /// and is started again. Always returns null (this process then exits).
+    /// </summary>
+    private static AppPaths? ApplyUpdate(string exe)
+    {
+        var installDir = Registration.InstallDir;
+        var installedExe = installDir is null ? null : Path.Combine(installDir, "Hanami.exe");
+        if (installedExe is null || !File.Exists(installedExe) || SamePath(exe, installedExe))
+        {
+            Log.Warn("Apply update: no installed Hanami to update; nothing done.");
+            return null;
+        }
+        if (!StopRunningCopy(StopTimeout))
+        {
+            Log.Warn("Apply update: the running Hanami didn't quit in time; leaving it as it is.");
+            return null;
+        }
+        try
+        {
+            UpdateInstall.Replace(exe, installedExe);
+            Log.Info($"Updated {installedExe} to {AppPaths.Version}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Apply update: couldn't replace the installed exe; starting the old copy again", ex);
+        }
+        try { Launch(installedExe, "--updated"); }   // the new exe on success, the untouched old one on failure
+        catch (Exception ex) { Log.Error("Apply update: couldn't start Hanami", ex); }
+        return null;
+    }
+
+    /// <summary>How long to wait for a running copy to quit: it can spend about 3 s putting the lock screen picture back.</summary>
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Asks a running Hanami (if any) to quit and waits for it to release the instance mutex.
+    /// False when it is still there after <paramref name="timeout"/>.
+    /// </summary>
+    private static bool StopRunningCopy(TimeSpan timeout)
+    {
+        if (!EventWaitHandle.TryOpenExisting(QuitEventName, out var quit)) return true;
+        quit.Set();
+        quit.Dispose();
+        using var mutex = new Mutex(false, InstanceMutexName);
+        try
+        {
+            if (!mutex.WaitOne(timeout)) return false;   // not acquired: there is nothing to release
+        }
+        catch (AbandonedMutexException) { }   // the old copy died holding it; we own it now
+        mutex.ReleaseMutex();
+        return true;
+    }
+
     private static bool Update(string exe, string installedExe)
     {
-        // Ask the running copy (if any) to quit, then wait for it to release the instance mutex.
-        if (EventWaitHandle.TryOpenExisting(QuitEventName, out var quit))
+        if (!StopRunningCopy(StopTimeout))
         {
-            quit.Set();
-            quit.Dispose();
-            using var mutex = new Mutex(false, InstanceMutexName);
-            try { mutex.WaitOne(TimeSpan.FromSeconds(10)); mutex.ReleaseMutex(); }
-            catch (AbandonedMutexException) { }
+            MessageBox.Show("The running Hanami didn't close in time, so it wasn't updated. Quit it from the tray icon and try again.",
+                "Hanami", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
         }
-        for (var attempt = 0; ; attempt++)
+        try
         {
-            try
-            {
-                File.Copy(exe, installedExe, overwrite: true);
-                Log.Info($"Updated {installedExe} to {AppPaths.Version}");
-                return true;
-            }
-            catch (IOException) when (attempt < 20)
-            {
-                Thread.Sleep(250);   // the old process can hold the file for a moment after exiting
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Couldn't update Hanami:\n{ex.Message}", "Hanami", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
-            }
+            UpdateInstall.Replace(exe, installedExe);
+            Log.Info($"Updated {installedExe} to {AppPaths.Version}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Couldn't update Hanami:\n{ex.Message}", "Hanami", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
     }
 

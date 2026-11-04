@@ -180,6 +180,7 @@ const defaultLook = () => ({
 export function createMockHost(post) {
   const state = initialState();
   let mockOnline = true;
+  let installResult = "ok";
   const windowState = { [MON1]: null, [MON2]: null };   // null | "maximized" | "fullscreen"
   const failures = new Map();
   const importNames = [
@@ -523,7 +524,29 @@ export function createMockHost(post) {
       return snapshot();
     },
 
-    installUpdate: () => ({ ok: true }),
+    // Returns at once with "downloading", then ticks the progress like the host. hanamiMock.setInstallResult("fail") makes it end in `failed`.
+    installUpdate: () => {
+      const u = state.update;
+      if (!u.version || !["available", "failed"].includes(u.status)) return snapshot();
+      Object.assign(u, { status: "downloading", progress: 0, error: null });
+      (async () => {
+        for (let i = 1; i <= 10; i++) {
+          await sleep(250);
+          if (installResult === "fail" && i === 6) {
+            Object.assign(u, { status: "failed", progress: null, error: "The download doesn't match its checksum, so it was thrown away." });
+            emitState();
+            return;
+          }
+          u.progress = i / 10;
+          emitState();
+        }
+        await sleep(800);   // the real app restarts here; the mock just becomes the new version
+        state.version = u.version;
+        Object.assign(u, { status: "upToDate", version: null, notes: null, sizeBytes: null, url: null, progress: null });
+        emitState();
+      })();
+      return snapshot();
+    },
     openUpdatePage: () => ({ ok: true }),
 
     previewScreensaver: () => {
@@ -569,6 +592,7 @@ export function createMockHost(post) {
     setWindowsTimers(displayOff, sleep) { Object.assign(state.screensaver, { windowsDisplayOffMinutes: displayOff, windowsSleepMinutes: sleep }); emitState(); },
     setWindowState(key, s) { windowState[key] = s; emitState(); },
     setUpdateFeed(online) { mockOnline = !!online; },
+    setInstallResult(result) { installResult = result === "fail" ? "fail" : "ok"; },
     failNext(method, message = "Simulated host error") { failures.set(method, message); },
   };
   console.info("[Hanami] running with the mock bridge (no WebView2 host). See window.hanamiMock.");

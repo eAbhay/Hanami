@@ -1,5 +1,5 @@
 // General tab — startup, folders, version, quit.
-import { h, svg, toggle, segmented, dialog } from "../util.js";
+import { h, svg, toggle, segmented, dialog, progressBar } from "../util.js";
 import { LOGO } from "../icons.js";
 import { pageHeader, card, row } from "../components/index.js";
 
@@ -23,9 +23,14 @@ export function createGeneralTab(ctx) {
   const bannerTitle = h("div.update-title");
   const bannerMeta = h("div.update-meta");
   const bannerNotes = h("pre.update-notes");
-  const openPage = h("button.btn.primary", { type: "button", onclick: () => ctx.call("openUpdatePage").catch((err) => ctx.toastError(err)) }, h("span", "Open release page"));
+  const bannerProgress = progressBar();
+  const installBtn = h("button.btn.primary", { type: "button", onclick: async () => {
+    try { await ctx.mutate("installUpdate"); } catch (err) { ctx.toastError(err); }
+  } }, svg("download"), h("span", "Update"));
+  const openPage = h("button.btn", { type: "button", onclick: () => ctx.call("openUpdatePage").catch((err) => ctx.toastError(err)) }, h("span", "Open download page"));
   const skipBtn = h("button.btn", { type: "button", onclick: () => ctx.mutate("skipUpdate").catch((err) => ctx.toastError(err)) }, h("span", "Skip this version"));
-  const banner = h("div.card.pad.update-banner", { hidden: true }, bannerTitle, bannerMeta, bannerNotes, h("div.update-actions", openPage, skipBtn));
+  const actions = h("div.update-actions", installBtn, openPage, skipBtn);
+  const banner = h("div.card.pad.update-banner", { hidden: true }, bannerTitle, bannerMeta, bannerProgress, bannerNotes, actions);
   const windowsNow = h("p.field-hint");
   const modeBox = h("div.field", mode, windowsNow);
   const installPath = h("code.path");
@@ -108,21 +113,32 @@ export function createGeneralTab(ctx) {
     const u = s.update ?? {}, cfg = s.settings.updates ?? {};
     autoCheck.set(cfg.autoCheck !== false);
     channel.set(cfg.channel === "beta" ? "beta" : "stable");
-    checkBtn.disabled = u.status === "checking";
+    checkBtn.disabled = u.status === "checking" || u.status === "downloading";
     const when = u.lastCheck ? `Last checked ${new Date(u.lastCheck).toLocaleString()}.` : "Not checked yet.";
     const msg = u.status === "checking" ? "Checking…"
       : u.status === "failed" ? u.error
       : u.status === "available" ? `Version ${u.version} is available. ${when}`
+      : u.status === "downloading" ? `Updating to ${u.version}…`
       : u.status === "upToDate" ? `You're up to date. ${when}`
       : when;
     checkStatus.textContent = msg;
-    banner.hidden = u.status !== "available";
-    if (u.status === "available") {
-      bannerTitle.textContent = `Hanami ${u.version} is available`;
+    // The banner is for an offered version: available, being installed, or an install that failed (a failed check has no version).
+    const downloading = u.status === "downloading", failedInstall = u.status === "failed" && !!u.version;
+    banner.hidden = !(u.status === "available" || downloading || failedInstall);
+    if (!banner.hidden) {
+      bannerTitle.textContent = downloading ? `Updating to Hanami ${u.version}` : failedInstall ? `Couldn't update to Hanami ${u.version}` : `Hanami ${u.version} is available`;
       const mb = u.sizeBytes ? ` · ${(u.sizeBytes / 1e6).toFixed(1)} MB` : "";
-      bannerMeta.textContent = `You have ${s.version}${mb}`;
+      bannerMeta.textContent = failedInstall ? u.error : `You have ${s.version}${mb}`;
       bannerNotes.textContent = u.notes || "";
-      bannerNotes.hidden = !u.notes;
+      bannerNotes.hidden = !u.notes || downloading;
+      if (downloading) {
+        const p = u.progress ?? 0;
+        bannerProgress.update({ done: p, total: 1, label: p >= 1 ? "Installing and restarting Hanami…" : "Downloading…" });
+      } else bannerProgress.reset();
+      installBtn.hidden = downloading;
+      installBtn.lastChild.textContent = failedInstall ? "Try again" : "Update";
+      openPage.hidden = !failedInstall;
+      skipBtn.hidden = downloading;
     }
   }
 

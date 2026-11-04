@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Windows.Threading;
 using Hanami.Core;
@@ -26,7 +27,9 @@ public sealed class UpdateService : IDisposable
     private readonly bool _customFeed;
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
     private readonly DispatcherTimer _timer;
-    private bool _checking;
+    // The release download is big: no overall timeout (a stall is caught per read), and the headers a releases check sends aren't wanted.
+    private readonly HttpClient _download = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private bool _checking, _installing, _disposed;
     private string? _etag;
     private List<ReleaseInfo> _lastReleases = [];
 
@@ -41,15 +44,17 @@ public sealed class UpdateService : IDisposable
     /// <summary>Raised once per version (and never for a skipped one) when an automatic or manual check finds it.</summary>
     public event Action<UpdateOffer>? Announce;
 
-    /// <param name="feed">Dev only (<c>--update-feed</c>): an http(s) URL or a file path with the releases list, instead of GitHub.</param>
+    /// <param name="feed"><c>--update-feed</c>: an http(s) URL or a file path with the releases list, instead of GitHub. The dev copy takes any;
+    /// an installed copy only a local file or a loopback address (so an update can be rehearsed in a temp install).</param>
     public UpdateService(AppPaths paths, SettingsStore store, string? feed = null)
     {
         _paths = paths;
         _store = store;
-        _customFeed = paths.IsDev && !string.IsNullOrWhiteSpace(feed);
+        _customFeed = !string.IsNullOrWhiteSpace(feed) && (paths.IsDev || UpdateInstall.IsLocalFeed(feed));
         _feed = _customFeed ? feed! : ReleasesUrl;
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Hanami", AppPaths.Version));
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        _download.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Hanami", AppPaths.Version));
         _timer = new DispatcherTimer { Interval = FirstCheckDelay };
         _timer.Tick += async (_, _) =>
         {
@@ -66,6 +71,7 @@ public sealed class UpdateService : IDisposable
     /// <summary>Automatic checks never run in the dev copy unless it was given a test feed.</summary>
     public void Start()
     {
+        CleanLeftovers();
         if (_paths.IsDev && !_customFeed) { Log.Info("Updates: no automatic checks in the dev copy."); return; }
         _timer.Start();
     }
@@ -95,7 +101,7 @@ public sealed class UpdateService : IDisposable
         catch (Exception ex)
         {
             Log.Warn($"Updates: check failed: {ex.Message}");
-            if (manual) Fail(Describe(ex));
+            if (manual) { Offer = null; Fail(Describe(ex)); }   // a failed check leaves nothing to install
             else if (Status == "checking") { Status = before; Changed?.Invoke(); }
         }
         finally { _checking = false; }
@@ -170,6 +176,155 @@ public sealed class UpdateService : IDisposable
         Changed?.Invoke();
     }
 
+    private string UpdateDir => Path.Combine(_paths.InstallDir, "update");
+
+    /// <summary>
+    /// Removes the update folder left by an earlier update (its exe may still be closing right after a restart, so a few tries).
+    /// </summary>
+    private void CleanLeftovers()
+    {
+        if (!Directory.Exists(UpdateDir)) return;
+        _ = Task.Run(async () =>
+        {
+            for (var i = 0; i < 5 && Directory.Exists(UpdateDir) && !_disposed; i++)
+            {
+                UpdateInstall.DeleteFolder(UpdateDir);
+                if (Directory.Exists(UpdateDir)) await Task.Delay(TimeSpan.FromSeconds(3));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Downloads the offered version, checks it and starts it with <c>--apply-update</c>, which swaps it in and restarts Hanami. Only after a click.
+    /// Returns once the download is under way (the status is <c>downloading</c> by then); progress and failures come through <see cref="Changed"/>.
+    /// Any failure deletes what was downloaded, keeps this copy running and ends in <c>failed</c>.
+    /// </summary>
+    public async Task InstallAsync()
+    {
+        if (_installing || Offer is not { } offer || Status is not ("available" or "failed")) return;
+        _installing = true;
+        string? partFile = null, finalFile = null;
+        try
+        {
+            if (!UpdateInstall.IsAllowedUrl(offer.ExeUrl, _customFeed) || !UpdateInstall.IsAllowedUrl(offer.ChecksumUrl, _customFeed))
+                throw new InvalidDataException("The release's download address isn't a secure (https) one.");
+            Status = "downloading";
+            Progress = 0;
+            Error = null;
+            Changed?.Invoke();
+
+            Directory.CreateDirectory(UpdateDir);
+            var name = UpdateInstall.DownloadName(offer.Version);
+            finalFile = Path.Combine(UpdateDir, name);
+            partFile = finalFile + ".part";
+            foreach (var f in new[] { partFile, finalFile }) File.Delete(f);
+
+            var checksumText = Encoding.UTF8.GetString(await ReadAllBytesAsync(offer.ChecksumUrl));
+            var expected = UpdateInstall.ParseChecksum(checksumText, UpdatePolicy.ExeAsset)
+                ?? throw new InvalidDataException("The release's checksum file isn't in the expected format.");
+
+            await DownloadAsync(offer.ExeUrl, partFile, offer.SizeBytes);
+            var problem = await Task.Run(() => UpdateInstall.Verify(partFile, offer.SizeBytes, expected));
+            if (problem is not null) throw new InvalidDataException(problem);
+            File.Move(partFile, finalFile, overwrite: true);
+            Log.Info($"Updates: downloaded and verified {name}.");
+
+            var psi = new ProcessStartInfo(finalFile) { UseShellExecute = false, WorkingDirectory = UpdateDir };
+            psi.ArgumentList.Add("--apply-update");
+            var process = Process.Start(psi) ?? throw new InvalidOperationException("The new version didn't start.");
+            Progress = 1;
+            Changed?.Invoke();
+            _ = WatchHandoverAsync(process, finalFile);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Updates: install failed: {ex}");
+            foreach (var f in new[] { partFile, finalFile }) { if (f is not null) try { File.Delete(f); } catch (Exception) { } }
+            Fail(DescribeInstall(ex));
+        }
+        finally { _installing = false; }
+    }
+
+    /// <summary>
+    /// After the handover this copy is asked to quit by the new one. If the new one ends while this copy is still here, it didn't work
+    /// (blocked, crashed, or the old copy refused to leave): say so instead of sitting on "installing" forever.
+    /// </summary>
+    private async Task WatchHandoverAsync(Process process, string exe)
+    {
+        try
+        {
+            int code;
+            using (process) { await process.WaitForExitAsync(); code = process.ExitCode; }
+            if (_disposed || Status != "downloading") return;
+            Log.Warn($"Updates: the new version exited with code {code} and this copy is still running.");
+            try { File.Delete(exe); } catch (Exception) { }
+            Fail("The new version couldn't be started. Use Open download page to install it by hand.");
+        }
+        catch (Exception ex) { Log.Warn($"Updates: handover watch failed: {ex.Message}"); }
+    }
+
+    private static string DescribeInstall(Exception ex) => ex switch
+    {
+        System.ComponentModel.Win32Exception => "Windows wouldn't start the new version (" + ex.Message.TrimEnd('.') + "). Use Open download page to install it by hand.",
+        InvalidDataException => ex.Message,
+        OperationCanceledException => "The download stalled and was stopped.",
+        HttpRequestException { StatusCode: { } code } => $"The download failed (GitHub answered {(int)code}).",
+        HttpRequestException => "The download failed. Check the connection.",
+        IOException => "The download couldn't be saved: " + ex.Message,
+        _ => ex.Message,
+    };
+
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>Reads a small file (the checksum) from a network address or a local file (test feeds).</summary>
+    private async Task<byte[]> ReadAllBytesAsync(string url)
+    {
+        if (UpdateInstall.LocalPath(url) is { } local) return await File.ReadAllBytesAsync(local);
+        using var cts = new CancellationTokenSource(StallTimeout);
+        using var response = await _download.GetAsync(url, cts.Token);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync(cts.Token);
+    }
+
+    /// <summary>Streams the exe to <paramref name="target"/>, reporting progress. No data for 30 s counts as stalled.</summary>
+    private async Task DownloadAsync(string url, string target, long expectedSize)
+    {
+        using var cts = new CancellationTokenSource(StallTimeout);
+        HttpResponseMessage? response = null;
+        Stream source;
+        long total = expectedSize;
+        if (UpdateInstall.LocalPath(url) is { } local)
+            source = new FileStream(local, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+        else
+        {
+            response = await _download.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            response.EnsureSuccessStatusCode();
+            total = response.Content.Headers.ContentLength ?? expectedSize;
+            source = await response.Content.ReadAsStreamAsync(cts.Token);
+        }
+        using (response)
+        await using (source)
+        await using (var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+        {
+            var buffer = new byte[81920];
+            long done = 0;
+            var lastReport = Stopwatch.StartNew();
+            int read;
+            while ((read = await source.ReadAsync(buffer, cts.Token)) > 0)
+            {
+                cts.CancelAfter(StallTimeout);   // data is flowing: restart the stall clock
+                await output.WriteAsync(buffer.AsMemory(0, read), cts.Token);
+                done += read;
+                if (total > 0 && lastReport.ElapsedMilliseconds > 250)
+                {
+                    lastReport.Restart();
+                    Progress = Math.Min(1, (double)done / total);
+                    Changed?.Invoke();
+                }
+            }
+        }
+    }
+
     /// <summary>Opens the release's page in the browser (only an https link; any http link for a dev test feed).</summary>
     public void OpenPage()
     {
@@ -193,7 +348,9 @@ public sealed class UpdateService : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
         _timer.Stop();
+        _download.Dispose();
         _http.Dispose();
     }
 }

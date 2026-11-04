@@ -49,6 +49,10 @@ load `library.hanami` media with `crossOrigin="anonymous"` and still export canv
                                        shime numbers exist; mapping = the pack's own frame map, see below)
     pets/<packId>/img/shime<N>.png     N in 1–46, all frames of a pack the same size (≤ 1024 px)
   app/web/                             extracted copy of web/ (overwritten on version change)
+  update/Hanami-<version>.exe          a downloaded, verified update while it is being installed (also
+                                       Hanami-<version>.exe.part during the download);
+                                       deleted on the next start, so uninstalling and "keep my data" leave nothing
+  Hanami.exe.new                       only while an update is being swapped in
 ```
 
 `manifest.json`:
@@ -177,7 +181,7 @@ Events: host posts `{event: "<name>", data}`.
 | `importFont` | – (file dialog: .ttf .otf .woff .woff2; copied to `Library/fonts/<id>`) | `{imported: FontInfo}` or `{cancelled: true}` |
 | `deleteFont` | `{id}` (if it is the selected clock font, `clock.font` resets to null) | `State` |
 | `checkForUpdates` | – (a manual check: always runs, even with `autoCheck` off; a failure is reported in `update.error`, not thrown) | `State` |
-| `installUpdate` | – (download, verify, swap and restart; **until the download phase exists it opens the release page**) | `State` |
+| `installUpdate` | – (needs an offered version, status `available`, or `failed` after an earlier try. Returns at once with `update.status` `downloading`; the download, checks and handover run in the host and are reported through `update`, see "Updates") | `State` |
 | `skipUpdate` | – (the offered version is not offered or announced again; a newer one is) | `State` |
 | `openUpdatePage` | – (opens the offered release's page in the browser; only an `https` link) | `{ok: true}` |
 | `uninstall` | – (the host shows a native dialog: **Keep my data** / **Delete my data too** (asks again) / Cancel; unavailable in the dev copy) | `{started: true}` (the app then quits and a helper removes it) or `{cancelled: true}` |
@@ -343,10 +347,10 @@ type State = {
   theme: { active: "light" | "dark"; windows: "light" | "dark" };   // the theme in use (mode applied) · Windows' own
   update: {                     // see "Updates"
     status: "idle" | "checking" | "upToDate" | "available" | "downloading" | "failed";
-    version: string | null;     // the offered version, no leading "v" (status available/downloading)
+    version: string | null;     // the offered version, no leading "v" (status available/downloading, and failed after a download)
     notes: string | null;       // the release notes, from the network: show as plain text only, never HTML
     sizeBytes: number | null; url: string | null;   // the Hanami.exe asset · the release page
-    progress: number | null;    // 0–1 while downloading
+    progress: number | null;    // 0–1 while downloading; 1 once the new version was started and Hanami is about to restart
     error: string | null;       // why a manual check (or the install) failed
     lastCheck: string | null;   // ISO time of the last successful check
   };
@@ -434,12 +438,34 @@ parses, not a prerelease on Stable (a tag with `-` counts as one even if GitHub 
 The newest wins. Nobody is offered a lower version: someone moving from Beta to Stable stays put until Stable passes them.
 **When:** about 60 s after start (always, if `autoCheck` is on, because the answer isn't kept across restarts and an unchanged one is free),
 then a tick about hourly runs a check once 24 h have passed since `lastCheckUtc`. Never in `--dev` unless `--update-feed <url or file>` is
-given (dev only; ignored elsewhere), which swaps the address so the check can be tried with no real release. A failed *automatic* check only
+given (see "Test feed" below for where it is honored), which swaps the address so the check can be tried with no real release. A failed *automatic* check only
 writes a log line; **Check now** shows the message in `update.error`.
 **Telling the user:** one tray notification per version (`updates.notifiedVersion`; clicking it opens the General tab), a lasting
-"Update to x.y.z" tray item while one is available, and a banner on the General tab with the notes, size, *Open release page* and
-*Skip this version*. A skip holds only for that version.
+"Update to x.y.z" tray item while one is available, and a banner on the General tab with the notes, size, *Update* and
+*Skip this version*; while downloading it shows a progress bar, and after a failure the message with *Try again* and *Open download page*.
+A skip holds only for that version.
 The update choices belong to the install: importing a pack's settings keeps this PC's `updates`. The `SetupWindow` checkbox sets `updates.autoCheck`.
+
+**Installing** (`installUpdate`, only after the click; `UpdateService.InstallAsync`, pure parts in `Core/UpdateInstall`):
+1. Both asset URLs must be `https` (a `http` redirect isn't followed). A test feed (see below) may also use `http` or a local file path.
+2. `Hanami.exe.sha256` is fetched first. **Frozen format:** one line `<64 hex> *Hanami.exe` (what `sha256sum` writes; `tools/build.ps1` makes it).
+   A line with no name is accepted; a different name is not.
+3. `Hanami.exe` goes to `<install>/update/Hanami-<version>.exe.part` (the small checksum file is held in memory) with `update.progress`; a stalled connection (no data for 30 s) fails.
+   When complete, its size must equal the asset's `size` and its SHA-256 the checksum, then it is renamed to `Hanami-<version>.exe`.
+   Any failure deletes the files and sets `status: "failed"` with a plain `error`; the app keeps running and the banner offers *Open download page*.
+4. **Handover (`--apply-update`, frozen):** the running copy starts the downloaded exe with `--apply-update` and stays running. If Windows refuses
+   to start it (`Win32Exception`, e.g. Application Control) the status is `failed`; if it exits while this copy is still running, `failed` too.
+5. The downloaded exe (`Installer.ApplyUpdate`, no message box) reads the install folder from `HKCU\Software\Hanami\InstallDir`, asks the running
+   copy to quit (the `Local\Hanami.Quit` event) and waits up to 20 s for the instance mutex (a quit can take 3 s putting the lock picture back).
+   If the old copy doesn't leave, nothing is touched: it simply keeps running. Then `UpdateInstall.Replace`: copy to `Hanami.exe.new` next to
+   the installed exe and move it over (retrying while the old process lets go). On a failure the old exe is still intact and is started again
+   (`--updated`). On success the installed exe starts with `--updated` (no settings window).
+6. The new version registers itself on every start, so Apps & features shows its version (`RegisterApp`); `update/` is cleaned up after the start.
+The manual route (running a newer exe from elsewhere, the "Replace the installed copy?" box) uses the same stop and replace code.
+
+**Test feed:** `--update-feed <url or file>` replaces the releases address. The dev copy accepts any address; an installed copy accepts it only
+when it is a local file or a loopback address (`127.0.0.1`, `localhost`), so an update can be rehearsed in a temp install with no release.
+A feed's asset URLs (`ExeUrl`, `ChecksumUrl`) may then be `http(s)` URLs, `file://` URIs or local paths; the size and checksum checks stay.
 
 ### Desktop pets
 
