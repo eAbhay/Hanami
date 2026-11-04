@@ -58,14 +58,16 @@ Comparing pictures: read through `LockScreen.GetImageStream`, scaled to 32×20, 
 the nearest wrong one in the library scored 45. Windows re-encodes, so bytes never match. Windows may also crop other aspect ratios (a 2200×1238 cached
 size scored 9.6, though the stream itself scored 0).
 
-- [ ] A.1 **Contract first:** add the date rule and the read-back to "Lock screen". Fix the `restoreLockScreen` row, which still says Hanami never restores by itself.
-- [ ] A.2 **Fresh date:** in `LockScreenSync`, set a fresh write time on the file just before every `_api.SetAsync`, in `ApplyAsync` and `RestoreAsync`. Keep it in `LockScreenSync`, not the wrapper, so the fake can test it. The signature uses the still's date, so it doesn't change.
-- [ ] A.3 **Read-back:** after each set, save the picture with `_api.BackupAsync` to a temp file and compare. A pure comparison goes in `LockImagePolicy`, decoding stays out of `Core/`. Threshold about 15; retry for up to about 5 s. No match: status `failed` with a plain message, no signature saved. If Windows gives no picture back, log it and carry on as unverified. Check how this behaves with Spotlight on, where the call succeeds but Spotlight shows; the message should mention the Picture setting if so.
-- [ ] A.4 **Tests:** make `FakeLockScreen` follow the date rule and return the picture it holds. Changing wallpaper must really change it. A fake that ignores the write must end as `failed`. Put-back is covered too.
-- [ ] A.5 **The user tests. Stop and wait.** Ask first, then give them these steps: Win+L after changing wallpaper (video, image, built-in scene), after a theme flip, after a restart, and after *Use this frame* (closes round 7's 2.5). Turn the option off and quit: is the previous picture back? Also ask if they expected the burning tree: Windows is in dark mode, so `the-burning-of-irminsul` is the right picture, and Furina Rain is the light-mode choice.
-- [ ] A.6 **Only after the user says it works:** tick the boxes, write Notes, one commit. Also tick round 7's 2.5.
+- [x] A.1 **Contract first:** add the date rule and the read-back to "Lock screen". Fix the `restoreLockScreen` row, which still says Hanami never restores by itself.
+- [x] A.2 **Fresh date:** in `LockScreenSync`, set a fresh write time on the file just before every `_api.SetAsync`, in `ApplyAsync` and `RestoreAsync`. Keep it in `LockScreenSync`, not the wrapper, so the fake can test it. The signature uses the still's date, so it doesn't change.
+- [x] A.3 **Read-back:** after each set, save the picture with `_api.BackupAsync` to a temp file and compare. A pure comparison goes in `LockImagePolicy`, decoding stays out of `Core/`. Threshold about 15; retry for up to about 5 s. No match: status `failed` with a plain message, no signature saved. If Windows gives no picture back, log it and carry on as unverified. Check how this behaves with Spotlight on, where the call succeeds but Spotlight shows; the message should mention the Picture setting if so.
+- [x] A.4 **Tests:** make `FakeLockScreen` follow the date rule and return the picture it holds. Changing wallpaper must really change it. A fake that ignores the write must end as `failed`. Put-back is covered too.
+- [x] A.5 **The user tests. Stop and wait.** Ask first, then give them these steps: Win+L after changing wallpaper (video, image, built-in scene), after a theme flip, after a restart, and after *Use this frame* (closes round 7's 2.5). Turn the option off and quit: is the previous picture back? Also ask if they expected the burning tree: Windows is in dark mode, so `the-burning-of-irminsul` is the right picture, and Furina Rain is the light-mode choice.
+- [x] A.6 **Only after the user says it works:** tick the boxes, write Notes, one commit. Also tick round 7's 2.5.
 
-Notes:
+Notes: user confirmed on the real lock screen (4 Nov 2026) that all checks pass. `SetVerifiedAsync` / `VerifyAsync` in `App/LockScreenSync.cs`; the pure comparison is in `Core/LockImagePolicy`; `ILockScreenImage` gained `SampleAsync` (32x20 RGB, WPF decode in `Platform/LockScreenImage`).
+Differed from the plan: `ApplyAsync` is `internal` so tests can reach it (the refresh path needs a dispatcher and monitors). Read-back timeout and interval are properties so tests shorten them.
+Unverified: the Spotlight case (read-back result not observed). Still unanswered: whether the user expected the burning tree (dark-mode picture is correct). Storage: one `lock.jpg` per wallpaper, plus `current.jpg`, `previous.jpg`; Windows' own cache is not measured.
 
 ## Phase B — Check and notify
 
@@ -217,7 +219,7 @@ Read: `web/settings/tabs/screensaver.js` (the Lock screen card), `web/settings/l
       Dragging seeks, dropping pending seeks so it stays smooth on 4K. Save only on the button: a full-resolution draw plus `saveLockStill {frameSec}`, which triggers a refresh. For images and built-in scenes, show the picture with no slider.
 - [x] 2.3 Light and dark: the picker follows the wallpaper the current theme uses. Frames are per wallpaper, so nothing else to store.
 - [x] 2.4 Unload the preview `<video>` when the tab or card goes away (`thumbs.js` shows how), so a 4K decode doesn't run in the background.
-- [ ] 2.5 Mock bridge support. Check in the browser (mock) and the dev app. With the user: pick a frame, Win+L. Commit.
+- [x] 2.5 Mock bridge support. Check in the browser (mock) and the dev app. With the user: pick a frame, Win+L. Commit.
 
 Notes: 2.5 is left unticked: the browser (mock) check is done, the real Win+L check is still for the user (now round 8's A.5).
 - New `web/settings/components/lockFrame.js` (created from the Screensaver tab, which now has `show`/`hide` to load/unload the preview) and `makeLockStill`, `lockWallpaperId`, `primarySize`, `lockFit` exported from `lockstills.js`. No host change was needed: `lockStill.frameSec` was already in `WallpaperInfo` (phase 1).

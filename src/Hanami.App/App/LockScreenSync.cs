@@ -29,6 +29,10 @@ public sealed class LockScreenSync : IDisposable
     private Task _revert = Task.CompletedTask;  // a put-back in progress: a new write waits for it
     private BitmapSource? _systemImage;        // what Windows showed before Hanami, for the curtain when sync is off
 
+    /// <summary>How long and how often the read-back after a set is retried (Windows can take a moment to show the new picture). Tests shorten them.</summary>
+    public TimeSpan VerifyTimeout { get; set; } = TimeSpan.FromSeconds(5);
+    public TimeSpan VerifyInterval { get; set; } = TimeSpan.FromMilliseconds(500);
+
     public string Status { get; private set; } = "off";
     public string? Error { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -125,12 +129,12 @@ public sealed class LockScreenSync : IDisposable
 
     // ---- writing the picture ---------------------------------------------------------------------
 
-    private async Task ApplyAsync(string captured, string signature)
+    internal async Task ApplyAsync(string captured, string signature)
     {
         Directory.CreateDirectory(_paths.LockScreenDir);
         if (!HasBackup && !await _api.BackupAsync(PreviousPath)) Log.Info("Lock screen: no previous picture to keep (Windows gave none).");
         File.Move(captured, CurrentPath, overwrite: true);
-        if (await _api.SetAsync(CurrentPath) is { } error) { Fail(error); return; }
+        if (await SetVerifiedAsync(CurrentPath) is { } error) { Fail(error); return; }
         _lastSignature = signature;
         try { File.WriteAllText(SignaturePath, signature); } catch (IOException ex) { Log.Warn($"Lock screen: could not save the signature: {ex.Message}"); }
         Status = "ok";
@@ -138,6 +142,43 @@ public sealed class LockScreenSync : IDisposable
         UpdatedAt = DateTime.Now;
         Log.Info("Lock screen picture updated");
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Sets <paramref name="path"/> as the lock screen picture and checks that Windows really shows it. Windows ignores a file at a path it
+    /// already knows unless its write time is newer (and still reports success), so the file gets a fresh one first. Null on success,
+    /// else the reason.
+    /// </summary>
+    private async Task<string?> SetVerifiedAsync(string path)
+    {
+        var now = DateTime.UtcNow;
+        var current = File.GetLastWriteTimeUtc(path);
+        File.SetLastWriteTimeUtc(path, now > current ? now : current.AddTicks(1));
+        if (await _api.SetAsync(path) is { } error) return error;
+        return await VerifyAsync(path);
+    }
+
+    /// <summary>Compares what Windows shows now with <paramref name="path"/>, retrying for <see cref="VerifyTimeout"/>. Null when it matches or can't be checked.</summary>
+    private async Task<string?> VerifyAsync(string path)
+    {
+        var probe = Path.Combine(_paths.LockScreenDir, "verify.jpg");
+        try
+        {
+            var expected = await _api.SampleAsync(path);
+            if (expected is null) { Log.Info("Lock screen: could not read the picture to check it; unverified."); return null; }
+            var deadline = DateTime.UtcNow + VerifyTimeout;
+            while (true)
+            {
+                if (!await _api.BackupAsync(probe)) { Log.Info("Lock screen: Windows gave no picture back to check; unverified."); return null; }
+                var actual = await _api.SampleAsync(probe);
+                if (actual is null) { Log.Info("Lock screen: could not read the picture Windows gave back; unverified."); return null; }
+                if (LockImagePolicy.SamePicture(expected, actual)) return null;
+                if (DateTime.UtcNow >= deadline) break;
+                await Task.Delay(VerifyInterval);
+            }
+            return "Windows did not take the picture. Check that the lock screen is set to Picture, not Windows Spotlight, in Windows settings.";
+        }
+        finally { try { File.Delete(probe); } catch (IOException) { } }
     }
 
     private void Fail(string message)
@@ -183,7 +224,7 @@ public sealed class LockScreenSync : IDisposable
     public async Task<bool> RestoreAsync()
     {
         if (!HasBackup) return false;
-        if (await _api.SetAsync(PreviousPath) is { } error) { Fail(error); return false; }
+        if (await SetVerifiedAsync(PreviousPath) is { } error) { Fail(error); return false; }
         ForgetSignature();
         Status = Enabled ? "idle" : "off";
         Error = null;
