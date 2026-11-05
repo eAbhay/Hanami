@@ -152,7 +152,7 @@ Each step below needs the tag and changelog heading to agree, or the workflow st
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\make-demo-assets.ps1   # placeholder videos in devroot\Library
 dotnet build src\Hanami.App\Hanami.App.csproj
-src\Hanami.App\bin\Debug\net10.0-windows\win-x64\Hanami.exe --dev
+src\Hanami.App\bin\Debug\net10.0-windows10.0.19041.0\win-x64\Hanami.exe --dev
 ```
 
 `--dev` uses `devroot/` as the install folder and serves `web/` straight from the repo,
