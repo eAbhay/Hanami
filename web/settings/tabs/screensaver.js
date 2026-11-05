@@ -80,11 +80,13 @@ export function createScreensaverTab(ctx) {
     row("lock", "Require sign-in when it ends", "Locks Windows the moment a key or click ends the screensaver, going straight to the lock screen instead of sliding up. Leave off if your desk is private.", signIn),
     h("div.divider"),
     row("lock", "Match the lock screen to the screensaver",
-      "Sets your Windows lock screen to a still picture of the screensaver's wallpaper (without the clock). For a video it is one frame, near the start unless you pick another below, and it stays the same until you change it or the wallpaper or theme changes. Windows has one lock picture for all monitors, so it uses the main monitor's. Windows can't show a live wallpaper there. Turning this off, or quitting Hanami, puts your previous lock screen picture back. Your lock screen must be set to Picture, not Windows Spotlight.",
+      "Uses a still of the screensaver's wallpaper as your Windows lock screen. Your own picture comes back when you turn this off or quit Hanami.",
       syncToggle),
     lockStatus,
     lockFrame.el,
-    h("div.slot-switch", restoreBtn, settingsBtn));
+    h("div.slot-switch.lock-actions",
+      h("span.field-hint", "Needs your lock screen set to Picture, not Windows Spotlight"),
+      settingsBtn, restoreBtn));
 
   async function onSyncToggle(on) {
     if (on) {
@@ -142,10 +144,12 @@ export function createScreensaverTab(ctx) {
     signIn.set(!!cfg.requireSignIn);
     syncToggle.set(!!cfg.syncLockScreen);
     lockStatus.hidden = !cfg.syncLockScreen && !lock.error;
-    lockStatus.textContent = lock.status === "failed" ? `Couldn't update it: ${lock.error ?? "unknown error"}`
-      : lock.status === "ok" ? `Updated ${new Date(lock.updatedAt).toLocaleString()}`
+    const lockLine = lock.status === "ok" ? `Updated ${new Date(lock.updatedAt).toLocaleString()}`
       : lock.status === "waiting" ? "Preparing the picture for this wallpaper…"
       : cfg.syncLockScreen ? "Waiting to update" : "";
+    // Windows has one lock picture for all monitors, so the main monitor's wallpaper decides it.
+    lockStatus.textContent = lock.status === "failed" ? `Couldn't update it: ${lock.error ?? "unknown error"}`
+      : cfg.syncLockScreen ? `${lockLine} · Uses your main monitor's wallpaper` : lockLine;
     restoreBtn.hidden = !lock.hasBackup || !!cfg.syncLockScreen;
     lockFrame.update(s);
   }

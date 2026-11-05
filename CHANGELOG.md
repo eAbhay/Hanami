@@ -8,6 +8,7 @@ without a matching section stops the release. Versions with a `-` (release candi
 
 - **Settings tabs reorganised:** **Light and dark** moved from General to Power, since it applies to both the Wallpaper and Screensaver tabs. **Require sign-in** moved to the Screensaver tab's Lock screen card, and the Screensaver tab's link to Power is gone. On the Pets tab, Your pets and Pet library now come before Behaviour.
 - The **Keep running on battery** text now says it covers pets as well as wallpapers.
+- **Lock screen card, less to read:** the long description is now two lines, and the Picture-not-Spotlight reminder sits beside **Lock screen settings…**. The frame picker has a short header instead of instructions.
 
 ## 0.1.1
 

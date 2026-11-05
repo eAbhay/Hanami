@@ -941,6 +941,8 @@ code.path {
 .lock-preview > video, .lock-preview > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .lock-frame .slot-switch { justify-content: flex-start; }
 .lock-frame .field-hint { margin: 0; }
+.slot-switch.lock-actions { justify-content: flex-start; }
+.lock-actions .field-hint { margin: 0; }
 .slot-hint { margin: 0 0 10px; }
 
 .pet-list { display: flex; flex-direction: column; }

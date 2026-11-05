@@ -31,7 +31,11 @@ Settings UI only: no setting, message or host change, so `docs/CONTRACTS.md` sho
       - `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj` and the Debug build still pass (no C# should change).
       - Then ask the user to look at it before any commit.
 
-Notes: 1.1-1.6 done; 1.7 checked on the mock (4 Nov 2026): General, Power, Screensaver and Pets layouts, light/dark toggle (mode choice on Power; switch on Wallpaper and Screensaver, gone when off), Require sign-in saves from the Lock screen card, Preview hint unchanged, update banner and General dot. 328 tests pass, Debug build clean (a running dev copy had to be quit first). `ctx.showTab` was unused after 1.3 and is removed; CONTRACTS.md needed no edit. Not committed: waiting for the user to look at it.
+Notes: 1.1-1.6 done; 1.7 checked on the mock (4 Nov 2026): General, Power, Screensaver and Pets layouts, light/dark toggle (mode choice on Power; switch on Wallpaper and Screensaver, gone when off), Require sign-in saves from the Lock screen card, Preview hint unchanged, update banner and General dot. 328 tests pass, Debug build clean (a running dev copy had to be quit first). `ctx.showTab` was unused after 1.3 and is removed; CONTRACTS.md needed no edit. Committed on `round-10` as 71cbf92; not merged, pushed or released yet.
+
+After that, on the user's request (5 Nov 2026), the Lock screen card got less text: a two-line "Match" description, "Uses your main monitor's wallpaper" in the status line while on, the Picture-not-Spotlight hint on the left beside **Lock screen settings…**, and a header over the frame picker instead of its note ("Pick your lock screen" for a video, "Your lock screen" otherwise).
+
+**Check at the next release:** a tray-started install through the swap and restart has never run for real, because only copies already on 0.1.1 have that tray item. The next release is the first real run: from a 0.1.1 copy, use **Update available: install x.y.z** in the tray menu, then confirm the new version, that settings and library are kept, and that Hanami restarts.
 
 ## Round 9 — "update available" is hard to miss (ships as `0.1.1`)
 
@@ -168,13 +172,13 @@ Prereleases don't become GitHub's "latest", so the README's download link is una
 - [x] E.2 **With the user's yes:** tag `v0.1.0-rc.2`. On Beta, rc.1 finds it and installs it with one click. Confirm the version, settings and library. On Stable, rc.1 must not offer it.
 - [x] E.3 **Application Control:** note whether Windows blocks the unsigned exe here, and that the fallback appears if it does.
 - [x] E.4 **With the user's yes:** tag `v0.1.0`. rc.2 on Stable finds it and installs. This ticks round 7's 3.7. Check the release page and the README link.
-- [ ] E.5 Ask the user about GitHub's immutable releases setting (check how it affects `gh release create` first, and that tags can't be reused), 2FA, and whether to delete the rc releases. Then a final pass over stale docs.
+- [x] E.5 Ask the user about GitHub's immutable releases setting (check how it affects `gh release create` first, and that tags can't be reused), 2FA, and whether to delete the rc releases. Then a final pass over stale docs.
 
 Notes: E.1-E.3 done 4 Nov 2026 (user's yes for each tag and the temp install).
 - rc.1 and rc.2 builds passed on CI and are published as prereleases with both assets; downloaded rc.1's SHA-256 matched. The first real HTTPS check/download from GitHub worked: Stable said "up to date" with rc.2 out, Beta offered rc.2 (82.6 MB), one click downloaded, verified, swapped and restarted. Version 0.1.0-rc.2 in the exe and Apps & features, settings (channel beta) and Library kept, no settings window after the restart, `update/` gone.
 - Application Control did not block the unsigned downloaded exe (rc.1 install or the rc.2 swap) on this laptop, so the `Win32Exception` fallback banner was not seen here.
 - E.4: `v0.1.0` published as Latest (run on tag 3b40758), assets `Hanami.exe` + `.sha256`, `releases/latest` redirects to it. The test install on Stable (rc.2) was offered 0.1.0 and updated with one click (ARP shows 0.1.0). Test install then removed (registry keys, shortcut, folder); the dev copy runs again.
-- E.5 so far: user has 2FA on; rc.1 and rc.2 releases and tags were deleted (`gh release delete --cleanup-tag`), their CHANGELOG stubs removed. Open: GitHub's immutable-releases setting, which the user needs explained first (it would stop a release's tag and assets from ever being changed or reused, and may stop deleting).
+- E.5 so far: user has 2FA on; rc.1 and rc.2 releases and tags were deleted (`gh release delete --cleanup-tag`), their CHANGELOG stubs removed. **User's decision (5 Nov 2026):** GitHub's immutable-releases setting stays as it is, unchanged. The final pass over stale docs is done too.
 - The user confirmed (4 Nov 2026) the burning tree on the lock screen was expected: it is their screensaver wallpaper.
 
 ---

@@ -22,9 +22,9 @@ export function createLockFrame(ctx) {
   const range = slider({ label: "Frame", min: 0, max: 1, step: STEP, value: 0, format: (v) => `${v.toFixed(2)} s`, onInput: (v) => { seek(v); const w = current(); if (w) setButtons(w); } });
   const useBtn = h("button.btn.small", { type: "button", onclick: () => save(Number(range.input.value)) }, h("span", "Use this frame"));
   const resetBtn = h("button.btn.subtle.small", { type: "button", onclick: reset }, h("span", "Reset"));
-  const note = h("p.field-hint");
+  const title = h("div.row-title");
   const buttons = h("div.slot-switch", useBtn, resetBtn);
-  const el = h("div.lock-frame", { hidden: true }, preview, range, buttons, note);
+  const el = h("div.lock-frame", { hidden: true }, title, preview, range, buttons);
 
   let active = false;          // the Screensaver tab is showing
   let loaded = null;           // {id, src, duration} of the video in the preview
@@ -149,12 +149,12 @@ export function createLockFrame(ctx) {
       loadVideo(w);
       img.style.objectFit = "";
       setButtons(w);
-      note.textContent = "The frame Windows shows on the lock screen. Drag to look, then Use this frame; Reset goes back to the default frame near the start.";
+      title.textContent = "Pick your lock screen";
       return;
     }
     unloadVideo();
     img.style.objectFit = lockFit(w);
-    note.textContent = w.type === "builtin" ? "The lock screen shows a still of this scene." : "The lock screen shows this picture.";
+    title.textContent = "Your lock screen";
     if (w.type === "builtin") {
       const key = `builtin:${w.id}`;
       if (pictureKey !== key) {

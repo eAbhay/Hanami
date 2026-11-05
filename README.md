@@ -83,9 +83,8 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 - **Export / import.** A `.hanamipack` file moves any selection of the library, plus your
   settings, to another PC.
 
-> Status: phase 1 (video + effects). Planned next: interactive illustrations (Live2D
-> characters that follow the cursor, a cat that roams the wallpaper), then desktop companions
-> that climb your windows.
+> Status: released and in use; see the [changelog](CHANGELOG.md). Not built yet: an interactive
+> Live2D character inside the wallpaper. Other ideas are in [docs/PLAN.md](docs/PLAN.md).
 
 ## Install
 
@@ -94,7 +93,7 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
    `%LocalAppData%\Programs\Hanami`. It copies itself there, creates `Library/` and
    `config/`, and optionally registers itself to start with Windows.
 3. Hanami lives in the tray. Click the 🌸 icon to open settings (tabs: Wallpaper, Screensaver,
-   Power, General, Export / Import). Wallpaper and Screensaver choose *what shows*; Power
+   Pets, Power, General, Export / Import). Wallpaper and Screensaver choose *what shows*; Power
    decides *when things run*, including the screensaver's timing. The settings window shows in
    the taskbar while it is open; closing it leaves Hanami running in the tray (tray menu → *Quit*
    to stop it).
