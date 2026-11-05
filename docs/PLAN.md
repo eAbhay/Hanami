@@ -1,7 +1,110 @@
-# Implementation plan — round 10: reorganise the settings tabs
+# Implementation plan — round 11: real-world checks (0.1.3), then wallpaper rotation and drag and drop (0.2.0)
 
-**Current scope (user's decision, 4 Nov 2026): round 10 below, on branch `round-10`.** Rounds 8 and 9 are finished and stay
-for their Notes. Round 7 is finished except for what round 8 took over.
+**Current scope (user's decision, 5 Nov 2026): round 11 below, on branch `round-11`, created from `main` at the start of the first phase.** Rounds 8, 9 and 10 are finished and stay for their Notes. Round 7 is finished except for what round 8 took over.
+
+## Round 11
+
+**Decisions (don't re-ask):**
+- **Order:** part A ships as `0.1.3`, then part B as `0.2.0`. Part B doesn't start until part A is released, so anything the checks find is fixed first.
+- **Rotation is by timer**, in order or shuffled. Time-of-day schedules are not in this round.
+- **Lists are per monitor and per theme:** each slot has a light list and a dark list, edited with the existing Light | Dark switch. A theme flip moves to the other list, so dark mode never shows a light wallpaper.
+- **The screensaver and lock screen stay on the base wallpaper:** "Same as desktop" means the monitor's chosen wallpaper, not whichever one is rotating, so rotation never rewrites the Windows lock screen.
+- **The chosen wallpaper is always in its list and plays first.** Rotation adds wallpapers to it, so the list can't be empty, and turning rotation off goes back to the chosen one.
+- **Pin tip:** Hanami doesn't read or change Windows' pinned-icon setting (same reasoning as round 6's registry decision). It only tells the user how, once, until dismissed.
+
+**Rules:** work only on `round-11`. No commit, merge, push, tag or version bump without the user's yes in that chat, and each tag needs its own yes. Installs touch `HKCU\Software\Hanami`, so ask first and follow `docs/TESTING.md`.
+
+**Traps:**
+- Start the dev copy from `bin\Debug\net10.0-windows10.0.19041.0\win-x64\`. `bin\Debug\net10.0-windows\win-x64\` holds a build from 2 Nov, which drops every setting it doesn't know from `devroot/config/settings.json` when it saves.
+- That is true of any older build: a new setting survives only in builds that know it, so don't test an old exe against current settings without a backup.
+- `devroot` has `syncLockScreen` on, so every dev start and quit writes the real lock screen. Turn it off first for automated runs.
+
+### Phase A1 — The user's real-world checks. Stop and wait.
+
+Nothing to build. Give the user these steps, then write what they report under Notes. Don't fix anything in this phase.
+
+- [ ] A1.1 **Second laptop (Intel + RTX 5060, external monitor):** download `Hanami.exe` from the latest release and install it. Check the wallpaper on both monitors with different scaling, moving the settings window between them, unplugging and replugging the monitor, the screensaver on both, and the clock's position on each.
+- [ ] A1.2 **Pets with a real Shimeji pack:** import a folder and a `.zip`, then check walking, climbing, drag and throw, riding a dragged window, and on the second laptop crossing between monitors.
+- [ ] A1.3 **Lock screen edge cases:** with Windows Spotlight on, turn on the match and report what the status line says and what Win+L shows. Then a built-in scene and a theme flip with the match on.
+- [ ] A1.4 **Battery on the second laptop:** unplug it and check the wallpaper pauses, pets freeze and no screensaver appears.
+
+Notes:
+
+### Phase A2 — Fix what the checks found
+
+- [ ] A2.1 Fix what A1 found, one commit per fix, each with a test where the logic is in `Core/`. If a fix is large or changes a design decision, stop and ask rather than doing it here. If nothing was found, tick this and move on.
+
+Notes:
+
+### Phase A3 — Pin tip and housekeeping
+
+Read: `web/settings/app.js`, `web/settings/tabs/general.js` (the update banner's styles), `Core/Settings.cs` (`UpdateSettings` as the model for a small settings block), CONTRACTS "Settings bridge" and "Updates".
+
+- [ ] A3.1 **Contract first:** settings `tips: {pinTrayDismissed: false}`. Defaults cover old files, so no `CurrentVersion` bump. Importing a pack's settings keeps this PC's value, as with `updates`.
+- [ ] A3.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
+- [ ] A3.3 **README screenshot:** `docs/img/settings.jpg` predates round 10. Retake it on the mock bridge if the tab it shows changed, built-in scenes and procedural samples only.
+- [ ] A3.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
+- [ ] A3.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
+
+Notes:
+
+### Phase A4 — Release `0.1.3`
+
+Read: README "Releasing".
+
+- [ ] A4.1 `<Version>` in `Hanami.App.csproj` and a `## 0.1.3` section in `CHANGELOG.md`, written for users. Commit. With the user's yes: merge to `main`, push.
+- [ ] A4.2 **With the user's yes for this tag:** tag `v0.1.3`, push it, watch the run, check the download's SHA-256 and stamped version.
+- [ ] A4.3 **The user updates the second laptop from its tray.** This covers what round 10's check couldn't: a real library across a tray update.
+
+Notes:
+
+### Phase B1 — Rotation: rules and host
+
+Part B starts only after A4. Read: `Core/Settings.cs` (`Assignment`, `DesktopWallpaperFor`, `DesktopEffectFor`, `ScreensaverWallpaperFor`, `ForgetWallpaper`), `App/WallpaperManager.cs` (`PushConfigAll`, `RebuildAsync`, `ApplyModesAsync`), `App/HanamiHost.cs` (`BuildState`, `DeleteWallpaperAsync`, the bridge switch), `App/LockScreenSync.cs` (to confirm it reads only `ScreensaverWallpaperFor`), CONTRACTS "Settings bridge", "Shared types", "Lock screen".
+
+- [ ] B1.1 **Contract first:**
+      - `Assignment` gains `rotate: false`, `rotation: string[]` and `darkRotation: string[]`, the wallpapers added to the chosen one. Top level gains `rotation: {intervalMinutes: 60, shuffle: false}`, shared by all monitors. Allowed intervals: 5, 15, 30, 60, 180, 1440. Defaults cover old files, so no `CurrentVersion` bump.
+      - Bridge method `setRotation {monitorKey, theme?, rotate?, wallpaperIds?}`, returning `State`.
+      - State `shownWallpapers: Record<monitorKey, wallpaperId>`, what each monitor is showing now, so the Wallpaper tab can mark it.
+      - Say in "Lock screen" that rotation never changes it. Check that packs export the new fields and that an unknown wallpaper id in a list is harmless after an import.
+- [ ] B1.2 **`Core/RotationPolicy.cs` (pure, tested):** the effective list (chosen wallpaper first, no duplicates, ids no longer in the library dropped; light list when the dark slot has no wallpaper of its own). `Next(list, current, shuffle, random)`: in order wraps around; shuffle goes through the whole list before repeating and never picks the current one twice in a row; a list of one means no change. `IsDue(lastChange, now, interval)`.
+- [ ] B1.3 **`DesktopWallpaperFor` keeps meaning the base wallpaper**, so the screensaver and lock screen need no change. Add the wallpaper currently shown as separate runtime state in `WallpaperManager`, per monitor key, which is what `PushConfigAll` sends. **Trap:** `DesktopEffectFor` goes through `DesktopWallpaperFor`, so it must take the shown id, or a rotated wallpaper would show the base wallpaper's effect.
+- [ ] B1.4 **Timer:** a tick of about 30 s, comparing against the last change so sleep doesn't matter. Hold while a monitor is paused or hidden, while the session is locked and while the screensaver shows; a due change then happens on return. Monitors sharing `*` change together. The position isn't saved: after a restart each monitor starts on its chosen wallpaper again. A theme flip or a new chosen wallpaper restarts from that slot's first wallpaper and resets the timer.
+- [ ] B1.5 **Delete:** `DeleteWallpaperAsync` must let go of a wallpaper that is showing through rotation, not only through an assignment, or the file stays locked. `ForgetWallpaper` removes the id from every list.
+- [ ] B1.6 **Tests:** the policy above, settings round trip, old files load with rotation off, the delete case. Check in dev with `rotation.intervalMinutes` edited to a short value through a test-only path: each change crossfades, the effect follows the wallpaper shown, and `LockScreenSync` logs no update. Commit.
+
+Notes:
+
+### Phase B2 — Rotation: settings UI
+
+Read: `web/settings/tabs/wallpapers.js`, `web/settings/components/` (`wallpaperPicker`, `slotSwitch`), `web/settings/scope.js`, `web/settings/mock-bridge.js`.
+
+- [ ] B2.1 **A Rotation card on the Wallpaper tab,** under Background: an on/off switch, then while on, small tiles of the library where a click adds or removes a wallpaper. The chosen wallpaper is shown first, marked, and can't be removed. Interval dropdown and a Shuffle switch. It follows the existing monitor scope and the Light | Dark switch. Keep the text to one short line.
+- [ ] B2.2 **Background card:** the tile showing now gets a small "Showing" marker when it isn't the chosen one, so clicking a card still means "choose this".
+- [ ] B2.3 **Mock bridge** support, including a way to advance `shownWallpapers` by hand.
+- [ ] B2.4 **Docs:** README feature bullet and CONTRACTS. Check on the mock and in the dev app with two monitors if available, light and dark. Then ask the user to look at it before committing.
+
+Notes:
+
+### Phase B3 — Drag and drop import
+
+Read: `App/SettingsWindow.cs` (`OnMessage`), `App/HanamiHost.cs` (`ImportMediaAsync`), `web/settings/tabs/wallpapers.js` (`doImport`, the import progress), `web/settings/bridge.js`, `web/settings/app.js`.
+
+A page gets `File` objects from a drop but no paths. WebView2 gives the host the path if the page sends the files with `chrome.webview.postMessageWithAdditionalObjects` (the SDK in use, 1.0.4258.31, has it; confirm on this runtime first). The host reads `CoreWebView2File.Path` from `e.AdditionalObjects`.
+
+- [ ] B3.1 **Contract first:** a new message carrying `{method: "importDropped"}` plus the dropped files. Paths come only from `AdditionalObjects`, never from `params`, so the page can't name an arbitrary file for the host to copy.
+- [ ] B3.2 **Host:** split `ImportMediaAsync` into the dialog and `ImportFilesAsync(files)`, so both share the copy and progress. Accept only `Library.VideoExtensions` and `Library.ImageExtensions`; folders and other files come back in a `rejected` list. Refuse a second import while one is running.
+- [ ] B3.3 **Page:** `dragover` and `drop` on the whole settings window, with `preventDefault` so a dropped file doesn't navigate the page away. A full-window "Drop to add to your wallpapers" overlay only while files are dragged. After a drop, go to the Wallpaper tab, because that is where the progress shows. **Trap:** round 10 removed `ctx.showTab` as unused, so it has to come back. A toast names anything rejected.
+- [ ] B3.4 **Mock bridge** support. **Check** in the dev app, since a plain browser can't do this part: one file, several, a mix with an unsupported file, a folder, a very large video, drop during an import. Commit.
+
+Notes:
+
+### Phase B4 — Release `0.2.0`
+
+- [ ] B4.1 Version and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
+- [ ] B4.2 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings and library are kept, with rotation off.
+
+Notes:
 
 ## Round 10 — settings tabs reorganised
 
@@ -310,4 +413,4 @@ Notes: 3.1–3.6 are done; 3.7 (tag `v0.1.0`) now happens in round 8's E.4, so t
 
 **Hanami's own Shimeji packs.** Feasible; the app needs nothing new. Format is `shime1.png`…`shime46.png` at 128×128 facing left, and any frame a pack lacks falls back to `shime1` (`PetBrain`), so a pack can start with about 12 key poses and grow. Plan: pick one original character (no existing anime characters, so it can be bundled and redistributed freely), write a pose sheet mapping frames to `ShimejiFrames`, make a small tool that turns a sprite sheet into a pack and previews it, and bundle a first pet as a starter. The hard part is art: keeping one character consistent across poses.
 
-**Other ideas, in the order suggested:** signed updates and code signing to remove the SmartScreen warning · a playlist per monitor, rotating wallpapers by time or time of day · drag and drop import onto the settings window · the in-wallpaper Live2D character, still not started.
+**Other ideas, in the order suggested:** signed updates and code signing to remove the SmartScreen warning · time-of-day schedules for rotation, after round 11 · the in-wallpaper Live2D character, still not started.
