@@ -4,7 +4,7 @@ One section per version, newest first. The section for a version is used as that
 for people using Hanami, not for developers. The heading is just the version number (`## 0.1.0`, `## 0.2.0-beta.1`), and a tag
 without a matching section stops the release. Versions with a `-` (release candidates, betas) are prereleases.
 
-## Unreleased
+## 0.1.2
 
 - **Settings tabs reorganised:** **Light and dark** moved from General to Power, since it applies to both the Wallpaper and Screensaver tabs. **Require sign-in** moved to the Screensaver tab's Lock screen card, and the Screensaver tab's link to Power is gone. On the Pets tab, Your pets and Pet library now come before Behaviour.
 - The **Keep running on battery** text now says it covers pets as well as wallpapers.
