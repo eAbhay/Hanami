@@ -35,7 +35,7 @@ Notes: 1.1-1.6 done; 1.7 checked on the mock (4 Nov 2026): General, Power, Scree
 
 After that, on the user's request (5 Nov 2026), the Lock screen card got less text: a two-line "Match" description, "Uses your main monitor's wallpaper" in the status line while on, the Picture-not-Spotlight hint on the left beside **Lock screen settings…**, and a header over the frame picker instead of its note ("Pick your lock screen" for a video, "Your lock screen" otherwise). The user checked this and the tab reorganisation in the dev app (5 Nov 2026) and confirmed they work.
 
-**Check at the next release:** a tray-started install through the swap and restart has never run for real, because only copies already on 0.1.1 have that tray item. The next release is the first real run: from a 0.1.1 copy, use **Update available: install x.y.z** in the tray menu, then confirm the new version, that settings and library are kept, and that Hanami restarts.
+**Tray install checked for real (5 Nov 2026):** on a temp install of `v0.1.1` with an empty library, the user chose **Update available: install 0.1.2** in the tray menu. It downloaded from GitHub, verified, swapped and restarted on 0.1.2; the exe matched the published checksum, Apps & features showed 0.1.2, update settings were kept and no files were left over. The temp install was then removed. Not covered: a real library across a tray update (the 0.1.0 update test kept settings and library).
 
 ## Round 9 — "update available" is hard to miss (ships as `0.1.1`)
 
