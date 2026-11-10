@@ -1,4 +1,4 @@
-# Implementation plan — round 11: real-world checks (0.1.3), then wallpaper rotation and drag and drop (0.2.0)
+# Implementation plan — round 11: real-world checks and on/off switches (0.1.3), then wallpaper rotation and drag and drop (0.2.0)
 
 **Current scope (user's decision, 5 Nov 2026): round 11 below, on branch `round-11`, created from `main` at the start of the first phase.** Rounds 8, 9 and 10 are finished and stay for their Notes. Round 7 is finished except for what round 8 took over.
 
@@ -11,6 +11,8 @@
 - **The screensaver and lock screen stay on the base wallpaper:** "Same as desktop" means the monitor's chosen wallpaper, not whichever one is rotating, so rotation never rewrites the Windows lock screen.
 - **The chosen wallpaper is always in its list and plays first.** Rotation adds wallpapers to it, so the list can't be empty, and turning rotation off goes back to the chosen one.
 - **Pin tip:** Hanami doesn't read or change Windows' pinned-icon setting (same reasoning as round 6's registry decision). It only tells the user how, once, until dismissed.
+- **Wallpaper on/off (added 10 Nov 2026):** for people who want only pets. One switch for all monitors, at the top of the Wallpaper tab. Off means Hanami draws nothing on the desktop and Windows' own wallpaper shows; it is not the same as Pause. It ships in `0.1.3` so rotation in part B is built knowing about it.
+- **Each feature tab opens with its own on/off:** Wallpaper, Screensaver and Pets get the same switch row at the top. The screensaver's switch moves from Power, but only the switch: "Start after", "Stop after" and the Windows sleep-timer warnings stay on Power. Pets' "Show pets" moves up from the Behaviour card.
 
 **Rules:** work only on `round-11`. No commit, merge, push, tag or version bump without the user's yes in that chat, and each tag needs its own yes. Installs touch `HKCU\Software\Hanami`, so ask first and follow `docs/TESTING.md`.
 
@@ -36,31 +38,45 @@ Notes:
 
 Notes:
 
-### Phase A3 — Pin tip and housekeeping
+### Phase A3 — On/off at the top of each tab
 
-Read: `web/settings/app.js`, `web/settings/tabs/general.js` (the update banner's styles), `Core/Settings.cs` (`UpdateSettings` as the model for a small settings block), CONTRACTS "Settings bridge" and "Updates".
+Read: `Core/Settings.cs` (`AppSettings`, `PetSettings` as the model), `Core/ScreensaverPolicy.cs` (`ScreensaverSettings.Enabled`), `Core/ModeResolver.cs`, `App/WallpaperManager.cs` (`RebuildAsync`, `WatchAsync`, `ApplyModesAsync`, `Dispose`, the `Power` and `SessionLocked` state), `Platform/DesktopHost.cs` (`RefreshStaticWallpaper`), `App/HanamiHost.cs` (`BuildState`, the bridge switch, the mode func given to `PetManager`), `web/settings/tabs/wallpapers.js`, `screensaver.js`, `pets.js`, `power.js` (`createPowerTab`, `saverCard`), `web/settings/mock-bridge.js`, CONTRACTS "Settings bridge", "Screensaver behaviour", "Desktop pets".
 
-- [ ] A3.1 **Contract first:** settings `tips: {pinTrayDismissed: false}`. Defaults cover old files, so no `CurrentVersion` bump. Importing a pack's settings keeps this PC's value, as with `updates`.
-- [ ] A3.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
-- [ ] A3.3 **README screenshot:** `docs/img/settings.jpg` predates round 10. Retake it on the mock bridge if the tab it shows changed, built-in scenes and procedural samples only.
-- [ ] A3.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
-- [ ] A3.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
+Already known (don't re-check): there is no way to turn the wallpaper off today; `Paused` only freezes it. Pets don't need the wallpaper windows, but their mode comes from `ModeResolver` (Paused, battery and maximized rules), so "off" must not be built on `Paused`. The screensaver and lock screen read only settings (`ScreensaverWallpaperFor`), never the wallpaper windows, so they keep working with the wallpaper off. Hanami never changes the Windows wallpaper, so on exit it only calls `RefreshStaticWallpaper` to clear its last frame.
+
+- [ ] A3.1 **Contract first:** settings `wallpaper: {enabled: true}` (a `WallpaperSettings` block like `PetSettings`). Defaults cover old files, so no `CurrentVersion` bump. Saved the same way `pets.enabled` is. Packs export it like the other blocks. Say in CONTRACTS what off means: no wallpaper windows, Windows' own wallpaper shows, the screensaver and lock screen unaffected.
+- [ ] A3.2 **Host:** off disposes the wallpaper views (no WebView2 running for them) and calls `RefreshStaticWallpaper` so the last frame doesn't stay. `WatchAsync` and monitor-change rebuilds do nothing while off; on rebuilds through `RebuildAsync`. **Trap:** power, battery and session-lock tracking live in `WallpaperManager` and feed the pets' mode, so they must keep running with no views. Pets' behaviour must not change when the wallpaper is turned off. Start-up with the wallpaper off creates no views at all.
+- [ ] A3.3 **Settings UI, the same switch row on three tabs,** right under each page header and above the monitor scope: "Wallpaper" (new, `wallpaper.enabled`), "Live screensaver" (moved from Power's Screensaver card, `screensaver.enabled`), "Show pets" (moved up out of Behaviour, `pets.enabled`). Make it one shared component so the three match. The cards below stay visible and editable while off (the screensaver's "Same as desktop" still uses the Wallpaper tab's choices). On Power, the Screensaver card keeps its status, "Start after", "Stop after", timers and battery footnote; whatever they did when the screensaver was off, keep doing it from the setting. Keep each row's text to one short line.
+- [ ] A3.4 **Tests and docs:** settings round trip and old files load with the wallpaper on; anything in `Core/` the host change adds. README feature bullet ("Want only pets? Turn the wallpaper off at the top of the Wallpaper tab"), CONTRACTS, mock bridge support.
+- [ ] A3.5 **Check** on the mock (three rows look the same, each saves, Power still reads right without the switch, no console errors) and in the dev app: wallpaper off shows Windows' wallpaper on every monitor with no Hanami WebView2 processes left for it; pets keep walking and still freeze on battery; the screensaver still starts and shows "Same as desktop" correctly; Win+D and a monitor replug don't bring the wallpaper back; on again restores it. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
 
 Notes:
 
-### Phase A4 — Release `0.1.3`
+### Phase A4 — Pin tip and housekeeping
+
+Read: `web/settings/app.js`, `web/settings/tabs/general.js` (the update banner's styles), `Core/Settings.cs` (`UpdateSettings` as the model for a small settings block), CONTRACTS "Settings bridge" and "Updates".
+
+- [ ] A4.1 **Contract first:** settings `tips: {pinTrayDismissed: false}`. Defaults cover old files, so no `CurrentVersion` bump. Importing a pack's settings keeps this PC's value, as with `updates`.
+- [ ] A4.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
+- [ ] A4.3 **README screenshot:** `docs/img/settings.jpg` predates round 10. Retake it on the mock bridge if the tab it shows changed (round 10 and A3 both changed tabs), built-in scenes and procedural samples only.
+- [ ] A4.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
+- [ ] A4.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
+
+Notes:
+
+### Phase A5 — Release `0.1.3`
 
 Read: README "Releasing".
 
-- [ ] A4.1 `<Version>` in `Hanami.App.csproj` and a `## 0.1.3` section in `CHANGELOG.md`, written for users. Commit. With the user's yes: merge to `main`, push.
-- [ ] A4.2 **With the user's yes for this tag:** tag `v0.1.3`, push it, watch the run, check the download's SHA-256 and stamped version.
-- [ ] A4.3 **The user updates the second laptop from its tray.** This covers what round 10's check couldn't: a real library across a tray update.
+- [ ] A5.1 `<Version>` in `Hanami.App.csproj` and a `## 0.1.3` section in `CHANGELOG.md`, written for users. Commit. With the user's yes: merge to `main`, push.
+- [ ] A5.2 **With the user's yes for this tag:** tag `v0.1.3`, push it, watch the run, check the download's SHA-256 and stamped version.
+- [ ] A5.3 **The user updates the second laptop from its tray.** This covers what round 10's check couldn't: a real library across a tray update.
 
 Notes:
 
 ### Phase B1 — Rotation: rules and host
 
-Part B starts only after A4. Read: `Core/Settings.cs` (`Assignment`, `DesktopWallpaperFor`, `DesktopEffectFor`, `ScreensaverWallpaperFor`, `ForgetWallpaper`), `App/WallpaperManager.cs` (`PushConfigAll`, `RebuildAsync`, `ApplyModesAsync`), `App/HanamiHost.cs` (`BuildState`, `DeleteWallpaperAsync`, the bridge switch), `App/LockScreenSync.cs` (to confirm it reads only `ScreensaverWallpaperFor`), CONTRACTS "Settings bridge", "Shared types", "Lock screen".
+Part B starts only after A5. Read: `Core/Settings.cs` (`Assignment`, `DesktopWallpaperFor`, `DesktopEffectFor`, `ScreensaverWallpaperFor`, `ForgetWallpaper`), `App/WallpaperManager.cs` (`PushConfigAll`, `RebuildAsync`, `ApplyModesAsync`), `App/HanamiHost.cs` (`BuildState`, `DeleteWallpaperAsync`, the bridge switch), `App/LockScreenSync.cs` (to confirm it reads only `ScreensaverWallpaperFor`), CONTRACTS "Settings bridge", "Shared types", "Lock screen".
 
 - [ ] B1.1 **Contract first:**
       - `Assignment` gains `rotate: false`, `rotation: string[]` and `darkRotation: string[]`, the wallpapers added to the chosen one. Top level gains `rotation: {intervalMinutes: 60, shuffle: false}`, shared by all monitors. Allowed intervals: 5, 15, 30, 60, 180, 1440. Defaults cover old files, so no `CurrentVersion` bump.
@@ -69,7 +85,7 @@ Part B starts only after A4. Read: `Core/Settings.cs` (`Assignment`, `DesktopWal
       - Say in "Lock screen" that rotation never changes it. Check that packs export the new fields and that an unknown wallpaper id in a list is harmless after an import.
 - [ ] B1.2 **`Core/RotationPolicy.cs` (pure, tested):** the effective list (chosen wallpaper first, no duplicates, ids no longer in the library dropped; light list when the dark slot has no wallpaper of its own). `Next(list, current, shuffle, random)`: in order wraps around; shuffle goes through the whole list before repeating and never picks the current one twice in a row; a list of one means no change. `IsDue(lastChange, now, interval)`.
 - [ ] B1.3 **`DesktopWallpaperFor` keeps meaning the base wallpaper**, so the screensaver and lock screen need no change. Add the wallpaper currently shown as separate runtime state in `WallpaperManager`, per monitor key, which is what `PushConfigAll` sends. **Trap:** `DesktopEffectFor` goes through `DesktopWallpaperFor`, so it must take the shown id, or a rotated wallpaper would show the base wallpaper's effect.
-- [ ] B1.4 **Timer:** a tick of about 30 s, comparing against the last change so sleep doesn't matter. Hold while a monitor is paused or hidden, while the session is locked and while the screensaver shows; a due change then happens on return. Monitors sharing `*` change together. The position isn't saved: after a restart each monitor starts on its chosen wallpaper again. A theme flip or a new chosen wallpaper restarts from that slot's first wallpaper and resets the timer.
+- [ ] B1.4 **Timer:** a tick of about 30 s, comparing against the last change so sleep doesn't matter. Hold while the wallpaper is off (A3), while a monitor is paused or hidden, while the session is locked and while the screensaver shows; a due change then happens on return. Monitors sharing `*` change together. The position isn't saved: after a restart each monitor starts on its chosen wallpaper again. A theme flip or a new chosen wallpaper restarts from that slot's first wallpaper and resets the timer.
 - [ ] B1.5 **Delete:** `DeleteWallpaperAsync` must let go of a wallpaper that is showing through rotation, not only through an assignment, or the file stays locked. `ForgetWallpaper` removes the id from every list.
 - [ ] B1.6 **Tests:** the policy above, settings round trip, old files load with rotation off, the delete case. Check in dev with `rotation.intervalMinutes` edited to a short value through a test-only path: each change crossfades, the effect follows the wallpaper shown, and `LockScreenSync` logs no update. Commit.
 
