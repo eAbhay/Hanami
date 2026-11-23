@@ -113,9 +113,9 @@ Notes: 398 tests, 37 new in `PetdexTests.cs` (synthetic PNG sheets). **Real chec
 
 Read: `Core/Pets/PetBrain.cs` (`Mirrored`, the climbing, falling, drag, throw, landing and idle choices, `PetProfile`), `Core/Pets/World.cs`, `App/PetWindow.cs` (the flip), `App/PetManager.cs`, CONTRACTS "Desktop pets".
 
-- [ ] P2.1 **Right-facing frames:** a pose can name a right-facing twin frame. When the pet faces right and the twin exists, it is drawn unflipped; otherwise it is mirrored as today. Shimeji packs are unaffected.
-- [ ] P2.2 **Abilities:** with `abilities` from the manifest, a Petdex pet climbs walls (run frames, upright, facing the wall) and never latches a ceiling, sits or sleeps. Idle choices use stand and, when present, the waiting row. A dizzy landing plays the failed row and recovers to stand instead of lying down. Stroke and click play wave.
-- [ ] P2.3 **Tests** in `Core/` for the twin-frame choice and that a pet without ceiling/sit/sleep never enters those states (including after a throw at a ceiling).
+- [x] P2.1 **Right-facing frames:** a pose can name a right-facing twin frame. When the pet faces right and the twin exists, it is drawn unflipped; otherwise it is mirrored as today. Shimeji packs are unaffected.
+- [x] P2.2 **Abilities:** with `abilities` from the manifest, a Petdex pet climbs walls (run frames, upright, facing the wall) and never latches a ceiling, sits or sleeps. Idle choices use stand and, when present, the waiting row. A dizzy landing plays the failed row and recovers to stand instead of lying down. Stroke and click play wave.
+- [x] P2.3 **Tests** in `Core/` for the twin-frame choice and that a pet without ceiling/sit/sleep never enters those states (including after a throw at a ceiling).
 - [ ] P2.4 **Check in dev** with Nezuko and Frieren next to a Shimeji pack: walk both ways (Frieren's ponytail stays on the correct side), climb a window edge up and down, drag, throw, drop, a throw at the top of the screen, stroke, Stay and Follow, companions. Screenshot the climb and the fall for the user, then ask them to look before committing.
 
 Notes:

@@ -21,7 +21,7 @@ public readonly record struct MeetPlan(MeetKind Kind, int Ticks);
 /// height in physical px (0 = 128 px at the pixel scale); it decides what is "in the way" and how far a jump reaches.
 /// </summary>
 public sealed record PetProfile(PetCapabilities Caps, IReadOnlySet<int> Frames, double PixelScale, string Activity = "normal",
-    PetAnimations? Animations = null, double BodyHeight = 0);
+    PetAnimations? Animations = null, double BodyHeight = 0, bool Petdex = false);
 
 /// <summary>
 /// One pet's state machine and physics, in physical screen pixels, stepped at a fixed 25 Hz
@@ -80,11 +80,13 @@ public sealed class PetBrain
     public double Vx { get; private set; }
     public double Vy { get; private set; }
     public Pose Pose => _anim[_animIndex];
-    /// <summary>The image to draw: the pose's frame, or shime1 when the pack lacks it.</summary>
-    public int Frame => _profile.Frames.Contains(Pose.Frame) ? Pose.Frame : 1;
+    /// <summary>Facing right with a right-facing twin of the pose's frame in the pack: that frame is drawn as it is, not mirrored.</summary>
+    private bool UsesTwin => Facing > 0 && Pose.Twin > 0 && _profile.Frames.Contains(Pose.Twin);
+    /// <summary>The image to draw: the pose's frame (its right-facing twin when facing right and it has one), or shime1 when the pack lacks it.</summary>
+    public int Frame => UsesTwin ? Pose.Twin : _profile.Frames.Contains(Pose.Frame) ? Pose.Frame : 1;
     public Surface? Surface => _on;
     /// <summary>Whether to draw the frame mirrored: facing right, unless the pose's image faces the other way.</summary>
-    public bool Mirrored => (Facing > 0) ^ Pose.Mirror;
+    public bool Mirrored => !UsesTwin && ((Facing > 0) ^ Pose.Mirror);
     public bool IsHeld => State == PetState.Dragged;
     public double PixelScale => _ps;
     public PetCapabilities Caps => _profile.Caps;
@@ -134,7 +136,8 @@ public sealed class PetBrain
         var sw = _a.Swing;
         var st = _a.Stand[0];   // held and reacting poses stand where the standing pose does
         Pose At(int frame, int ticks) => new(frame, ticks, st.AnchorX, st.AnchorY, 0, 0, st.Mirror);
-        _reactPoses = [At(sw[0], 5), At(sw[1], 5), At(sw[2], 5), At(sw[3], 5), At(sw[4], 5), At(sw[2], 8)];
+        // A click: the swing frames for Shimeji; a Petdex pet waves.
+        _reactPoses = profile.Petdex ? _a.Wave : [At(sw[0], 5), At(sw[1], 5), At(sw[2], 5), At(sw[3], 5), At(sw[4], 5), At(sw[2], 8)];
         _anim = _a.Fall;
         SetAnim(_a.Fall);
     }
@@ -241,7 +244,7 @@ public sealed class PetBrain
         _stateTicks = 30 * ShimejiFrames.TickRate;
         _markTicks = 0;
         Vx = 0;
-        SetAnim(_strokeSit ? _a.Sit : _a.Stand);
+        SetAnim(_strokeSit ? _a.Sit : _profile.Petdex ? _a.Wave : _a.Stand);
     }
 
     public void EndStroke()
@@ -477,6 +480,8 @@ public sealed class PetBrain
         Attach(floor, world);
         Vx = Vy = 0;
         if (_dizzy && _profile.Caps.Sleep) { _dizzy = false; Enter(PetState.Lie, 75 + _rng.Next(75)); return; }
+        // A Petdex pet can't lie down: it plays its "failed" row, then stands.
+        if (_dizzy && _profile.Petdex) { _dizzy = false; State = PetState.Land; _stateTicks = 50; Vx = Vy = 0; SetAnim(_a.Resist); return; }
         _dizzy = false;
         if (hard && Present(_a.Bounce)) { State = PetState.Land; _stateTicks = 8; SetAnim(_a.Bounce); }
         else Enter(PetState.Stand, 25 + _rng.Next(75));
@@ -560,6 +565,7 @@ public sealed class PetBrain
             PetState.Sit => _rng.Next(4) == 0 && Present(_a.SitLookUp) ? _a.SitLookUp : _a.Sit,
             PetState.Lie => _a.Sprawl,
             PetState.Sleep => _a.Sleep,
+            PetState.Stand when _profile.Petdex && _rng.Next(4) == 0 && Present(_a.Waiting) && _a.Waiting[0].Frame != _a.Stand[0].Frame => _a.Waiting,
             _ => _a.Stand,
         });
     }

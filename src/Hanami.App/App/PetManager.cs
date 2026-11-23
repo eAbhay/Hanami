@@ -19,6 +19,7 @@ internal sealed class PetFrames
     public required int Height { get; init; }
     public required PetCapabilities Caps { get; init; }
     public required PetAnimations Anims { get; init; }
+    public bool IsPetdex { get; init; }
 
     public static PetFrames? Load(PetLibrary library, string packId)
     {
@@ -41,7 +42,7 @@ internal sealed class PetFrames
             catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException) { }
         }
         if (!images.ContainsKey(1)) return null;
-        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations() };
+        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations(), IsPetdex = manifest.IsPetdex };
     }
 }
 
@@ -180,7 +181,7 @@ public sealed class PetManager : IDisposable
         pet.Ps = settings.Scale * ScaleAt(x ?? 0, y ?? 0);
         pet.Activity = settings.Activity;
         pet.Brain = new PetBrain(new PetProfile(pet.Frames.Caps, pet.Frames.Set, pet.Ps, settings.Activity, pet.Frames.Anims,
-            BodyHeight: pet.Frames.Height * pet.Ps * 0.85), new Random(_rng.Next()));
+            BodyHeight: pet.Frames.Height * pet.Ps * 0.85, Petdex: pet.Frames.IsPetdex), new Random(_rng.Next()));
         pet.Brain.Stay = pet.Stay;
         if (pet.Follow) pet.Brain.SetFollowCursor(true);
         pet.Stroking = false;
