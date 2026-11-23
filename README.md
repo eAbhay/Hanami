@@ -25,6 +25,8 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
 ![Hanami's settings window](docs/img/settings.jpg)
 
 - **Video, image or built-in animated scenes** play behind your desktop icons, one per monitor.
+- **Each feature has its own switch.** The Wallpaper, Screensaver and Pets tabs each open with an on/off row. Want only pets? Turn the
+  wallpaper off at the top of the Wallpaper tab: Hanami draws nothing on the desktop and Windows' own wallpaper shows.
 - **Interactive effects** draw over the wallpaper: sakura petals, snow, autumn leaves, fireflies,
   rain, sparkles and flame embers. They react to the mouse (repel, attract, or a gust of wind),
   and can burst when you click the desktop (off by default). Each effect has its own settings

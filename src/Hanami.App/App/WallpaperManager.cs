@@ -64,6 +64,33 @@ public sealed class WallpaperManager : IDisposable
         _inputTimer.Start();
     }
 
+    /// <summary>The wallpaper switch (settings <c>wallpaper.enabled</c>). Off means no views at all; power and session tracking go on.</summary>
+    public bool Enabled => _settings().Wallpaper.Enabled;
+
+    /// <summary>Brings the views in line with the switch after a settings change: off lets go of every view, on builds them.</summary>
+    public async Task SyncEnabledAsync()
+    {
+        if (!Enabled)
+        {
+            if (_views.Count > 0) DropViews();
+        }
+        else if (_views.Count == 0)
+        {
+            await RebuildAsync(force: true);
+        }
+    }
+
+    /// <summary>Disposes every view and clears Windows' own wallpaper of Hanami's last frame.</summary>
+    private void DropViews()
+    {
+        foreach (var v in _views.Values) v.Dispose();
+        _views.Clear();
+        Modes.Clear();
+        _desktop = null;
+        DesktopHost.RefreshStaticWallpaper();
+        StatusChanged?.Invoke();
+    }
+
     /// <summary>Re-finds the desktop window and matches views to the current monitors.</summary>
     public async Task RebuildAsync(bool force = false)
     {
@@ -73,6 +100,12 @@ public sealed class WallpaperManager : IDisposable
         _lastRebuild = DateTime.UtcNow;
         try
         {
+            if (!Enabled)
+            {
+                _monitors = Monitors.Enumerate();   // the Power tab still lists the screens
+                if (_views.Count > 0) DropViews();
+                return;
+            }
             var desktop = DesktopHost.Find();
             if (desktop is null) return;
             var monitors = Monitors.Enumerate();
@@ -163,6 +196,8 @@ public sealed class WallpaperManager : IDisposable
             if (fpsChanged) PushConfigAll();
             StatusChanged?.Invoke();
         }
+
+        if (!Enabled) return;   // no views to look after
 
         // Explorer restarted, or the desktop windows were recreated (e.g. after resume).
         var broken = _desktop is null || !_desktop.IsAlive || _views.Values.Any(v => Win32.GetParent(v.Hwnd) != _desktop.Parent);

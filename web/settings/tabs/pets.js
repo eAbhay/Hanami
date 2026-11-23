@@ -1,6 +1,6 @@
 // Pets tab — import Shimeji image sets, and choose which pets are out on the desktop.
 import { h, svg, formatBytes, dialog, debounce, slider, segmented, toggle } from "../util.js";
-import { pageHeader, card, row } from "../components/index.js";
+import { pageHeader, card, row, featureSwitch } from "../components/index.js";
 
 const MAX_PETS = 8;
 
@@ -11,7 +11,7 @@ export function createPetsTab(ctx) {
 
   // ---- behaviour
   const savePets = (patch) => ctx.mutate("updateSettings", { pets: patch }).catch(() => {});
-  const show = toggle(true, (v) => savePets({ enabled: v }), "Show pets");
+  const show = featureSwitch(ctx, { settingsKey: "pets", icon: "sparkles", title: "Show pets", sub: "Off hides every pet without removing it. The tray menu can also hide them for this session." });
   const climb = toggle(true, (v) => savePets({ climbWindows: v }), "Climb windows");
   const social = toggle(true, (v) => savePets({ socialize: v }), "Play together");
   const socialRow = h("div", h("div.divider"),
@@ -33,11 +33,10 @@ export function createPetsTab(ctx) {
 
   const el = h("section",
     pageHeader("Pets", "Little companions that live on your desktop.", actions),
+    show,
     card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
     card("Pet library", h("span.card-meta", "Imported Shimeji packs"), empty, packList),
     card("Behaviour", null,
-      row("sparkles", "Show pets", "Turn all pets off without removing them. The tray menu can also hide them for this session.", show),
-      h("div.divider"),
       size,
       h("div.field", h("label.field-label", "Activity"), activity,
         h("p.field-hint", "Calm pets sit and nap more; lively ones run around and rarely sleep.")),

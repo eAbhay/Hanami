@@ -1,7 +1,7 @@
 // Screensaver tab — what the screensaver shows. When it runs lives on the Power tab.
 import { h, svg, toggle, dialog } from "../util.js";
 import { scopeSelector } from "../scope.js";
-import { pageHeader, card, row, wallpaperPicker, effectPicker, createClockCard, slotSwitch } from "../components/index.js";
+import { pageHeader, card, row, wallpaperPicker, effectPicker, createClockCard, slotSwitch, featureSwitch } from "../components/index.js";
 import { createLockFrame } from "../components/lockFrame.js";
 
 export function createScreensaverTab(ctx) {
@@ -63,6 +63,7 @@ export function createScreensaverTab(ctx) {
   const effectNote = h("span.card-meta", "Same as desktop follows the wallpaper's effect");
 
   // With "Same as desktop" and several monitors: which monitor's wallpaper is being edited.
+  const power = featureSwitch(ctx, { settingsKey: "screensaver", icon: "screensaver", title: "Live screensaver", sub: "Shows your live wallpaper fullscreen while you're away." });
   const scope = scopeSelector(ctx, { verb: "Edits apply" });
 
   const clockCard = createClockCard(ctx);
@@ -106,6 +107,7 @@ export function createScreensaverTab(ctx) {
 
   const el = h("section",
     pageHeader("Screensaver", "Your live wallpaper, fullscreen, while you're away from your desk.", previewBtn),
+    power,
     status,
     scope,
     card("Background", slots, emptyDark, backgrounds.el),
@@ -132,6 +134,7 @@ export function createScreensaverTab(ctx) {
     backgrounds.update(s, dark ? cfg.darkWallpaperId ?? null : cfg.wallpaperId ?? null,
       ctx.split ? { light: cfg.wallpaperId ?? null, dark: cfg.darkWallpaperId ?? null } : null);
     scope.update(s);
+    power.set(cfg.enabled);
     if (cfg.wallpaperId != null) scope.hidden = true;   // an own background has one look on every monitor
     const id = backgroundId();
     const look = ctx.lookFor(id);

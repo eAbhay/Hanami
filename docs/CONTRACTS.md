@@ -299,6 +299,11 @@ type Settings = {
     syncLockScreen: boolean;    // default false — make the Windows lock screen picture a still of the main monitor's screensaver wallpaper
     stopAfterHours: number;     // 0 = never (default); after this, hide it and let Windows' timers take over
   };
+  wallpaper: {                  // files without it get these defaults (no settings migration)
+    enabled: boolean;           // default true. Off = Hanami draws no wallpaper: no wallpaper windows (no WebView2 for them),
+                                // Windows' own wallpaper shows. Not Pause (which freezes it). The screensaver, the lock screen
+                                // picture and pets are unaffected; power/session tracking keeps running so pets' mode stays the same.
+  };
   pets: {
     enabled: boolean;           // default true ("Show pets")
     items: { id: string; packId: string }[];   // pets out; the same pack may appear more than once; max 8

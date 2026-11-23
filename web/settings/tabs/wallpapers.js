@@ -1,9 +1,10 @@
 // Wallpaper tab — pick the background and the effect for each monitor (or all of them).
 import { h, svg, progressBar } from "../util.js";
 import { scopeSelector } from "../scope.js";
-import { pageHeader, card, wallpaperPicker, effectPicker, slotSwitch } from "../components/index.js";
+import { pageHeader, card, wallpaperPicker, effectPicker, slotSwitch, featureSwitch } from "../components/index.js";
 
 export function createWallpapersTab(ctx) {
+  const power = featureSwitch(ctx, { settingsKey: "wallpaper", icon: "monitor", title: "Wallpaper", sub: "Off shows Windows' own wallpaper. Pets and the screensaver keep working." });
   const scope = scopeSelector(ctx);
   const progress = progressBar();
   const importBtn = h("button.btn.primary", { type: "button", onclick: doImport }, svg("upload"), h("span", "Import video / image"));
@@ -20,6 +21,7 @@ export function createWallpapersTab(ctx) {
 
   const el = h("section",
     pageHeader("Wallpaper", "Pick a background and an effect. Click a card to apply it.", importBtn),
+    power,
     scope,
     progress,
     card("Background", slots, emptyDark, backgrounds.el),
@@ -56,6 +58,7 @@ export function createWallpapersTab(ctx) {
 
   function update(s) {
     scope.update(s);
+    power.set(s.settings.wallpaper?.enabled);
     const a = ctx.assignmentFor(ctx.scopeKey());
     slots.update();
     emptyDark.hidden = !(ctx.slot === "dark" && a.own == null);

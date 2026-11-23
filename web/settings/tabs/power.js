@@ -74,7 +74,6 @@ export function createPowerTab(ctx) {
   }
 
   // ---------------------------------------------------------------- screensaver
-  const saverEnabled = toggle(true, (v) => saveSaver({ enabled: v }), "Live screensaver");
   const saverStatus = h("span.card-meta");
   const idleSeg = segmented(IDLE_PRESETS.map((v) => ({ value: v, label: `${v}` })), 2, (v) => saveSaver({ idleMinutes: v }), { ariaLabel: "Start after (minutes)" });
   const idleInput = h("input.num-input", { type: "number", min: 1, max: 120, step: 1, "aria-label": "Custom idle minutes", title: "Custom: 1–120 minutes" });
@@ -93,7 +92,6 @@ export function createPowerTab(ctx) {
 
   const saverCard = card("Screensaver", saverStatus,
     h("div.rules",
-      row("screensaver", "Live screensaver", "When plugged in and idle, shows your live wallpaper fullscreen with a clock and keeps the screen on. A key press or click ends it — moving the mouse doesn't.", saverEnabled, { rule: true }),
       row("clock", "Start after", "Minutes without mouse or keyboard input, while plugged in.",
         h("div.ss-idle", idleSeg, h("label.num-wrap", idleInput, h("span", "min"))), { rule: true }),
       row("power", "Stop after", "After this, Hanami hides it and lets Windows turn the screen off and sleep as usual.", stopSeg, { rule: true })),
@@ -170,7 +168,6 @@ export function createPowerTab(ctx) {
 
     const cfg = s.settings.screensaver;
     if (cfg && s.screensaver) {
-      saverEnabled.set(cfg.enabled);
       saverStatus.textContent = s.screensaver.status || (cfg.enabled ? "Ready" : "Off");
       idleSeg.set(cfg.idleMinutes);
       if (document.activeElement !== idleInput) idleInput.value = cfg.idleMinutes;

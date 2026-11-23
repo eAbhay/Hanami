@@ -247,6 +247,7 @@ public sealed class HanamiHost
     private (Mode mode, string reason) SummaryMode()
     {
         var modes = _wallpapers.Modes.Values.ToList();
+        if (!_wallpapers.Enabled) return (Mode.Paused, "Wallpaper off");
         if (modes.Count == 0) return (Mode.Paused, "No desktop found");
         var best = modes.MaxBy(m => m.Mode);
         return best.Mode == Mode.Full ? (Mode.Full, "Running") : (best.Mode, $"{(best.Mode == Mode.Reduced ? "Reduced" : "Paused")} — {best.Reason}");
@@ -483,6 +484,7 @@ public sealed class HanamiHost
     private async Task AfterSettingsChangedAsync()
     {
         _pets.Sync();
+        await _wallpapers.SyncEnabledAsync();
         _wallpapers.PushConfigAll();
         _screensaver.PushConfigAll();
         _lockSync.RequestRefresh();

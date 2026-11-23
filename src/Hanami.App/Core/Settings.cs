@@ -34,6 +34,9 @@ public sealed class AppSettings
     /// <summary>Optional light and dark wallpapers per slot. Off (<see cref="ThemeSettings.Split"/>) by default.</summary>
     public ThemeSettings Theme { get; set; } = new();
 
+    /// <summary>The desktop wallpaper's on/off switch.</summary>
+    public WallpaperSettings Wallpaper { get; set; } = new();
+
     /// <summary>Desktop pets (Shimeji-style companions).</summary>
     public PetSettings Pets { get; set; } = new();
 
@@ -158,6 +161,12 @@ public sealed class ThemeSettings
 
     /// <summary>The active theme for a Windows theme: forced by <see cref="Mode"/>, else Windows'.</summary>
     public bool IsDark(bool windowsDark) => Mode switch { Dark => true, Light => false, _ => windowsDark };
+}
+
+/// <summary>Whether Hanami draws the desktop wallpaper at all. Off leaves Windows' own wallpaper showing. See docs/CONTRACTS.md.</summary>
+public sealed class WallpaperSettings
+{
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>Desktop pets: which ones are out and how they behave. See docs/CONTRACTS.md.</summary>
@@ -488,6 +497,7 @@ public sealed class SettingsStore
         s.Looks ??= new();
         s.Screensaver ??= new();
         s.Theme ??= new();
+        s.Wallpaper ??= new();
         NormalizePets(s.Pets ??= new());
         if (s.Theme.Mode is not (ThemeSettings.System or ThemeSettings.Light or ThemeSettings.Dark)) s.Theme.Mode = ThemeSettings.System;
         if (s.SettingsVersion < 3) MigrateToLooks(s);
