@@ -973,3 +973,11 @@ code.path {
 .tip[hidden] { display: none; }
 .tip svg { flex: none; width: 18px; height: 18px; color: var(--accent, #d58ab8); }
 .tip-text { flex: 1; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+
+/* Drop veil: shown over the whole window only while files are dragged over it. */
+.drop-veil { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: color-mix(in srgb, var(--bg, #1c1a22) 72%, transparent); backdrop-filter: blur(6px); pointer-events: none; }
+.drop-veil[hidden] { display: none; }
+.drop-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 34px 46px; max-width: min(460px, 86vw); text-align: center; border: 2px dashed var(--violet, #b79cf0); border-radius: 18px; background: var(--surface, #25222d); }
+.drop-card svg { width: 34px; height: 34px; color: var(--violet, #b79cf0); }
+.drop-title { font: 600 18px/1.2 var(--font-display); }
+.drop-sub { color: var(--text-2); font-size: 12.5px; line-height: 1.45; }

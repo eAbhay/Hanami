@@ -319,7 +319,7 @@ public sealed class HanamiHost
         };
     }
 
-    private async Task<JsonNode?> DispatchAsync(string method, JsonNode? p)
+    private async Task<JsonNode?> DispatchAsync(string method, JsonNode? p, IReadOnlyList<string> droppedFiles)
     {
         switch (method)
         {
@@ -354,7 +354,10 @@ public sealed class HanamiHost
                 return BuildState();
 
             case "importMedia":
-                return await ImportMediaAsync();
+                return await ExclusiveImportAsync(ImportMediaAsync);
+
+            case "importDropped":
+                return await ExclusiveImportAsync(() => ImportDroppedAsync(droppedFiles));
 
             case "renameWallpaper":
                 _library.Rename(Required(p, "id"), Required(p, "name"));
@@ -366,7 +369,10 @@ public sealed class HanamiHost
                 return BuildState();
 
             case "importPet":
-                return await ImportPetAsync((string?)p?["source"] ?? "zip");
+            {
+                var source = (string?)p?["source"] ?? "zip";
+                return await ExclusiveImportAsync(() => ImportPetAsync(source));
+            }
 
             case "renamePet":
                 _petLibrary.Rename(Required(p, "id"), Required(p, "name"));
@@ -492,6 +498,17 @@ public sealed class HanamiHost
         OnStatusChanged();
     }
 
+    private bool _importing;
+
+    /// <summary>One import at a time (a dialog import, a drop, a pet import): a second one is refused, not queued.</summary>
+    private async Task<JsonNode> ExclusiveImportAsync(Func<Task<JsonNode>> work)
+    {
+        if (_importing) throw new InvalidOperationException("Another import is still running.");
+        _importing = true;
+        try { return await work(); }
+        finally { _importing = false; }
+    }
+
     private async Task<JsonNode> ImportMediaAsync()
     {
         var exts = string.Join(";", Library.VideoExtensions.Concat(Library.ImageExtensions).Select(e => "*" + e));
@@ -503,8 +520,14 @@ public sealed class HanamiHost
         };
         if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
 
-        var imported = new JsonArray();
-        var files = dlg.FileNames;
+        var imported = await ImportFilesAsync(dlg.FileNames, onFailure: null);
+        return new JsonObject { ["imported"] = new JsonArray(imported.Select(i => Json.ToNode(i)).ToArray()) };
+    }
+
+    /// <summary>Copies videos and images into the library with progress; the dialog and a drop share this. A failing file throws unless <paramref name="onFailure"/> takes it.</summary>
+    private async Task<List<WallpaperInfo>> ImportFilesAsync(IReadOnlyList<string> files, Action<string, string>? onFailure)
+    {
+        var imported = new List<WallpaperInfo>();
         var totalBytes = files.Sum(f => new FileInfo(f).Length);
         long before = 0;
         var lastReport = DateTime.MinValue;
@@ -517,13 +540,47 @@ public sealed class HanamiHost
                 lastReport = DateTime.UtcNow;
                 Progress("import", before + x.done, totalBytes, name);
             });
-            var info = await Task.Run(() => _library.ImportAsync(file, progress));
+            try
+            {
+                imported.Add(await Task.Run(() => _library.ImportAsync(file, progress)));
+            }
+            catch (Exception ex) when (onFailure is not null && ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                Log.Warn($"Import of {name} failed: {ex.Message}");
+                onFailure(name, ex.Message);
+            }
             before += new FileInfo(file).Length;
-            imported.Add(Json.ToNode(info));
         }
         Progress("import", totalBytes, totalBytes, "Done");
         BroadcastState();
-        return new JsonObject { ["imported"] = imported };
+        return imported;
+    }
+
+    /// <summary>Sorts what was dropped on the settings window and imports each part: photos and videos as wallpapers, zips and folders as pets.</summary>
+    private async Task<JsonNode> ImportDroppedAsync(IReadOnlyList<string> paths)
+    {
+        var rejected = new List<(string name, string reason)>();
+        var items = DropClassifier.Classify(paths);
+        foreach (var r in items.Where(i => i.Kind == DropKind.Rejected)) rejected.Add((r.Name, r.Reason ?? "it can't be imported"));
+
+        var media = items.Where(i => i.Kind is DropKind.Photo or DropKind.Video).Select(i => i.Path).ToList();
+        var wallpapers = media.Count == 0 ? new() : await ImportFilesAsync(media, (name, reason) => rejected.Add((name, reason)));
+
+        var pets = 0;
+        foreach (var pack in items.Where(i => i.Kind == DropKind.PetPack))
+        {
+            var result = await Task.Run(() => Directory.Exists(pack.Path) ? PetPackReader.ImportFolder(_petLibrary, pack.Path) : PetPackReader.ImportZip(_petLibrary, pack.Path));
+            pets += result.Imported.Count;
+            foreach (var reason in result.Rejected) rejected.Add((pack.Name, reason));
+        }
+        if (pets > 0) BroadcastState();
+
+        return new JsonObject
+        {
+            ["wallpapers"] = wallpapers.Count,
+            ["pets"] = pets,
+            ["rejected"] = new JsonArray(rejected.Select(r => (JsonNode)new JsonObject { ["name"] = r.name, ["reason"] = r.reason }).ToArray()),
+        };
     }
 
     /// <summary>Imports Petdex pets or Shimeji image sets from a folder or from .zip files; fails with the reasons when none was usable.</summary>

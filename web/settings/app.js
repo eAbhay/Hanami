@@ -1,5 +1,5 @@
 // Hanami settings — app shell: state, sidebar, tab routing, monitor scope.
-import { call, on, isMock } from "./bridge.js";
+import { call, callWithFiles, on, isMock } from "./bridge.js";
 import { h, svg, toast, toastError } from "./util.js";
 import { LOGO } from "./icons.js";
 import { createWallpapersTab } from "./tabs/wallpapers.js";
@@ -239,6 +239,63 @@ function buildSidebar(nav) {
   return side;
 }
 
+// ------------------------------------------------------------------ drag and drop
+/**
+ * Dropping photos, videos or pet packs (zips, folders) anywhere on the window imports them. The files go to the host as
+ * additional objects of an `importDropped` message (it reads their paths from WebView2 itself); the page only shows the
+ * veil, then the result: the tab where it shows, and a toast saying what was added and what was skipped.
+ */
+function setupDrop() {
+  const veil = h("div.drop-veil", { hidden: true, "aria-hidden": "true" },
+    h("div.drop-card", svg("upload"), h("div.drop-title", "Drop photos, videos or pets"),
+      h("div.drop-sub", "Photos and videos become wallpapers. Pet zips and folders (Petdex or Shimeji) go to Pets.")));
+  document.body.append(veil);
+
+  const hasFiles = (e) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  let depth = 0;
+  window.addEventListener("dragenter", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth++;
+    veil.hidden = false;
+  });
+  window.addEventListener("dragover", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();   // without this the browser would open the dropped file in place of the settings page
+    e.dataTransfer.dropEffect = "copy";
+  });
+  window.addEventListener("dragleave", (e) => {
+    if (!hasFiles(e)) return;
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) veil.hidden = true;
+  });
+  window.addEventListener("drop", async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    veil.hidden = true;
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) await importDropped(files);
+  });
+}
+
+async function importDropped(files) {
+  try {
+    const r = await callWithFiles("importDropped", undefined, files);
+    applyState(await call("getState"));
+    const { wallpapers = 0, pets = 0, rejected = [] } = r ?? {};
+    const added = [wallpapers && `${wallpapers} wallpaper${wallpapers === 1 ? "" : "s"}`, pets && `${pets} pet${pets === 1 ? "" : "s"}`].filter(Boolean);
+    if (added.length) ctx.showTab(wallpapers ? "wallpapers" : "pets");
+    if (added.length) toast(`Added ${added.join(" and ")}`, "success");
+    if (rejected.length) {
+      const first = `${rejected[0].name}: ${rejected[0].reason}`;
+      toast(`Skipped ${rejected.length === 1 ? first : `${rejected.length} items — ${first}, and ${rejected.length - 1} more`}`, added.length ? "info" : "error", 6000);
+    }
+  } catch (err) {
+    toastError(err);
+  }
+}
+
 // ------------------------------------------------------------------ boot
 async function boot() {
   const app = document.getElementById("app");
@@ -288,6 +345,9 @@ async function boot() {
   main.append(tip);
 
   app.append(buildSidebar(nav), main);
+
+  ctx.showTab = show;
+  setupDrop();
 
   // One shared "<Effect> settings" drawer; tabs open it from an effect tile's gear.
   const drawer = createTuningDrawer(ctx);

@@ -189,6 +189,7 @@ export function createMockHost(post) {
     ["Lantern festival", "lantern"], ["Koi pond", "koi"], ["Starlit shrine", "shrine"], ["Summer fields", "fields"],
   ];
   let importCounter = 0;
+  let importing = false;
 
   function computeModes() {
     const s = state.settings, p = state.power;
@@ -380,6 +381,32 @@ export function createMockHost(post) {
       const imported = await created;
       emitState();
       return { imported: clone(imported) };
+    },
+
+    importDropped: async ({ mockFiles = [] } = {}) => {
+      if (importing) throw new Error("Another import is still running.");
+      importing = true;
+      try {
+        await sleep(400);
+        let wallpapers = 0, pets = 0;
+        const rejected = [];
+        for (const name of mockFiles) {
+          const ext = (name.match(/\.[^.]*$/)?.[0] ?? "").toLowerCase();
+          if ([".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif", ".mp4", ".webm", ".m4v", ".mov"].includes(ext)) {
+            await addFakeWallpaper(name.replace(/\.[^.]*$/, ""), importNames[importCounter++ % importNames.length][1]);
+            wallpapers++;
+          } else if (ext === ".zip" && /pet|shime/i.test(name)) {
+            const n = state.petPacks.length + 1;
+            state.petPacks.push({ id: `pet-mock${n}`, name: name.replace(/\.zip$/i, ""), preview: "", frames: 46, sizeBytes: 640_000, frameWidth: 128, frameHeight: 128,
+              capabilities: { climb: true, ceiling: false, sit: false, sleep: false }, kind: "petdex", credit: null });
+            pets++;
+          } else {
+            rejected.push({ name, reason: ext === ".zip" ? "this zip has no Petdex pet (pet.json) or Shimeji images (shime1.png …)" : `${ext || "this kind of"} files aren't supported` });
+          }
+        }
+        emitState();
+        return { wallpapers, pets, rejected };
+      } finally { importing = false; }
     },
 
     renameWallpaper: ({ id, name }) => {

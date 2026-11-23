@@ -12,9 +12,9 @@ namespace Hanami.App;
 public sealed class SettingsWindow : Window
 {
     private readonly WebView2 _web = new();
-    private readonly Func<string, JsonNode?, Task<JsonNode?>> _dispatch;
+    private readonly Func<string, JsonNode?, IReadOnlyList<string>, Task<JsonNode?>> _dispatch;
 
-    public SettingsWindow(CoreWebView2Environment env, AppPaths paths, Func<string, JsonNode?, Task<JsonNode?>> dispatch, string? tab = null)
+    public SettingsWindow(CoreWebView2Environment env, AppPaths paths, Func<string, JsonNode?, IReadOnlyList<string>, Task<JsonNode?>> dispatch, string? tab = null)
     {
         _dispatch = dispatch;
         Title = "Hanami";
@@ -57,7 +57,12 @@ public sealed class SettingsWindow : Window
         JsonObject response;
         try
         {
-            var result = await _dispatch(method, req["params"]);
+            // Files the user dropped on the window arrive as additional objects, never as text in the request: the page
+            // can't name a path, only hand over files it was given by a real drop.
+            var files = e.AdditionalObjects is { } objects
+                ? objects.OfType<CoreWebView2File>().Select(f => f.Path).ToList()
+                : new List<string>();
+            var result = await _dispatch(method, req["params"], files);
             response = new JsonObject { ["id"] = id, ["result"] = result };
         }
         catch (Exception ex)

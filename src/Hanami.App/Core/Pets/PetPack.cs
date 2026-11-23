@@ -111,6 +111,15 @@ public static class PetPackReader
 
     // ---- folders ---------------------------------------------------------------------------------
 
+    /// <summary>Whether a folder holds something the pet import takes: a Petdex pet or Shimeji images, in the places it looks.</summary>
+    public static bool HasPetFiles(string folder)
+    {
+        if (PetdexReader.HasPet(folder)) return true;
+        foreach (var dir in ImageFolders(folder))
+            if (Directory.EnumerateFiles(dir).Take(MaxFilesPerFolder).Any(f => FrameNumber(Path.GetFileName(f)) is not null)) return true;
+        return false;
+    }
+
     public static PetImportResult ImportFolder(PetLibrary library, string folder)
     {
         if (PetdexReader.ImportFolder(library, folder) is { } petdex) return petdex;   // a Petdex pet (pet.json), not a Shimeji set

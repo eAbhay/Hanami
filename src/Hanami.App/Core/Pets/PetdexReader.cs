@@ -52,6 +52,9 @@ public static class PetdexReader
         return result;
     }
 
+    /// <summary>Whether a folder is, or (a level or two down) holds, a Petdex pet: a folder with a pet.json.</summary>
+    public static bool HasPet(string folder) => FindFolders(folder).Any();
+
     private static IEnumerable<string> FindFolders(string root, int depth = 0)
     {
         if (File.Exists(Path.Combine(root, ManifestFile))) { yield return root; yield break; }

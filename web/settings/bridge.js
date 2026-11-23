@@ -55,6 +55,23 @@ export async function call(method, params) {
   });
 }
 
+/**
+ * Like call(), for files the user dropped on the window: the host receives them as additional objects of the message
+ * (so it learns their paths from WebView2, never from the page). In the mock bridge only the file names are sent.
+ */
+export async function callWithFiles(method, params, files) {
+  const t = await getTransport();
+  const id = nextId++;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    try {
+      const msg = params === undefined ? { id, method } : { id, method, params };
+      if (t.isMock) t.post({ ...msg, params: { ...(params ?? {}), mockFiles: files.map((f) => f.name) } });
+      else window.chrome.webview.postMessageWithAdditionalObjects(msg, files);
+    } catch (err) { pending.delete(id); reject(err); }
+  });
+}
+
 export function on(event, handler) {
   if (!handlers.has(event)) handlers.set(event, new Set());
   handlers.get(event).add(handler);
