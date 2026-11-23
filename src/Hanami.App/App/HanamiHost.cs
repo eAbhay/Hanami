@@ -526,20 +526,20 @@ public sealed class HanamiHost
         return new JsonObject { ["imported"] = imported };
     }
 
-    /// <summary>Imports Shimeji image sets from a folder or from .zip files; fails with the reasons when none was usable.</summary>
+    /// <summary>Imports Petdex pets or Shimeji image sets from a folder or from .zip files; fails with the reasons when none was usable.</summary>
     private async Task<JsonNode> ImportPetAsync(string source)
     {
         Func<PetImportResult>? work = null;
         if (source == "folder")
         {
-            var dlg = new OpenFolderDialog { Title = "Choose a folder with a Shimeji image set (shime1.png …)" };
+            var dlg = new OpenFolderDialog { Title = "Choose a folder with a Petdex pet (pet.json) or a Shimeji image set (shime1.png …)" };
             if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
             var folder = dlg.FolderName;
             work = () => PetPackReader.ImportFolder(_petLibrary, folder);
         }
         else
         {
-            var dlg = new OpenFileDialog { Title = "Import a Shimeji .zip", Multiselect = true, Filter = "Zip files (*.zip)|*.zip|All files (*.*)|*.*" };
+            var dlg = new OpenFileDialog { Title = "Import a pet .zip (Petdex or Shimeji)", Multiselect = true, Filter = "Zip files (*.zip)|*.zip|All files (*.*)|*.*" };
             if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
             var files = dlg.FileNames;
             work = () =>

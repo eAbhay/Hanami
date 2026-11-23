@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
 
@@ -18,7 +19,31 @@ public sealed class PetPackManifest
     /// <summary>The pack's own frame map (from its actions.xml or hanami-pet.json); null = Shimeji-ee's default numbering.</summary>
     public PetMapping? Mapping { get; set; }
 
+    /// <summary>"shimeji" (also when missing) or "petdex".</summary>
+    public string Kind { get; set; } = KindShimeji;
+    /// <summary>Where a downloaded pack came from, so it can be credited; null for a hand import.</summary>
+    public PetSource? Source { get; set; }
+    /// <summary>What the pet can do, stated by the pack's layout; null = work it out from which frames exist (Shimeji).</summary>
+    public PetCapabilities? Abilities { get; set; }
+
+    public const string KindShimeji = "shimeji", KindPetdex = "petdex";
+    [JsonIgnore]
+    public bool IsPetdex => Kind == KindPetdex;
+    /// <summary>The highest frame number this pack may hold.</summary>
+    [JsonIgnore]
+    public int MaxFrame => IsPetdex ? ShimejiFrames.MaxFrameNumber : ShimejiFrames.NumFrames;
+
+    public PetCapabilities CapabilitiesFor(IReadOnlyCollection<int> frames) => Abilities ?? Animations().CapabilitiesFor(frames);
+
     public PetAnimations Animations() => PetAnimations.FromMapping(Mapping, FrameWidth, FrameHeight);
+}
+
+/// <summary>Where a downloaded pet came from: the site, the pet's page name there, and who submitted it.</summary>
+public sealed class PetSource
+{
+    public string Site { get; set; } = "";
+    public string Slug { get; set; } = "";
+    public string? SubmittedBy { get; set; }
 }
 
 public sealed record PetCapabilities(bool Climb, bool Ceiling, bool Sit, bool Sleep)
@@ -32,7 +57,7 @@ public sealed record PetCapabilities(bool Climb, bool Ceiling, bool Sit, bool Sl
 
 /// <summary>What the settings UI lists (PetPackInfo in docs/CONTRACTS.md).</summary>
 public sealed record PetPackInfo(string Id, string Name, string Preview, int Frames, long SizeBytes,
-    int FrameWidth, int FrameHeight, PetCapabilities Capabilities);
+    int FrameWidth, int FrameHeight, PetCapabilities Capabilities, string Kind = PetPackManifest.KindShimeji, string? Credit = null);
 
 /// <summary>Pets that were found in a source, and the ones that were not usable (with a readable reason each).</summary>
 public sealed record PetImportResult(List<PetPackManifest> Imported, List<string> Rejected);
@@ -53,10 +78,10 @@ public static class PetPackReader
     private static readonly Regex FrameName = new(@"^shime(\d{1,2})\.png$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>N for a file called shime&lt;N&gt;.png with N in 1–46, else null.</summary>
-    public static int? FrameNumber(string fileName)
+    public static int? FrameNumber(string fileName, int max = ShimejiFrames.NumFrames)
     {
         var m = FrameName.Match(fileName);
-        return m.Success && int.TryParse(m.Groups[1].Value, out var n) && n is >= 1 and <= ShimejiFrames.NumFrames ? n : null;
+        return m.Success && int.TryParse(m.Groups[1].Value, out var n) && n >= 1 && n <= max ? n : null;
     }
 
     private sealed record Candidate(string Name, Dictionary<int, byte[]> Frames, PetMapping? Mapping);
@@ -86,6 +111,7 @@ public static class PetPackReader
 
     public static PetImportResult ImportFolder(PetLibrary library, string folder)
     {
+        if (PetdexReader.ImportFolder(library, folder) is { } petdex) return petdex;   // a Petdex pet (pet.json), not a Shimeji set
         var result = new PetImportResult(new(), new());
         var found = new List<Candidate>();
         foreach (var dir in ImageFolders(folder))
@@ -142,6 +168,7 @@ public static class PetPackReader
 
     public static PetImportResult ImportZip(PetLibrary library, string zipPath)
     {
+        if (PetdexReader.ImportZip(library, zipPath) is { } petdex) return petdex;
         var result = new PetImportResult(new(), new());
         var fallbackName = Path.GetFileNameWithoutExtension(zipPath);
         var groups = new Dictionary<string, Dictionary<int, byte[]>>(StringComparer.OrdinalIgnoreCase);
@@ -302,14 +329,16 @@ public sealed class PetLibrary
 
     public PetPackInfo Info(PetPackManifest m)
     {
-        var caps = m.Animations().CapabilitiesFor(m.Frames);
+        var caps = m.CapabilitiesFor(m.Frames);
         var size = new DirectoryInfo(DirOf(m.Id)).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
         return new PetPackInfo(m.Id, m.Name, $"{Library.Origin}/pets/{m.Id}/img/shime1.png", m.Frames.Count, size,
-            m.FrameWidth, m.FrameHeight, caps);
+            m.FrameWidth, m.FrameHeight, caps, m.Kind,
+            m.Source is { } src && src.Site == "petdex" ? (string.IsNullOrWhiteSpace(src.SubmittedBy) ? "Petdex" : $"by {src.SubmittedBy} · Petdex") : null);
     }
 
     /// <summary>Stores a validated image set as a new pack.</summary>
-    public PetPackManifest Add(string name, IReadOnlyDictionary<int, byte[]> frames, int width, int height, PetMapping? mapping = null)
+    public PetPackManifest Add(string name, IReadOnlyDictionary<int, byte[]> frames, int width, int height, PetMapping? mapping = null,
+        string kind = PetPackManifest.KindShimeji, PetSource? source = null, PetCapabilities? abilities = null)
     {
         var id = IdPrefix + Guid.NewGuid().ToString("N")[..8];
         var dir = DirOf(id);
@@ -322,6 +351,7 @@ public sealed class PetLibrary
             {
                 Id = id, Name = CleanName(name), CreatedAt = DateTime.UtcNow, FrameWidth = width, FrameHeight = height,
                 Frames = frames.Keys.Order().ToList(), Mapping = mapping,
+                Kind = kind, Source = source, Abilities = abilities,
             };
             File.WriteAllText(Path.Combine(staging, "manifest.json"), JsonSerializer.Serialize(manifest, Json.FileOptions));
             Directory.Move(staging, dir);
@@ -364,7 +394,7 @@ public sealed class PetLibrary
             if (!Directory.Exists(imgDir)) return "has no images";
             foreach (var file in Directory.EnumerateFiles(imgDir).Take(PetPackReader.MaxFilesPerFolder))
             {
-                if (PetPackReader.FrameNumber(Path.GetFileName(file)) is not { } n) continue;
+                if (PetPackReader.FrameNumber(Path.GetFileName(file), manifest.MaxFrame) is not { } n) continue;
                 frames[n] = new FileInfo(file).Length > PetPackReader.MaxPngBytes ? [] : File.ReadAllBytes(file);
             }
             return PetPackReader.Validate(frames, manifest.Mapping).Error;

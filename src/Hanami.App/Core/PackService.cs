@@ -234,6 +234,7 @@ public static class PackService
         {
             ct.ThrowIfCancellationRequested();
             var id = group.Key;
+            var maxFrame = PackKindMaxFrame(group, id);
             if (!PetLibrary.IsValidId(id) || Directory.Exists(pets.DirOf(id))) continue;
             var staging = pets.DirOf(id) + ".importing";
             try
@@ -243,7 +244,7 @@ public static class PackService
                     // Only manifest.json and img/shime<N>.png, written to paths built here, never from the entry name.
                     var rel = entry.FullName[$"pets/{id}/".Length..];
                     string? target = rel == "manifest.json" ? Path.Combine(staging, "manifest.json")
-                        : rel.StartsWith("img/", StringComparison.Ordinal) && !rel[4..].Contains('/') && PetPackReader.FrameNumber(rel[4..]) is { } n
+                        : rel.StartsWith("img/", StringComparison.Ordinal) && !rel[4..].Contains('/') && PetPackReader.FrameNumber(rel[4..], maxFrame) is { } n
                             ? Path.Combine(staging, "img", $"shime{n}.png") : null;
                     if (target is null || entry.Length > PetPackReader.MaxPngBytes) continue;
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -265,6 +266,20 @@ public static class PackService
             }
         }
         return added;
+    }
+
+    /// <summary>Highest frame number the pack in <paramref name="group"/> may hold, from its manifest's kind (Petdex packs go up to 99, the rest to 46).</summary>
+    private static int PackKindMaxFrame(IEnumerable<ZipArchiveEntry> group, string id)
+    {
+        var entry = group.FirstOrDefault(e => e.FullName == $"pets/{id}/manifest.json");
+        if (entry is null || entry.Length > PetPackReader.MaxPngBytes) return ShimejiFrames.NumFrames;
+        try
+        {
+            using var reader = new StreamReader(entry.Open());
+            var manifest = JsonSerializer.Deserialize<PetPackManifest>(reader.ReadToEnd(), Json.Options);
+            return manifest?.MaxFrame ?? ShimejiFrames.NumFrames;
+        }
+        catch (JsonException) { return ShimejiFrames.NumFrames; }
     }
 
     private static async Task WriteTextAsync(ZipArchive zip, string name, string text)

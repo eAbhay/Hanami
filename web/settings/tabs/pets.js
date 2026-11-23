@@ -29,13 +29,13 @@ export function createPetsTab(ctx) {
   const empty = h("div.empty",
     h("div.empty-art", svg("sparkles")),
     h("div.empty-title", "No pet packs yet"),
-    h("div.empty-text", "Pets use Shimeji image sets (shime1.png … shime46.png). Search for “<character> shimeji”, download a pack and import its folder or .zip here. Each pack's licence belongs to its author, so check its terms."));
+    h("div.empty-text", "Import a pet from petdex.dev (its .zip or folder with pet.json) or a Shimeji image set (shime1.png … shime46.png), as a folder or .zip. Each pet's licence belongs to its author, so check its terms."));
 
   const el = h("section",
     pageHeader("Pets", "Little companions that live on your desktop.", actions),
     show,
     card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
-    card("Pet library", h("span.card-meta", "Imported Shimeji packs"), empty, packList),
+    card("Pet library", h("span.card-meta", "Imported pet packs"), empty, packList),
     card("Behaviour", null,
       size,
       h("div.field", h("label.field-label", "Activity"), activity,

@@ -8,7 +8,8 @@ namespace Hanami.Core.Pets;
 /// <param name="Vx">Movement per tick in pixels, for a pet facing LEFT (Shimeji frames face left; mirror for right).</param>
 /// <param name="Vy">Movement per tick in pixels (negative = up).</param>
 /// <param name="Mirror">The image faces the opposite way to the usual left, so it is mirrored when the pet faces left instead of right.</param>
-public readonly record struct Pose(int Frame, int Ticks, int AnchorX, int AnchorY, int Vx, int Vy, bool Mirror = false);
+/// <param name="Twin">A frame drawn facing RIGHT for this one (Petdex packs have real right-facing rows); 0 = none, so the frame is mirrored as usual.</param>
+public readonly record struct Pose(int Frame, int Ticks, int AnchorX, int AnchorY, int Vx, int Vy, bool Mirror = false, int Twin = 0);
 
 /// <summary>
 /// What the numbered frames of a Shimeji image set (shime1.png … shime46.png) mean, and how long and how far
@@ -21,6 +22,8 @@ public static class ShimejiFrames
 {
     public const int TickRate = 25;
     public const int NumFrames = 46;
+    /// <summary>Highest frame number a pack may hold: Petdex sheets have up to 88 cells; a Shimeji import is still limited to <see cref="NumFrames"/>.</summary>
+    public const int MaxFrameNumber = 99;
 
     /// <summary>Embedded Fall action: pixels per tick² of gravity, and the air resistance per tick.</summary>
     public const double Gravity = 2, ResistanceX = 0.05, ResistanceY = 0.1;

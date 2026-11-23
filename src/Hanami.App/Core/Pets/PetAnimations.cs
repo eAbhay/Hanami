@@ -15,6 +15,8 @@ public sealed class PoseDef
     public int Vy { get; set; }
     /// <summary>The frame faces the other way round from the usual left (e.g. a wall grab drawn facing right).</summary>
     public bool Mirror { get; set; }
+    /// <summary>A frame facing right for this one (0 = none).</summary>
+    public int Twin { get; set; }
 }
 
 /// <summary>
@@ -41,7 +43,7 @@ public sealed class PetAnimations
 {
     public static readonly string[] Names =
         ["stand", "walk", "run", "sit", "sitLookUp", "sprawl", "sleep", "fall", "bounce", "grabWall", "climbWallUp", "climbWallDown",
-         "grabCeiling", "climbCeiling", "resist", "jump", "sitDangle"];
+         "grabCeiling", "climbCeiling", "resist", "jump", "sitDangle", "wave", "waiting"];
 
     public static readonly PetAnimations Default = new();
 
@@ -53,6 +55,8 @@ public sealed class PetAnimations
         ["climbWallUp"] = ShimejiFrames.ClimbWallUp, ["climbWallDown"] = ShimejiFrames.ClimbWallDown,
         ["grabCeiling"] = ShimejiFrames.GrabCeiling, ["climbCeiling"] = ShimejiFrames.ClimbCeiling, ["resist"] = ShimejiFrames.Resist,
         ["jump"] = ShimejiFrames.Jump, ["sitDangle"] = ShimejiFrames.SitDangleLegs,
+        // Only Petdex packs have these; for the rest they are the stand pose, so asking for them is always safe.
+        ["wave"] = ShimejiFrames.Stand, ["waiting"] = ShimejiFrames.Stand,
     };
 
     /// <summary>The five dragged frames: far left, left, centre, right, far right (relative to the cursor).</summary>
@@ -78,6 +82,10 @@ public sealed class PetAnimations
     public Pose[] Resist => _a["resist"];
     public Pose[] Jump => _a["jump"];
     public Pose[] SitDangle => _a["sitDangle"];
+    /// <summary>Played on a click or stroke by Petdex pets (the stand pose elsewhere).</summary>
+    public Pose[] Wave => _a["wave"];
+    /// <summary>A Petdex pack's waiting row, or the stand pose.</summary>
+    public Pose[] Waiting => _a["waiting"];
 
     /// <summary>The swing frame while dragged (same thresholds as Shimeji's Pinched action).</summary>
     public int Pinched(double footX, double cursorX) =>
@@ -116,8 +124,9 @@ public sealed class PetAnimations
         foreach (var (name, poses) in mapping.Animations ?? new())
         {
             if (Array.IndexOf(Names, name) < 0 || poses is not { Count: > 0 }) continue;
-            result._a[name] = poses.Where(p => p.Frame is >= 1 and <= ShimejiFrames.NumFrames)
-                .Select(p => new Pose(p.Frame, Math.Clamp(p.Ticks, 1, 1000), p.AnchorX, p.AnchorY, Math.Clamp(p.Vx, -40, 40), Math.Clamp(p.Vy, -40, 40), p.Mirror)).ToArray();
+            result._a[name] = poses.Where(p => p.Frame is >= 1 and <= ShimejiFrames.MaxFrameNumber)
+                .Select(p => new Pose(p.Frame, Math.Clamp(p.Ticks, 1, 1000), p.AnchorX, p.AnchorY, Math.Clamp(p.Vx, -40, 40), Math.Clamp(p.Vy, -40, 40), p.Mirror,
+                    p.Twin is >= 1 and <= ShimejiFrames.MaxFrameNumber ? p.Twin : 0)).ToArray();
             if (result._a[name].Length == 0) result._a[name] = Default._a[name]; else defined.Add(name);
         }
         // A pack that maps stand/sprawl but not sleep sleeps on its sprawl pose.
@@ -129,7 +138,7 @@ public sealed class PetAnimations
             if (!defined.Contains("jump")) result._a["jump"] = result._a["fall"];
             if (!defined.Contains("sitDangle")) result._a["sitDangle"] = result._a["sit"];
         }
-        if (mapping.Swing is { Count: 5 } sw && sw.All(n => n is >= 1 and <= ShimejiFrames.NumFrames)) result.Swing = sw.ToArray();
+        if (mapping.Swing is { Count: 5 } sw && sw.All(n => n is >= 1 and <= ShimejiFrames.MaxFrameNumber)) result.Swing = sw.ToArray();
         return result;
     }
 
