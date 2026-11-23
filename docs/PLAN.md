@@ -1,18 +1,15 @@
-# Implementation plan — round 11: real-world checks and on/off switches (0.1.3), then wallpaper rotation and drag and drop (0.2.0)
+# Implementation plan — round 11: on/off switches and pin tip (0.1.3), then round 12: Petdex pets, browsing Petdex in the app, drag and drop (0.2.0)
 
-**Current scope (user's decision, 5 Nov 2026): round 11 below, on branch `round-11`, created from `main` at the start of the first phase.** Rounds 8, 9 and 10 are finished and stay for their Notes. Round 7 is finished except for what round 8 took over.
+**Current scope (user's decision, 23 Nov 2026): round 11 part A on branch `round-11`, created from `main` at the start of A3, then round 12 on branch `round-12`, created from `main` after `0.1.3` is released.** Round 11's old part B (rotation, drag and drop) is archived under "Future plans". Rounds 8, 9 and 10 are finished and stay for their Notes. Round 7 is finished except for what round 8 took over.
 
 ## Round 11
 
 **Decisions (don't re-ask):**
-- **Order:** part A ships as `0.1.3`, then part B as `0.2.0`. Part B doesn't start until part A is released, so anything the checks find is fixed first.
-- **Rotation is by timer**, in order or shuffled. Time-of-day schedules are not in this round.
-- **Lists are per monitor and per theme:** each slot has a light list and a dark list, edited with the existing Light | Dark switch. A theme flip moves to the other list, so dark mode never shows a light wallpaper.
-- **The screensaver and lock screen stay on the base wallpaper:** "Same as desktop" means the monitor's chosen wallpaper, not whichever one is rotating, so rotation never rewrites the Windows lock screen.
-- **The chosen wallpaper is always in its list and plays first.** Rotation adds wallpapers to it, so the list can't be empty, and turning rotation off goes back to the chosen one.
+- **Part A ships as `0.1.3`.** Round 12 doesn't start until it is released.
 - **Pin tip:** Hanami doesn't read or change Windows' pinned-icon setting (same reasoning as round 6's registry decision). It only tells the user how, once, until dismissed.
-- **Wallpaper on/off (added 10 Nov 2026):** for people who want only pets. One switch for all monitors, at the top of the Wallpaper tab. Off means Hanami draws nothing on the desktop and Windows' own wallpaper shows; it is not the same as Pause. It ships in `0.1.3` so rotation in part B is built knowing about it.
+- **Wallpaper on/off (added 10 Nov 2026):** for people who want only pets. One switch for all monitors, at the top of the Wallpaper tab. Off means Hanami draws nothing on the desktop and Windows' own wallpaper shows; it is not the same as Pause.
 - **Each feature tab opens with its own on/off:** Wallpaper, Screensaver and Pets get the same switch row at the top. The screensaver's switch moves from Power, but only the switch: "Start after", "Stop after" and the Windows sleep-timer warnings stay on Power. Pets' "Show pets" moves up from the Behaviour card.
+- **The README screenshot waits for round 12**, since the Pets tab changes there.
 
 **Rules:** work only on `round-11`. No commit, merge, push, tag or version bump without the user's yes in that chat, and each tag needs its own yes. Installs touch `HKCU\Software\Hanami`, so ask first and follow `docs/TESTING.md`.
 
@@ -21,22 +18,17 @@
 - That is true of any older build: a new setting survives only in builds that know it, so don't test an old exe against current settings without a backup.
 - `devroot` has `syncLockScreen` on, so every dev start and quit writes the real lock screen. Turn it off first for automated runs.
 
-### Phase A1 — The user's real-world checks. Stop and wait.
+### Phase A1 — The user's real-world checks
 
-Nothing to build. Give the user these steps, then write what they report under Notes. Don't fix anything in this phase.
+- [x] A1.1 Second laptop, two monitors with different scaling: the user checked it and reports it works as expected.
+- [x] A1.2 Pets with a real Shimeji pack: **skipped on purpose**, because round 12 reworks pets around Petdex. Shimeji import stays unchecked with a real pack; round 12's P6 covers it.
+- [x] A1.3 Lock screen edge cases and A1.4 battery on the second laptop: the user reports them fine.
 
-- [ ] A1.1 **Second laptop (Intel + RTX 5060, external monitor):** download `Hanami.exe` from the latest release and install it. Check the wallpaper on both monitors with different scaling, moving the settings window between them, unplugging and replugging the monitor, the screensaver on both, and the clock's position on each.
-- [ ] A1.2 **Pets with a real Shimeji pack:** import a folder and a `.zip`, then check walking, climbing, drag and throw, riding a dragged window, and on the second laptop crossing between monitors.
-- [ ] A1.3 **Lock screen edge cases:** with Windows Spotlight on, turn on the match and report what the status line says and what Win+L shows. Then a built-in scene and a theme flip with the match on.
-- [ ] A1.4 **Battery on the second laptop:** unplug it and check the wallpaper pauses, pets freeze and no screensaver appears.
-
-Notes:
+Notes: the user marked A1 done on 23 Nov 2026 with no problems found.
 
 ### Phase A2 — Fix what the checks found
 
-- [ ] A2.1 Fix what A1 found, one commit per fix, each with a test where the logic is in `Core/`. If a fix is large or changes a design decision, stop and ask rather than doing it here. If nothing was found, tick this and move on.
-
-Notes:
+- [x] A2.1 Nothing was found.
 
 ### Phase A3 — On/off at the top of each tab
 
@@ -58,7 +50,7 @@ Read: `web/settings/app.js`, `web/settings/tabs/general.js` (the update banner's
 
 - [ ] A4.1 **Contract first:** settings `tips: {pinTrayDismissed: false}`. Defaults cover old files, so no `CurrentVersion` bump. Importing a pack's settings keeps this PC's value, as with `updates`.
 - [ ] A4.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
-- [ ] A4.3 **README screenshot:** `docs/img/settings.jpg` predates round 10. Retake it on the mock bridge if the tab it shows changed (round 10 and A3 both changed tabs), built-in scenes and procedural samples only.
+- [ ] A4.3 ~~README screenshot~~ moved to round 12 P6 (user's decision, 23 Nov 2026).
 - [ ] A4.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
 - [ ] A4.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
 
@@ -74,51 +66,105 @@ Read: README "Releasing".
 
 Notes:
 
-### Phase B1 — Rotation: rules and host
+## Round 12 — Petdex pets, browsing Petdex in the app, drag and drop (ships as `0.2.0`)
 
-Part B starts only after A5. Read: `Core/Settings.cs` (`Assignment`, `DesktopWallpaperFor`, `DesktopEffectFor`, `ScreensaverWallpaperFor`, `ForgetWallpaper`), `App/WallpaperManager.cs` (`PushConfigAll`, `RebuildAsync`, `ApplyModesAsync`), `App/HanamiHost.cs` (`BuildState`, `DeleteWallpaperAsync`, the bridge switch), `App/LockScreenSync.cs` (to confirm it reads only `ScreensaverWallpaperFor`), CONTRACTS "Settings bridge", "Shared types", "Lock screen".
+[Petdex](https://petdex.dev) (code MIT, `github.com/crafter-station/petdex`) has about 5,300 user-submitted pets, many of them anime characters. Hanami gets them in three ways: the real petdex.dev website in a Hanami window with a "Get pet" button, import of a Petdex zip or folder by hand, and drag and drop. Shimeji packs stay, imported by hand or dropped.
 
-- [ ] B1.1 **Contract first:**
-      - `Assignment` gains `rotate: false`, `rotation: string[]` and `darkRotation: string[]`, the wallpapers added to the chosen one. Top level gains `rotation: {intervalMinutes: 60, shuffle: false}`, shared by all monitors. Allowed intervals: 5, 15, 30, 60, 180, 1440. Defaults cover old files, so no `CurrentVersion` bump.
-      - Bridge method `setRotation {monitorKey, theme?, rotate?, wallpaperIds?}`, returning `State`.
-      - State `shownWallpapers: Record<monitorKey, wallpaperId>`, what each monitor is showing now, so the Wallpaper tab can mark it.
-      - Say in "Lock screen" that rotation never changes it. Check that packs export the new fields and that an unknown wallpaper id in a list is harmless after an import.
-- [ ] B1.2 **`Core/RotationPolicy.cs` (pure, tested):** the effective list (chosen wallpaper first, no duplicates, ids no longer in the library dropped; light list when the dark slot has no wallpaper of its own). `Next(list, current, shuffle, random)`: in order wraps around; shuffle goes through the whole list before repeating and never picks the current one twice in a row; a list of one means no change. `IsDue(lastChange, now, interval)`.
-- [ ] B1.3 **`DesktopWallpaperFor` keeps meaning the base wallpaper**, so the screensaver and lock screen need no change. Add the wallpaper currently shown as separate runtime state in `WallpaperManager`, per monitor key, which is what `PushConfigAll` sends. **Trap:** `DesktopEffectFor` goes through `DesktopWallpaperFor`, so it must take the shown id, or a rotated wallpaper would show the base wallpaper's effect.
-- [ ] B1.4 **Timer:** a tick of about 30 s, comparing against the last change so sleep doesn't matter. Hold while the wallpaper is off (A3), while a monitor is paused or hidden, while the session is locked and while the screensaver shows; a due change then happens on return. Monitors sharing `*` change together. The position isn't saved: after a restart each monitor starts on its chosen wallpaper again. A theme flip or a new chosen wallpaper restarts from that slot's first wallpaper and resets the timer.
-- [ ] B1.5 **Delete:** `DeleteWallpaperAsync` must let go of a wallpaper that is showing through rotation, not only through an assignment, or the file stays locked. `ForgetWallpaper` removes the id from every list.
-- [ ] B1.6 **Tests:** the policy above, settings round trip, old files load with rotation off, the delete case. Check in dev with `rotation.intervalMinutes` edited to a short value through a test-only path: each change crossfades, the effect follows the wallpaper shown, and `LockScreenSync` logs no update. Commit.
+**What a Petdex pet is (checked 23 Nov 2026 on `nezuko` and `frieren-6`):**
+- A zip with `pet.json` (`id`, `displayName`, `description`, optional `spriteVersionNumber`, `spritesheetPath`) and `spritesheet.webp`. No license field.
+- The sheet is 8 columns of 192×208 px cells. v1 has 9 rows (1536×1872), v2 has 11 rows (1536×2288). About 4,800 of the 5,340 pets are v1. Rows are not all full, and the frame count of a row varies between pets (Nezuko's idle has 6, Frieren's 7), so empty cells are detected by alpha, never assumed.
+- Rows, top to bottom: idle, run right, run left, wave, jump, failed, waiting, running ("working"), review; v2 adds two rows of turning and looking around. What a row actually shows varies between pets: Nezuko's "failed" row sits and lies down, Frieren's doesn't. So only the rows with a fixed meaning carry behaviour: idle, run right, run left, wave, jump, failed.
+- There are no climbing, hanging, held or falling frames.
+- Pet pages are `https://petdex.dev/pets/<slug>`. Full list: `GET https://petdex.dev/api/manifest` (307 to `https://assets.petdex.dev/manifests/petdex-v1.json`, about 1.9 MB) = `{generatedAt, total, pets: [{slug, displayName, kind (character|creature|object), submittedBy, spritesheetUrl, petJsonUrl, zipUrl, spriteVersionNumber}]}`. Every file is under `https://assets.petdex.dev/pets/<slug>-<hash>/`.
+
+**Decisions (don't re-ask):**
+- **Petdex is the pet source to browse; Shimeji stays alongside**, imported by hand (folder or `.zip`) or dropped. There is no Shimeji browsing.
+- **Browsing is the real website, not a Hanami-made gallery:** a Hanami window shows petdex.dev itself, the user picks a pet on the site, and Hanami's "Get pet" button downloads it and adds it to the library. Wallpapers will get the same window later with "Get wallpaper", for a site the user picks. No offline mode: without a connection the window just says so.
+- **Drag and drop is in this round** (moved back from the archive): it sorts each drop into photo, video or pet pack by itself.
+- **Climbing uses the run rows:** run left climbs a left wall and run right climbs a right wall, up and down. The frames are drawn upright, not rotated. Holding still on a wall uses the run row's first frame.
+- **Falling uses the jump row.** Jumping does too. Being dragged uses jump frames, and landing after a drop or throw uses the "failed" row, which also stands in for dizzy.
+- **Ceilings, sitting and sleeping are off for Petdex pets.** Their art can't do ceilings, and the "failed" row isn't reliably a sit or lie (see above). Resting uses the idle row, and the waiting row when it has frames. A click or stroke plays the wave row.
+- **Size is normalised by height for every pack, Shimeji included:** at the same Size slider value, every pet's visible standing height is about the same on screen. The slider keeps its meaning (0.5–2).
+- **Names:** a downloaded pet takes Petdex's `displayName`, falling back to the slug when that is empty, and is renamed with the existing pencil button like any pack.
+- **Credits:** each downloaded pet keeps its source (`petdex`, slug, `submittedBy`) and the Pets tab shows "by <submittedBy> · Petdex". Hanami never bundles a Petdex pet in the exe, the README or a screenshot, because the art belongs to its submitter.
+
+**Rules:** work only on `round-12`. No commit, merge, push, tag or version bump without the user's yes in that chat, and each tag needs its own yes. Downloads in tests go to a temp folder or `devroot`, never the user's real library.
+
+**Traps:**
+- **WebP decoding:** WPF decodes WebP through WIC, which needs the WebP codec (Windows' "Web Media Extensions"). It is usually there on Windows 11 but not guaranteed (N editions, stripped images). Confirm `BitmapDecoder` reads the downloaded sheets on this laptop first. If it can't, stop and ask the user before adding a decoding package.
+- **Frame numbers:** packs are stored as `img/shime<N>.png` and everything downstream (`PetFrames`, exports, `VerifyExtracted`) reads them by number, capped at `ShimejiFrames.NumFrames` (46). A Petdex sheet has up to 88 cells.
+- **Capabilities come from frames today** (`PetAnimations.CapabilitiesFor`): a Petdex pack would "have" the default ceiling frames 23–25 just because cells with those numbers exist. Petdex capabilities must come from the layout instead.
+- **Facing:** Hanami draws frames facing left and mirrors them for right (`PetBrain.Mirrored`). Petdex characters are often not symmetric (Frieren's ponytail), so a mirrored run-left looks wrong. Petdex packs have real right-facing rows, and those should be used instead of mirroring.
+- **The browse window shows a third-party site:** it must never get the settings bridge or the library's virtual host (see P5.1).
+
+### Phase P1 — Petdex pack format and import
+
+Read: `Core/Pets/PetPack.cs` (`PetPackReader`, `PetLibrary.Add`, `VerifyExtracted`, `PetPackManifest`), `Core/Pets/PetAnimations.cs` (`PetMapping`, `FromMapping`, `CapabilitiesFor`), `Core/Pets/ShimejiFrames.cs`, `App/PetManager.cs` (how `PetFrames` loads images), `Core/PackService.cs` (pets in `.hanamipack`), CONTRACTS "Desktop pets" and `PetPackInfo`.
+
+- [ ] P1.1 **Contract first:** `PetPackManifest` gains `kind: "shimeji" | "petdex"` (missing means shimeji), `source: {site, slug, submittedBy} | null`, and `abilities` (explicit `PetCapabilities`, used instead of frame checks when present). `PetPackInfo` gains `kind`, `credit`. Frame numbers may go up to 99 for Petdex packs (`ShimejiFrames.NumFrames` stays the limit for Shimeji import). Old manifests load unchanged.
+- [ ] P1.2 **`Core/Pets/PetdexLayout.cs` (pure, tested):** the row table for v1 and v2, cell to frame number (`row * 8 + col + 1`), and building a `PetMapping` from the cells that have pixels: stand = idle, walk and run = run left (with the run-right row as their right-facing twin, see P2), grabWall = first run-left frame, climbWallUp/Down = run left, fall and jump = jump row, swing = 5 frames from the jump row, bounce and resist = failed row, a wave animation for stroke. Anchors: the bottom centre of the idle frames' visible pixels (feet), in image pixels. A pack missing idle, either run row or jump is rejected with a readable reason.
+- [ ] P1.3 **Reading:** `PetdexReader` takes a Petdex zip or folder: reads only `pet.json` and the sheet it names (by file name; never write entry paths), caps sizes (zip 20 MB, sheet 10 MB, exactly 1536 px wide and 9 or 11 rows tall), slices non-empty cells into PNGs and hands them to `PetLibrary.Add` with the mapping, `kind: "petdex"` and the name from `displayName`. `ImportFolder` and `ImportZip` recognise a Petdex pet by its `pet.json` and route it there, so the Pets tab's existing Import buttons take both formats. A folder of several pets (like `~/.codex/pets`) imports each.
+- [ ] P1.4 **Exports and verification:** `VerifyExtracted` and `PetManager`'s frame loading accept numbers up to 99 for Petdex packs. A `.hanamipack` with a Petdex pet round-trips with its `source`.
+- [ ] P1.5 **Tests** with small synthetic sheets made in the test (no real Petdex art in the repo): v1, v2, empty cells, wrong sizes, a missing required row, a malicious zip path, abilities. Check in dev by importing the Nezuko and Frieren zips by hand (download them to a temp folder) and that they stand and walk. Commit.
 
 Notes:
 
-### Phase B2 — Rotation: settings UI
+### Phase P2 — Behaviour for Petdex pets
 
-Read: `web/settings/tabs/wallpapers.js`, `web/settings/components/` (`wallpaperPicker`, `slotSwitch`), `web/settings/scope.js`, `web/settings/mock-bridge.js`.
+Read: `Core/Pets/PetBrain.cs` (`Mirrored`, the climbing, falling, drag, throw, landing and idle choices, `PetProfile`), `Core/Pets/World.cs`, `App/PetWindow.cs` (the flip), `App/PetManager.cs`, CONTRACTS "Desktop pets".
 
-- [ ] B2.1 **A Rotation card on the Wallpaper tab,** under Background: an on/off switch, then while on, small tiles of the library where a click adds or removes a wallpaper. The chosen wallpaper is shown first, marked, and can't be removed. Interval dropdown and a Shuffle switch. It follows the existing monitor scope and the Light | Dark switch. Keep the text to one short line.
-- [ ] B2.2 **Background card:** the tile showing now gets a small "Showing" marker when it isn't the chosen one, so clicking a card still means "choose this".
-- [ ] B2.3 **Mock bridge** support, including a way to advance `shownWallpapers` by hand.
-- [ ] B2.4 **Docs:** README feature bullet and CONTRACTS. Check on the mock and in the dev app with two monitors if available, light and dark. Then ask the user to look at it before committing.
-
-Notes:
-
-### Phase B3 — Drag and drop import
-
-Read: `App/SettingsWindow.cs` (`OnMessage`), `App/HanamiHost.cs` (`ImportMediaAsync`), `web/settings/tabs/wallpapers.js` (`doImport`, the import progress), `web/settings/bridge.js`, `web/settings/app.js`.
-
-A page gets `File` objects from a drop but no paths. WebView2 gives the host the path if the page sends the files with `chrome.webview.postMessageWithAdditionalObjects` (the SDK in use, 1.0.4258.31, has it; confirm on this runtime first). The host reads `CoreWebView2File.Path` from `e.AdditionalObjects`.
-
-- [ ] B3.1 **Contract first:** a new message carrying `{method: "importDropped"}` plus the dropped files. Paths come only from `AdditionalObjects`, never from `params`, so the page can't name an arbitrary file for the host to copy.
-- [ ] B3.2 **Host:** split `ImportMediaAsync` into the dialog and `ImportFilesAsync(files)`, so both share the copy and progress. Accept only `Library.VideoExtensions` and `Library.ImageExtensions`; folders and other files come back in a `rejected` list. Refuse a second import while one is running.
-- [ ] B3.3 **Page:** `dragover` and `drop` on the whole settings window, with `preventDefault` so a dropped file doesn't navigate the page away. A full-window "Drop to add to your wallpapers" overlay only while files are dragged. After a drop, go to the Wallpaper tab, because that is where the progress shows. **Trap:** round 10 removed `ctx.showTab` as unused, so it has to come back. A toast names anything rejected.
-- [ ] B3.4 **Mock bridge** support. **Check** in the dev app, since a plain browser can't do this part: one file, several, a mix with an unsupported file, a folder, a very large video, drop during an import. Commit.
+- [ ] P2.1 **Right-facing frames:** a pose can name a right-facing twin frame. When the pet faces right and the twin exists, it is drawn unflipped; otherwise it is mirrored as today. Shimeji packs are unaffected.
+- [ ] P2.2 **Abilities:** with `abilities` from the manifest, a Petdex pet climbs walls (run frames, upright, facing the wall) and never latches a ceiling, sits or sleeps. Idle choices use stand and, when present, the waiting row. A dizzy landing plays the failed row and recovers to stand instead of lying down. Stroke and click play wave.
+- [ ] P2.3 **Tests** in `Core/` for the twin-frame choice and that a pet without ceiling/sit/sleep never enters those states (including after a throw at a ceiling).
+- [ ] P2.4 **Check in dev** with Nezuko and Frieren next to a Shimeji pack: walk both ways (Frieren's ponytail stays on the correct side), climb a window edge up and down, drag, throw, drop, a throw at the top of the screen, stroke, Stay and Follow, companions. Screenshot the climb and the fall for the user, then ask them to look before committing.
 
 Notes:
 
-### Phase B4 — Release `0.2.0`
+### Phase P3 — Size normalised by height
 
-- [ ] B4.1 Version and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
-- [ ] B4.2 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings and library are kept, with rotation off.
+Read: `App/PetManager.cs` (`Reset`, `ScaleAt`, how `Ps` sizes the window and feeds `PetProfile.PixelScale`), `App/PetWindow.cs`, `Core/Pets/World.cs` and `PetBrain.cs` (where frame size and `PixelScale` meet the physics), `Core/Settings.cs` (`PetSettings.Scale`).
+
+- [ ] P3.1 **Contract first:** `PetPackManifest.standHeight`, the visible height in image pixels of the pack's stand frame(s) (alpha bounding box, ignoring nearly transparent pixels). Computed at import; for older packs, computed once on load and saved.
+- [ ] P3.2 **Core:** a pure `PetSize.ScaleFor(standHeight, userScale, dpi)` so that at `Scale` 1 and 100% DPI a pet stands about 100 px tall, clamped so tiny or huge art stays sane. Pick the target by checking a typical 128 px Shimeji pack looks about the same as today. Tests.
+- [ ] P3.3 **Host:** `Ps` uses it, so window size, anchors and physics all follow the one factor. Changing packs or the slider still resets the pet as today.
+- [ ] P3.4 **Check in dev:** Nezuko, Frieren and a Shimeji pack side by side at sizes 0.5, 1 and 2, on 100% and 125% displays if available. Settings UI copy for Size if it mentions pixels. Commit.
+
+Notes:
+
+### Phase P4 — Drag and drop import (moved back from the archive, 23 Nov 2026)
+
+Read: `App/SettingsWindow.cs` (`OnMessage`), `App/HanamiHost.cs` (`ImportMediaAsync`, the pet import path), `Core/Pets/PetPack.cs` (`PetPackReader.ImportFolder`/`ImportZip` and P1's Petdex detection), `Core/Library.cs` (`VideoExtensions`, `ImageExtensions`), `web/settings/tabs/wallpapers.js` (`doImport`, the import progress), `web/settings/tabs/pets.js`, `web/settings/bridge.js`, `web/settings/app.js`.
+
+Already known: a page gets `File` objects from a drop but no paths. WebView2 gives the host the path if the page sends the files with `chrome.webview.postMessageWithAdditionalObjects` (the SDK in use, 1.0.4258.31, has it; confirm on this runtime first). The host reads `CoreWebView2File.Path` from `e.AdditionalObjects`. Whether a dropped folder arrives as a `CoreWebView2File` with its folder path is not known yet: check it first, and if it doesn't, folders are rejected with a "use Import folder" message rather than worked around.
+
+- [ ] P4.1 **Contract first:** a new message carrying `{method: "importDropped"}` plus the dropped files. Paths come only from `AdditionalObjects`, never from `params`, so the page can't name an arbitrary file for the host to copy. The reply says what each item became: `{wallpapers: n, pets: n, rejected: [{name, reason}]}`.
+- [ ] P4.2 **`Core/DropClassifier.cs` (pure, tested):** sorts each path into photo, video, pet pack or rejected. Photo and video by `Library.ImageExtensions` / `VideoExtensions`. A `.zip` or folder is a pet pack when it holds a Petdex `pet.json` or Shimeji `shime<N>.png` images (the same detection P1's import uses, by entry name only, without extracting); otherwise rejected with a reason. Anything else is rejected.
+- [ ] P4.3 **Host:** split `ImportMediaAsync` into the dialog and `ImportFilesAsync(files)` so the dialog and a drop share the copy and progress. Pet packs go through the existing pet import. Refuse a second import while one is running.
+- [ ] P4.4 **Page:** `dragover` and `drop` on the whole settings window, with `preventDefault` so a dropped file doesn't navigate the page away. A full-window "Drop photos, videos or pets" overlay only while files are dragged. After a drop, go to the tab where the result shows: Wallpaper for photos and videos, Pets when only pets were dropped. **Trap:** round 10 removed `ctx.showTab` as unused, so it has to come back. A toast says what was added and names anything rejected.
+- [ ] P4.5 **Mock bridge** support. **Check** in the dev app, since a plain browser can't do this part: one photo, one video, several mixed, a Petdex zip, a Shimeji zip, a Shimeji folder, a plain zip of photos (rejected), an unsupported file, a very large video, a drop during an import. Commit.
+
+Notes:
+
+### Phase P5 — Browse Petdex in the app
+
+Read: `App/SettingsWindow.cs` (how it creates its WebView2, its environment and user data folder), `App/UpdateService.cs` (its `HttpClient`, timeouts and download caps), `App/HanamiHost.cs` (bridge switch, the pet import path), `web/settings/tabs/pets.js`, CONTRACTS "Settings bridge".
+
+Already known (checked 23 Nov 2026): pet pages are `https://petdex.dev/pets/<slug>`. The site sends `frame-ancestors 'none'` and `X-Frame-Options: DENY`, so it can't sit in an iframe in the settings page; it gets its own window with its own top-level WebView2. The zip URL has a hash in it (`assets.petdex.dev/pets/<slug>-<hash>/zip.zip`), so a slug is turned into a download through the list at `https://petdex.dev/api/manifest`. The site has sign-in (Clerk) and Cloudflare checks, which work in a normal top-level WebView2.
+
+- [ ] P5.1 **A reusable browse window** (`App/BrowseWindow.cs`), built so a wallpaper site can plug in later: it takes a source adapter with the site's start URL, the hosts it may navigate to, `ItemFromUrl(url)` (null when the page isn't an item) and `DownloadFor(item)`. The window is a native toolbar (Back, Forward, Reload, the page title, a primary "Get pet" button) above a WebView2 that shows the real website. **Security:** this WebView2 has no Hanami bridge at all (no `WebMessageReceived` handler, no host objects, no virtual host for the library), its own user data folder separate from settings, navigation limited to the adapter's hosts plus the sign-in and Cloudflare hosts, other links and new windows open in the default browser, and the site's own downloads are cancelled (or, if it is a Petdex zip from `assets.petdex.dev`, handed to the same import as "Get pet").
+- [ ] P5.2 **Petdex adapter** (`Core/Pets/PetdexSource.cs`, pure parts tested): start `https://petdex.dev/`, item = the slug from `/pets/<slug>` (ignoring query, fragment and trailing slash). `DownloadFor` fetches the list once per window session, finds the slug, and returns its zip URL, `displayName` and `submittedBy`. "Get pet" is disabled off pet pages, says "Added" when a pack's `source.slug` already matches, and shows progress while downloading.
+- [ ] P5.3 **Download and add:** only from `https://assets.petdex.dev/`, capped at 20 MB, into a temp file, then through P1's reader with `source` set, the name from `displayName`. A toast in the browse window and the Pets tab refreshes. No connection or a site error shows a plain message in the window; there is no offline mode.
+- [ ] P5.4 **Pets tab:** a "Browse Petdex" button next to the Import buttons opens the window (one at a time; a second click brings it to the front). Petdex packs in the library show "by <submittedBy> · Petdex"; Shimeji packs show "Shimeji". Rename keeps working for both. The library's empty state and the Import buttons' copy mention both formats. Mock bridge: the button exists and fakes adding a pet (no real Petdex art).
+- [ ] P5.5 **Check in dev:** browse, search on the site, open a pet, Get it, Get it again (Added), sign-in page loads, an outside link opens in the default browser, the site's own download button, no network. Then ask the user to look before committing.
+
+Notes:
+
+### Phase P6 — Docs, real checks, release `0.2.0`
+
+- [ ] P6.1 **README:** pets section rewritten (browsing Petdex, Shimeji import, drag and drop, what Petdex pets can and can't do, credit to submitters). Retake `docs/img/settings.jpg` on the mock bridge (moved from A4.3): built-in scenes, procedural samples and the mock's fake pets only. CONTRACTS checked end to end.
+- [ ] P6.2 **The user's checks:** add three or four anime pets with "Get pet", drop a few files of each kind, import a real Shimeji pack (this was A1.2), and on the second laptop move pets across monitors.
+- [ ] P6.3 `<Version>` 0.2.0 and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
+- [ ] P6.4 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings, library and pets are kept.
 
 Notes:
 
@@ -429,4 +475,49 @@ Notes: 3.1–3.6 are done; 3.7 (tag `v0.1.0`) now happens in round 8's E.4, so t
 
 **Hanami's own Shimeji packs.** Feasible; the app needs nothing new. Format is `shime1.png`…`shime46.png` at 128×128 facing left, and any frame a pack lacks falls back to `shime1` (`PetBrain`), so a pack can start with about 12 key poses and grow. Plan: pick one original character (no existing anime characters, so it can be bundled and redistributed freely), write a pose sheet mapping frames to `ShimejiFrames`, make a small tool that turns a sprite sheet into a pack and previews it, and bundle a first pet as a starter. The hard part is art: keeping one character consistent across poses.
 
-**Other ideas, in the order suggested:** signed updates and code signing to remove the SmartScreen warning · time-of-day schedules for rotation, after round 11 · the in-wallpaper Live2D character, still not started.
+**In-app wallpaper downloads (user's idea, 23 Nov 2026).** Round 12's browse window (P5) with a wallpaper site's adapter and a "Get wallpaper" button that adds the chosen wallpaper to the library. The user will pick the site. Check the site's API and licensing before planning.
+
+**Other ideas, in the order suggested:** signed updates and code signing to remove the SmartScreen warning · time-of-day schedules for rotation, after rotation itself · the in-wallpaper Live2D character, still not started.
+
+### Archived: round 11 part B — wallpaper rotation (parked by the user on 23 Nov 2026; drag and drop moved to round 12)
+
+Planned in full and not started. Its decisions still hold if it comes back: rotation is by timer, in order or shuffled; lists are per monitor and per theme; the screensaver and lock screen stay on the base wallpaper; the chosen wallpaper is always in its list and plays first. It must respect the wallpaper on/off switch from A3.
+
+#### Phase B1 — Rotation: rules and host
+
+Read: `Core/Settings.cs` (`Assignment`, `DesktopWallpaperFor`, `DesktopEffectFor`, `ScreensaverWallpaperFor`, `ForgetWallpaper`), `App/WallpaperManager.cs` (`PushConfigAll`, `RebuildAsync`, `ApplyModesAsync`), `App/HanamiHost.cs` (`BuildState`, `DeleteWallpaperAsync`, the bridge switch), `App/LockScreenSync.cs` (to confirm it reads only `ScreensaverWallpaperFor`), CONTRACTS "Settings bridge", "Shared types", "Lock screen".
+
+- [ ] B1.1 **Contract first:**
+      - `Assignment` gains `rotate: false`, `rotation: string[]` and `darkRotation: string[]`, the wallpapers added to the chosen one. Top level gains `rotation: {intervalMinutes: 60, shuffle: false}`, shared by all monitors. Allowed intervals: 5, 15, 30, 60, 180, 1440. Defaults cover old files, so no `CurrentVersion` bump.
+      - Bridge method `setRotation {monitorKey, theme?, rotate?, wallpaperIds?}`, returning `State`.
+      - State `shownWallpapers: Record<monitorKey, wallpaperId>`, what each monitor is showing now, so the Wallpaper tab can mark it.
+      - Say in "Lock screen" that rotation never changes it. Check that packs export the new fields and that an unknown wallpaper id in a list is harmless after an import.
+- [ ] B1.2 **`Core/RotationPolicy.cs` (pure, tested):** the effective list (chosen wallpaper first, no duplicates, ids no longer in the library dropped; light list when the dark slot has no wallpaper of its own). `Next(list, current, shuffle, random)`: in order wraps around; shuffle goes through the whole list before repeating and never picks the current one twice in a row; a list of one means no change. `IsDue(lastChange, now, interval)`.
+- [ ] B1.3 **`DesktopWallpaperFor` keeps meaning the base wallpaper**, so the screensaver and lock screen need no change. Add the wallpaper currently shown as separate runtime state in `WallpaperManager`, per monitor key, which is what `PushConfigAll` sends. **Trap:** `DesktopEffectFor` goes through `DesktopWallpaperFor`, so it must take the shown id, or a rotated wallpaper would show the base wallpaper's effect.
+- [ ] B1.4 **Timer:** a tick of about 30 s, comparing against the last change so sleep doesn't matter. Hold while the wallpaper is off (A3), while a monitor is paused or hidden, while the session is locked and while the screensaver shows; a due change then happens on return. Monitors sharing `*` change together. The position isn't saved: after a restart each monitor starts on its chosen wallpaper again. A theme flip or a new chosen wallpaper restarts from that slot's first wallpaper and resets the timer.
+- [ ] B1.5 **Delete:** `DeleteWallpaperAsync` must let go of a wallpaper that is showing through rotation, not only through an assignment, or the file stays locked. `ForgetWallpaper` removes the id from every list.
+- [ ] B1.6 **Tests:** the policy above, settings round trip, old files load with rotation off, the delete case. Check in dev with `rotation.intervalMinutes` edited to a short value through a test-only path: each change crossfades, the effect follows the wallpaper shown, and `LockScreenSync` logs no update. Commit.
+
+Notes:
+
+#### Phase B2 — Rotation: settings UI
+
+Read: `web/settings/tabs/wallpapers.js`, `web/settings/components/` (`wallpaperPicker`, `slotSwitch`), `web/settings/scope.js`, `web/settings/mock-bridge.js`.
+
+- [ ] B2.1 **A Rotation card on the Wallpaper tab,** under Background: an on/off switch, then while on, small tiles of the library where a click adds or removes a wallpaper. The chosen wallpaper is shown first, marked, and can't be removed. Interval dropdown and a Shuffle switch. It follows the existing monitor scope and the Light | Dark switch. Keep the text to one short line.
+- [ ] B2.2 **Background card:** the tile showing now gets a small "Showing" marker when it isn't the chosen one, so clicking a card still means "choose this".
+- [ ] B2.3 **Mock bridge** support, including a way to advance `shownWallpapers` by hand.
+- [ ] B2.4 **Docs:** README feature bullet and CONTRACTS. Check on the mock and in the dev app with two monitors if available, light and dark. Then ask the user to look at it before committing.
+
+Notes:
+
+#### Phase B3 — Drag and drop import
+
+Moved to round 12 as P4 on 23 Nov 2026.
+
+#### Phase B4 — Release (version decided when it comes back)
+
+- [ ] B4.1 Version and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
+- [ ] B4.2 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings and library are kept, with rotation off.
+
+Notes:
