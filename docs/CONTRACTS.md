@@ -315,6 +315,10 @@ type Settings = {
   // Items whose pack is gone are dropped on load; bad ids and duplicate item ids are repaired.
   startWithWindows: boolean;    // default true
   paused: boolean;              // manual pause from tray/UI, default false
+  tips: {                       // files without it get these defaults (no settings migration)
+    pinTrayDismissed: boolean;  // default false. The "keep Hanami's icon on your taskbar" notice above every tab, until dismissed.
+                                // Like `updates`, importing a pack keeps this PC's value.
+  };
   updates: {                    // see "Updates"; files without it get these defaults (no settings migration)
     autoCheck: boolean;         // default true; off stops automatic checks only, "Check now" always works
     channel: "stable" | "beta"; // default "stable"; anything else reads as stable

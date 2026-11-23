@@ -48,13 +48,13 @@ Notes: built and committed on `round-11` at the user's "commit and push at every
 
 Read: `web/settings/app.js`, `web/settings/tabs/general.js` (the update banner's styles), `Core/Settings.cs` (`UpdateSettings` as the model for a small settings block), CONTRACTS "Settings bridge" and "Updates".
 
-- [ ] A4.1 **Contract first:** settings `tips: {pinTrayDismissed: false}`. Defaults cover old files, so no `CurrentVersion` bump. Importing a pack's settings keeps this PC's value, as with `updates`.
-- [ ] A4.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
+- [x] A4.1 **Contract first:** settings `tips: {pinTrayDismissed: false}`. Defaults cover old files, so no `CurrentVersion` bump. Importing a pack's settings keeps this PC's value, as with `updates`.
+- [x] A4.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
 - [ ] A4.3 ~~README screenshot~~ moved to round 12 P6 (user's decision, 23 Nov 2026).
-- [ ] A4.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
+- [~] A4.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
 - [ ] A4.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
 
-Notes:
+Notes: `TipSettings` in `Core/Settings.cs`; the tip lives in `web/settings/app.js` (`boot`), and a pack import keeps this PC's `tips`. Checked on the mock only (shows, dismisses, no console errors); the dev app is not checked. A4.5 (deleting the stale `bin` folders) waits for the user's yes. The sidebar status also says "Wallpaper off" now (A3).
 
 ### Phase A5 — Release `0.1.3`
 

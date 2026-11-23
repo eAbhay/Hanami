@@ -46,6 +46,9 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; } = true;
     public bool Paused { get; set; }
 
+    /// <summary>Which one-time notices the user has dismissed. Missing in older files, which show them all.</summary>
+    public TipSettings Tips { get; set; } = new();
+
     /// <summary>Update checks. Missing in older files, which simply get the defaults.</summary>
     public UpdateSettings Updates { get; set; } = new();
 
@@ -202,6 +205,13 @@ public sealed class PowerSettings
     public Mode EnergySaver { get; set; } = Mode.Reduced;
     public Mode WhenMaximized { get; set; } = Mode.Paused;
     public Mode WhenFullscreen { get; set; } = Mode.Paused;
+}
+
+/// <summary>One-time notices in the settings window.</summary>
+public sealed class TipSettings
+{
+    /// <summary>The "pin Hanami's tray icon to the taskbar" notice was dismissed.</summary>
+    public bool PinTrayDismissed { get; set; }
 }
 
 public sealed class UpdateSettings
@@ -498,6 +508,7 @@ public sealed class SettingsStore
         s.Screensaver ??= new();
         s.Theme ??= new();
         s.Wallpaper ??= new();
+        s.Tips ??= new();
         NormalizePets(s.Pets ??= new());
         if (s.Theme.Mode is not (ThemeSettings.System or ThemeSettings.Light or ThemeSettings.Dark)) s.Theme.Mode = ThemeSettings.System;
         if (s.SettingsVersion < 3) MigrateToLooks(s);

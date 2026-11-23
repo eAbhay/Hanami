@@ -167,6 +167,7 @@ const MODE_LABEL = { full: "Running", reduced: "Reduced", paused: "Paused" };
 const RANK = { paused: 0, reduced: 1, full: 2 };
 
 function summarizeModes(s) {
+  if (s.settings.wallpaper?.enabled === false) return { mode: "paused", text: "Wallpaper off", sub: screensaverClause(s) };
   const entries = s.monitors.map((m) => ({ m, ...(s.modes[m.key] ?? { mode: "full", reason: "" }) }));
   if (!entries.length) return { mode: "full", text: "Running", sub: "" };
   const worst = entries.reduce((a, b) => (RANK[b.mode] < RANK[a.mode] ? b : a));
@@ -277,6 +278,14 @@ async function boot() {
     if (offered) generalBtn.setAttribute("aria-label", `General, update ${s.update.version} available`);
     else generalBtn.removeAttribute("aria-label");
   });
+
+  // The pin tip: above every tab until dismissed. It is settings state, so it survives a restart and shows on existing copies.
+  const tip = h("div.card.pad.tip", { hidden: true, role: "note" },
+    svg("info"),
+    h("div.tip-text", "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar."),
+    h("button.btn.subtle.small", { type: "button", onclick: () => ctx.mutate("updateSettings", { tips: { pinTrayDismissed: true } }).catch(() => {}) }, "Got it"));
+  ctx.onState((s) => { tip.hidden = !!s.settings.tips?.pinTrayDismissed; });
+  main.append(tip);
 
   app.append(buildSidebar(nav), main);
 

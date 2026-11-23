@@ -155,6 +155,7 @@ function initialState() {
       screensaver: { enabled: true, idleMinutes: 2, wallpaperId: null, requireSignIn: false, syncLockScreen: false, stopAfterHours: 0 },
       startWithWindows: true,
       paused: false,
+      tips: { pinTrayDismissed: false },
       updates: { autoCheck: true, channel: "stable", skippedVersion: null, lastCheckUtc: null },
     },
     monitors: [

@@ -43,3 +43,26 @@ public sealed class WallpaperSwitchTests : IDisposable
         Assert.False(reloaded.Paused);
     }
 }
+
+public sealed class TipSettingsTests
+{
+    [Fact]
+    public void Old_files_show_the_pin_tip()
+    {
+        var s = SettingsStore.Normalize(JsonSerializer.Deserialize<AppSettings>("""{"paused":false}""", Json.Options));
+        Assert.False(s.Tips.PinTrayDismissed);
+        Assert.False(SettingsStore.Normalize(JsonSerializer.Deserialize<AppSettings>("""{"tips":null}""", Json.Options)).Tips.PinTrayDismissed);
+    }
+
+    [Fact]
+    public void Dismissing_is_saved()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "hanami-tip-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            new SettingsStore(path).Patch(new JsonObject { ["tips"] = new JsonObject { ["pinTrayDismissed"] = true } });
+            Assert.True(new SettingsStore(path).Current.Tips.PinTrayDismissed);
+        }
+        finally { File.Delete(path); }
+    }
+}

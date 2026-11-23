@@ -664,6 +664,7 @@ public sealed class HanamiHost
             // Keep this PC's own run state; take everything else from the pack.
             settings.Paused = _store.Current.Paused;
             settings.Updates = _store.Current.Updates;   // update choices belong to this install
+            settings.Tips = _store.Current.Tips;         // so does what the user dismissed
             foreach (var a in settings.Assignments.Values)
             {
                 if (a.WallpaperId is { } wid && !_library.Exists(wid)) a.WallpaperId = "builtin:twilight";
