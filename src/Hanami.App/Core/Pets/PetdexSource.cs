@@ -30,7 +30,16 @@ public static class PetdexSource
     /// Cloudflare's challenge. Anything else opens in the default browser. Matches the host or any subdomain of it.
     /// </summary>
     private static readonly string[] AllowedHosts =
-        ["petdex.dev", "clerk.com", "clerk.accounts.dev", "challenges.cloudflare.com", "accounts.google.com", "github.com"];
+        ["petdex.dev", "clerk.com", "clerk.accounts.dev", "challenges.cloudflare.com", "accounts.google.com"];
+
+    /// <summary>Identity providers are allowed for their sign-in pages only, so Petdex's own links to GitHub open in the default browser.</summary>
+    private static readonly (string host, string pathPrefix)[] SignInPages = [("github.com", "/login"), ("github.com", "/sessions")];
+
+    /// <summary>Whether the browse window may navigate to an address: https on an allowed host, or a provider's sign-in page.</summary>
+    public static bool IsAllowedUrl(Uri? uri) =>
+        uri is { Scheme: "https" }
+        && (IsAllowedHost(uri.Host) || SignInPages.Any(p => uri.Host.Equals(p.host, StringComparison.OrdinalIgnoreCase)
+            && uri.AbsolutePath.StartsWith(p.pathPrefix, StringComparison.OrdinalIgnoreCase)));
 
     public static bool IsAllowedHost(string? host) =>
         !string.IsNullOrEmpty(host) && AllowedHosts.Any(a => host.Equals(a, StringComparison.OrdinalIgnoreCase) || host.EndsWith("." + a, StringComparison.OrdinalIgnoreCase));

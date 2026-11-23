@@ -520,7 +520,7 @@ public sealed class HanamiHost
             Title = "Petdex",
             StartUrl = PetdexSource.StartUrl,
             ActionLabel = "Get pet",
-            AllowHost = PetdexSource.IsAllowedHost,
+            AllowUrl = PetdexSource.IsAllowedUrl,
             ItemFromUrl = PetdexSource.SlugFromUrl,
             IsAdded = slug => _petLibrary.Manifests().Any(m => m.Source is { Site: PetdexSource.Site } s && s.Slug == slug),
             ItemFromDownload = async url =>

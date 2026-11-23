@@ -19,8 +19,8 @@ public sealed class BrowseSource
     public required string StartUrl { get; init; }
     /// <summary>The label of the primary button (for example "Get pet").</summary>
     public required string ActionLabel { get; init; }
-    /// <summary>Whether a host may be navigated to inside the window; anything else opens in the default browser.</summary>
-    public required Func<string, bool> AllowHost { get; init; }
+    /// <summary>Whether an https address may be navigated to inside the window; anything else opens in the default browser.</summary>
+    public required Func<Uri, bool> AllowUrl { get; init; }
     /// <summary>The item a page address stands for (a pet's slug), or null when the page isn't an item.</summary>
     public required Func<string, string?> ItemFromUrl { get; init; }
     /// <summary>The item a file download of the site belongs to, or null when it isn't one of its items.</summary>
@@ -155,7 +155,7 @@ public sealed class BrowseWindow : Window
     private bool IsAllowed(string uri, bool frame)
     {
         if (!Uri.TryCreate(uri, UriKind.Absolute, out var u)) return false;
-        if (u.Scheme == Uri.UriSchemeHttps) return _source.AllowHost(u.Host);
+        if (u.Scheme == Uri.UriSchemeHttps) return _source.AllowUrl(u);
         return frame ? u.Scheme is "about" or "blob" or "data" : uri.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
     }
 

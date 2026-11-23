@@ -49,6 +49,17 @@ public sealed class PetdexSourceTests
     public void IsAllowedHost_MatchesTheHostOrItsSubdomains(string? host, bool allowed) => Assert.Equal(allowed, PetdexSource.IsAllowedHost(host));
 
     [Theory]
+    [InlineData("https://petdex.dev/pets/x", true)]
+    [InlineData("https://github.com/login?client_id=1", true)]
+    [InlineData("https://github.com/login/oauth/authorize", true)]
+    [InlineData("https://github.com/crafter-station/petdex", false)]   // Petdex's own link to its code: the default browser
+    [InlineData("https://discord.gg/abc", false)]
+    [InlineData("http://petdex.dev/pets/x", false)]
+    [InlineData("https://evil.example/login", false)]
+    public void IsAllowedUrl_AddsSignInPagesOfProviders_ButNotTheirOtherPages(string url, bool allowed) =>
+        Assert.Equal(allowed, PetdexSource.IsAllowedUrl(new Uri(url)));
+
+    [Theory]
     [InlineData("https://assets.petdex.dev/pets/nezuko-6856df028590/zip.zip", true)]
     [InlineData("http://assets.petdex.dev/pets/x/zip.zip", false)]
     [InlineData("https://assets.petdex.dev.evil.com/pets/x/zip.zip", false)]

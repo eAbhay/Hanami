@@ -570,7 +570,7 @@ a `BrowseSource` gives the start URL, `AllowHost`, `ItemFromUrl(url)` (null when
 `IsAdded` and `GetAsync(item)`. **The window shows a third-party site, so it gets nothing of Hanami's:** no settings bridge (no
 `WebMessageReceived`, web messages and host objects off), no virtual hosts (not `app.hanami`, not `library.hanami`), its own
 browser profile (`%LocalAppData%\Hanami\WebView2-Browse`, apart from `WebView2`), every permission denied. It navigates only to
-`PetdexSource.IsAllowedHost` (petdex.dev and subdomains, its sign-in and Cloudflare's challenge); other links and new windows open in
+`PetdexSource.IsAllowedUrl` (https on petdex.dev and subdomains, Clerk, Google's account pages and Cloudflare's challenge, plus GitHub's `/login` and `/sessions` pages only; Petdex's other links to GitHub open in the default browser); other links and new windows open in
 the default browser, other frames are blocked, and the site's own downloads are cancelled (a zip from `assets.petdex.dev` that is in
 Petdex's list is taken like the button). A pet page is `https://petdex.dev/pets/<slug>`; there "Get pet" is enabled, and says "Added" once a
 pack's `source.slug` matches. Getting a pet: the pet list (`GET https://petdex.dev/api/manifest`, a redirect to a file on
