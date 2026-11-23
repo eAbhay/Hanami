@@ -52,7 +52,7 @@ Read: `web/settings/app.js`, `web/settings/tabs/general.js` (the update banner's
 - [x] A4.2 **Tip:** a small dismissible notice above the tab content, on every tab, until dismissed: "Keep Hanami's icon on your taskbar so you can see when an update is waiting. Open the ^ next to the clock and drag the icon down onto the taskbar." It shows on existing copies too, independently of the update banner. Mock bridge support.
 - [ ] A4.3 ~~README screenshot~~ moved to round 12 P6 (user's decision, 23 Nov 2026).
 - [x] A4.4 **Check** on the mock (tip shows, dismiss survives a reload of the state, no console errors) and in the dev app. `dotnet test --project src\Hanami.Tests\Hanami.Tests.csproj`. Then ask the user to look at it before committing.
-- [ ] A4.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
+- [x] A4.5 **With the user's yes:** delete the stale `bin\Debug\net10.0-windows` and `bin\Release\net10.0-windows` folders (gitignored, nothing builds there any more).
 
 Notes: `TipSettings` in `Core/Settings.cs`; the tip lives in `web/settings/app.js` (`boot`), and a pack import keeps this PC's `tips`. Checked on the mock (shows, dismisses, no console errors); in the dev app only that the settings window opens and the app runs. A4.5 (deleting the stale `bin` folders) waits for the user's yes. The sidebar status also says "Wallpaper off" now (A3).
 
@@ -60,11 +60,11 @@ Notes: `TipSettings` in `Core/Settings.cs`; the tip lives in `web/settings/app.j
 
 Read: README "Releasing".
 
-- [ ] A5.1 `<Version>` in `Hanami.App.csproj` and a `## 0.1.3` section in `CHANGELOG.md`, written for users. Commit. With the user's yes: merge to `main`, push.
-- [ ] A5.2 **With the user's yes for this tag:** tag `v0.1.3`, push it, watch the run, check the download's SHA-256 and stamped version.
+- [x] A5.1 `<Version>` in `Hanami.App.csproj` and a `## 0.1.3` section in `CHANGELOG.md`, written for users. Commit. With the user's yes: merge to `main`, push.
+- [x] A5.2 **With the user's yes for this tag:** tag `v0.1.3`, push it, watch the run, check the download's SHA-256 and stamped version.
 - [ ] A5.3 **The user updates the second laptop from its tray.** This covers what round 10's check couldn't: a real library across a tray update.
 
-Notes:
+Notes: released 23 Nov 2026 on the user's yes (merged `round-11` into `main`, tag `v0.1.3`). The run succeeded; the downloaded `Hanami.exe` matches its `.sha256` and reads `0.1.3+b1abfd3`. The stale `bin` folders are deleted. **A5.3 is the user's:** update the second laptop from its tray. Round 12 starts on a new `round-12` branch from `main`.
 
 ## Round 12 — Petdex pets, browsing Petdex in the app, drag and drop (ships as `0.2.0`)
 
