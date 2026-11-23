@@ -45,9 +45,9 @@ load `library.hanami` media with `crossOrigin="anonymous"` and still export canv
     wallpapers/<id>/lock.jpg           the wallpaper's lock screen picture (saveLockStill), may be missing
     fonts/<id>.<ttf|otf|woff|woff2>    imported clock fonts
     pets/<packId>/manifest.json        a pet pack: {id, name, createdAt, frameWidth, frameHeight,
-                                       frames: number[], mapping?: PetMapping, kind?, source?, abilities?}  (id = "pet-" +
+                                       frames: number[], mapping?: PetMapping, kind?, source?, abilities?, standHeight?}  (id = "pet-" +
                                        8 hex; frames = which shime numbers exist; mapping = the pack's own frame map, see
-                                       below; kind, source and abilities: see "Petdex packs" below)
+                                       below; kind, source and abilities: see "Petdex packs" below; standHeight: see "Desktop pets")
     pets/<packId>/img/shime<N>.png     N in 1–46 (1–99 for a Petdex pack), all frames of a pack the same size (≤ 1024 px)
   app/web/                             extracted copy of web/ (overwritten on version change)
   update/Hanami-<version>.exe          a downloaded, verified update while it is being installed (also
@@ -552,7 +552,13 @@ at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames`
   shows and while Windows is locked; "Hide pets" (tray or pet menu) hides them for the session only. They follow the
   power rules without the maximized/fullscreen rules: `paused` freezes them on their current frame (and they can't be
   picked up), `reduced` redraws at most every other tick. Pets never multiply; at most 8.
-- A pet is drawn at `pets.scale` × its monitor's DPI scale (resized explicitly when it crosses to another monitor).
+- A pet is drawn at `pets.scale` × its monitor's DPI scale × a correction for its pack's art (resized explicitly when it
+  crosses to another monitor), so every pack stands about the same height: `PetSize.ScaleFor(standHeight, scale, dpi)`, where
+  `standHeight` is the manifest's visible height in image pixels of the pack's stand frame(s) (alpha bounding box, pixels
+  at or below alpha 16 ignored; the tallest of the stand animation's frames) and the correction is 100 / `standHeight`,
+  clamped to 0.25 – 3. At Size 100% on a 100% display a pet stands about 100 px tall. Computed when a pack is imported; a
+  pack without it (older, or `standHeight` 0) is measured once when it is first loaded and the manifest is saved. A pack
+  whose stand frame can't be measured keeps the old size (its image pixels).
 
 ### Install registration and uninstall
 

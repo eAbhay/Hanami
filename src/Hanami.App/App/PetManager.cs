@@ -20,11 +20,14 @@ internal sealed class PetFrames
     public required PetCapabilities Caps { get; init; }
     public required PetAnimations Anims { get; init; }
     public bool IsPetdex { get; init; }
+    /// <summary>Visible height of the stand frame in image pixels (0 = unknown); see <see cref="PetSize"/>.</summary>
+    public int StandHeight { get; init; }
 
     public static PetFrames? Load(PetLibrary library, string packId)
     {
         var manifest = library.Read(packId);
         if (manifest is null) return null;
+        manifest = library.EnsureStandHeight(manifest);
         var images = new Dictionary<int, BitmapSource>();
         foreach (var n in manifest.Frames)
         {
@@ -42,7 +45,7 @@ internal sealed class PetFrames
             catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException) { }
         }
         if (!images.ContainsKey(1)) return null;
-        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations(), IsPetdex = manifest.IsPetdex };
+        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations(), IsPetdex = manifest.IsPetdex, StandHeight = manifest.StandHeight };
     }
 }
 
@@ -178,7 +181,7 @@ public sealed class PetManager : IDisposable
     private void Reset(Pet pet, double? x = null, double? y = null)
     {
         var settings = _settings().Pets;
-        pet.Ps = settings.Scale * ScaleAt(x ?? 0, y ?? 0);
+        pet.Ps = PetSize.ScaleFor(pet.Frames.StandHeight, settings.Scale, ScaleAt(x ?? 0, y ?? 0));
         pet.Activity = settings.Activity;
         pet.Brain = new PetBrain(new PetProfile(pet.Frames.Caps, pet.Frames.Set, pet.Ps, settings.Activity, pet.Frames.Anims,
             BodyHeight: pet.Frames.Height * pet.Ps * 0.85, Petdex: pet.Frames.IsPetdex), new Random(_rng.Next()));
@@ -318,7 +321,7 @@ public sealed class PetManager : IDisposable
         if (pet.Stroking && pet.Brain.State != PetState.Stroked) pet.Stroking = false;   // ended by itself
         if (pet.Follow && !pet.Brain.FollowCursor) pet.Follow = false;                   // a minute passed, or the pet was clicked
 
-        var wantScale = _settings().Pets.Scale * ScaleAt(pet.Brain.X, pet.Brain.Y);
+        var wantScale = PetSize.ScaleFor(pet.Frames.StandHeight, _settings().Pets.Scale, ScaleAt(pet.Brain.X, pet.Brain.Y));
         if (Math.Abs(wantScale - pet.Ps) > 0.01 || _settings().Pets.Activity != pet.Activity) { Reset(pet, pet.Brain.X, pet.Brain.Y); return; }
         if (Win32.GetCursorPos(out var cursor)) pet.Brain.SetCursor(cursor.X, cursor.Y);
         pet.Brain.Step(_world);

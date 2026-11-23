@@ -25,6 +25,8 @@ public sealed class PetPackManifest
     public PetSource? Source { get; set; }
     /// <summary>What the pet can do, stated by the pack's layout; null = work it out from which frames exist (Shimeji).</summary>
     public PetCapabilities? Abilities { get; set; }
+    /// <summary>The visible height in image pixels of the stand frame(s), which sizes the pet on screen (<see cref="PetSize"/>); 0 = not measured yet.</summary>
+    public int StandHeight { get; set; }
 
     public const string KindShimeji = "shimeji", KindPetdex = "petdex";
     [JsonIgnore]
@@ -353,6 +355,7 @@ public sealed class PetLibrary
                 Frames = frames.Keys.Order().ToList(), Mapping = mapping,
                 Kind = kind, Source = source, Abilities = abilities,
             };
+            manifest.StandHeight = PetSize.StandHeight(manifest.Animations(), n => frames.GetValueOrDefault(n));
             File.WriteAllText(Path.Combine(staging, "manifest.json"), JsonSerializer.Serialize(manifest, Json.FileOptions));
             Directory.Move(staging, dir);
             return manifest;
@@ -362,6 +365,22 @@ public sealed class PetLibrary
             try { Directory.Delete(staging, recursive: true); } catch { }
             throw;
         }
+    }
+
+    /// <summary>
+    /// The manifest with its stand height measured and saved, when it had none (packs imported before sizes were normalised).
+    /// Stays 0 when the frames can't be read.
+    /// </summary>
+    public PetPackManifest EnsureStandHeight(PetPackManifest m)
+    {
+        if (m.StandHeight > 0) return m;
+        try
+        {
+            m.StandHeight = PetSize.StandHeight(m.Animations(), n => File.Exists(FramePath(m.Id, n)) ? File.ReadAllBytes(FramePath(m.Id, n)) : null);
+            if (m.StandHeight > 0) File.WriteAllText(Path.Combine(DirOf(m.Id), "manifest.json"), JsonSerializer.Serialize(m, Json.FileOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return m;
     }
 
     public void Rename(string id, string name)

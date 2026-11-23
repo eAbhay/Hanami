@@ -124,12 +124,12 @@ Notes: 410 tests (12 new in `PetdexBehaviourTests.cs`). `PetBrain` reads `Pose.T
 
 Read: `App/PetManager.cs` (`Reset`, `ScaleAt`, how `Ps` sizes the window and feeds `PetProfile.PixelScale`), `App/PetWindow.cs`, `Core/Pets/World.cs` and `PetBrain.cs` (where frame size and `PixelScale` meet the physics), `Core/Settings.cs` (`PetSettings.Scale`).
 
-- [ ] P3.1 **Contract first:** `PetPackManifest.standHeight`, the visible height in image pixels of the pack's stand frame(s) (alpha bounding box, ignoring nearly transparent pixels). Computed at import; for older packs, computed once on load and saved.
-- [ ] P3.2 **Core:** a pure `PetSize.ScaleFor(standHeight, userScale, dpi)` so that at `Scale` 1 and 100% DPI a pet stands about 100 px tall, clamped so tiny or huge art stays sane. Pick the target by checking a typical 128 px Shimeji pack looks about the same as today. Tests.
-- [ ] P3.3 **Host:** `Ps` uses it, so window size, anchors and physics all follow the one factor. Changing packs or the slider still resets the pet as today.
-- [ ] P3.4 **Check in dev:** Nezuko, Frieren and a Shimeji pack side by side at sizes 0.5, 1 and 2, on 100% and 125% displays if available. Settings UI copy for Size if it mentions pixels. Commit.
+- [x] P3.1 **Contract first:** `PetPackManifest.standHeight`, the visible height in image pixels of the pack's stand frame(s) (alpha bounding box, ignoring nearly transparent pixels). Computed at import; for older packs, computed once on load and saved.
+- [x] P3.2 **Core:** a pure `PetSize.ScaleFor(standHeight, userScale, dpi)` so that at `Scale` 1 and 100% DPI a pet stands about 100 px tall, clamped so tiny or huge art stays sane. Pick the target by checking a typical 128 px Shimeji pack looks about the same as today. Tests.
+- [x] P3.3 **Host:** `Ps` uses it, so window size, anchors and physics all follow the one factor. Changing packs or the slider still resets the pet as today.
+- [~] P3.4 **Check in dev:** Nezuko, Frieren and a Shimeji pack side by side at sizes 0.5, 1 and 2, on 100% and 125% displays if available. Settings UI copy for Size if it mentions pixels. Commit.
 
-Notes:
+Notes: 425 tests (15 new in `PetSizeTests.cs`). `Core/Pets/PetSize.cs` holds `ScaleFor`, the alpha measuring and `StandHeight`; target 100 px, correction clamped 0.25 – 3, 0 = unknown keeps the old size. `PetLibrary.Add` measures on import and `EnsureStandHeight` does it once for older packs (called from `PetFrames.Load`, saves the manifest). **Packs with big art get smaller than before:** the dev test pack measured 175 px and now stands about 100 logical px (125 px on this 125% display) where it used to be about 219. **Checked in dev:** that pack, scale 1, on this display, and the legacy measuring and saving. **Not checked:** Nezuko and Frieren next to a Shimeji pack at 0.5, 1 and 2 (that needs the zips downloaded a third time), and a 100% display. The Size slider's copy mentions no pixels, so it is unchanged.
 
 ### Phase P4 — Drag and drop import (moved back from the archive, 23 Nov 2026)
 
