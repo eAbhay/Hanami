@@ -150,6 +150,7 @@ public sealed class HanamiHost
     {
         Log.Info("Quitting");
         _settingsWindow?.Close();
+        _browseWindow?.Close();
         if (_lockSync is not null) await _lockSync.RevertOnExitAsync();   // the lock screen gets its previous picture back
         _pets?.Dispose();
         _theme?.Dispose();
@@ -356,6 +357,10 @@ public sealed class HanamiHost
             case "importMedia":
                 return await ExclusiveImportAsync(ImportMediaAsync);
 
+            case "openPetdexBrowser":
+                OpenPetdexBrowser();
+                return BuildState();
+
             case "importDropped":
                 return await ExclusiveImportAsync(() => ImportDroppedAsync(droppedFiles));
 
@@ -496,6 +501,62 @@ public sealed class HanamiHost
         _lockSync.RequestRefresh();
         await _wallpapers.ApplyModesAsync();
         OnStatusChanged();
+    }
+
+    private BrowseWindow? _browseWindow;
+
+    /// <summary>Opens the Petdex browse window (one at a time; a second request brings it to the front).</summary>
+    private void OpenPetdexBrowser()
+    {
+        if (_browseWindow is { } open)
+        {
+            if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
+            open.Activate();
+            return;
+        }
+        var client = new PetdexClient();   // its pet list is fetched once per window
+        var source = new BrowseSource
+        {
+            Title = "Petdex",
+            StartUrl = PetdexSource.StartUrl,
+            ActionLabel = "Get pet",
+            AllowHost = PetdexSource.IsAllowedHost,
+            ItemFromUrl = PetdexSource.SlugFromUrl,
+            IsAdded = slug => _petLibrary.Manifests().Any(m => m.Source is { Site: PetdexSource.Site } s && s.Slug == slug),
+            ItemFromDownload = async url =>
+                PetdexSource.IsAssetUrl(url) ? (await client.ListAsync()).Values.FirstOrDefault(e => e.ZipUrl == url)?.Slug : null,
+            GetAsync = (slug, progress) => GetPetdexPetAsync(client, slug, progress),
+        };
+        _browseWindow = new BrowseWindow(source, _paths.IsDev);
+        _browseWindow.Closed += (_, _) => _browseWindow = null;
+        _browseWindow.Show();
+        _browseWindow.Activate();
+    }
+
+    /// <summary>The browse window's "Get pet": looks the pet up in Petdex's list, downloads its zip (assets host only, 20 MB at most) and adds it with its credit.</summary>
+    private async Task<string> GetPetdexPetAsync(PetdexClient client, string slug, IProgress<string> progress)
+    {
+        progress.Report("Looking the pet up…");
+        var list = await client.ListAsync();
+        if (!list.TryGetValue(slug, out var entry)) throw new InvalidOperationException("Petdex's pet list doesn't have this pet yet. Try again later.");
+        if (_petLibrary.Manifests().Any(m => m.Source is { Site: PetdexSource.Site } s && s.Slug == slug)) return $"{entry.DisplayName} is already in your library.";
+
+        var temp = Path.Combine(Path.GetTempPath(), $"hanami-petdex-{Guid.NewGuid():N}.zip");
+        try
+        {
+            await client.DownloadZipAsync(entry, temp, new Progress<double>(f => progress.Report($"Downloading {entry.DisplayName}… {(int)(f * 100)}%")));
+            progress.Report($"Adding {entry.DisplayName}…");
+            var result = await Task.Run(() => PetdexReader.ImportZip(_petLibrary, temp, entry.ToSource()));
+            foreach (var reason in result?.Rejected ?? []) Log.Warn($"Petdex {slug}: {reason}");
+            if (result is null || result.Imported.Count == 0)
+                throw new InvalidOperationException(result?.Rejected.FirstOrDefault() ?? "This pet couldn't be added.");
+            BroadcastState();
+            return $"Added {result.Imported[0].Name}. Find it on the Pets tab.";
+        }
+        finally
+        {
+            try { File.Delete(temp); } catch { }
+        }
     }
 
     private bool _importing;

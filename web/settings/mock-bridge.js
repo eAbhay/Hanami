@@ -336,6 +336,17 @@ export function createMockHost(post) {
       return { imported: [clone(pack)], rejected: [] };
     },
 
+    // The real host opens a window showing petdex.dev; the mock just pretends one pet was fetched (no real Petdex art).
+    openPetdexBrowser: async () => {
+      await sleep(300);
+      const n = state.petPacks.length + 1;
+      const preview = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="34" r="22" fill="#9ec9f4"/><circle cx="24" cy="30" r="3"/><circle cx="40" cy="30" r="3"/></svg>`)}`;
+      state.petPacks.push({ id: `pet-mock${n}`, name: `Petdex pet ${n}`, preview, frames: 57, sizeBytes: 380_000, frameWidth: 192, frameHeight: 208,
+        capabilities: { climb: true, ceiling: false, sit: false, sleep: false }, kind: "petdex", credit: "by someone · Petdex" });
+      emitState();
+      return snapshot();
+    },
+
     renamePet: ({ id, name }) => {
       const p = state.petPacks.find((x) => x.id === id);
       if (!p) throw new Error("Pet pack not found");

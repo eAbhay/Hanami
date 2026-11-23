@@ -160,6 +160,7 @@ Events: host posts `{event: "<name>", data}`.
 | `setLook` | `{wallpaperId, desktop?: {effectPreset?: PresetId}, screensaver?: {effectPreset?: PresetId \| null, clock?: Partial<ClockSettings>}}` — merged into that wallpaper's look (created if missing); `screensaver.effectPreset: null` = same as desktop | `State` |
 | `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null, wallpaperId?: string, target?: "desktop" \| "screensaver"}` — with `wallpaperId` it edits that look's tuning of the preset (`target` `screensaver` while the screensaver effect is "same as desktop" edits the desktop tuning, since they are shared); without it the effect defaults. `tuning: null` resets that level | `State` |
 | `importMedia` | – (host opens a file dialog, multi-select, copies files into the library) | `{imported: WallpaperInfo[]}` or `{cancelled: true}` |
+| `openPetdexBrowser` | – (opens the Petdex browse window, see "Browsing Petdex"; a second call brings the open one to the front) | `State` |
 | `importDropped` | – plus the dropped files, which are **not** in `params`: the page sends the message with `chrome.webview.postMessageWithAdditionalObjects(msg, files)` and the host reads each `CoreWebView2File.Path` from the message's additional objects, so a page can never name a path itself (an `importDropped` without objects imports nothing). Each item is sorted by `Core/DropClassifier`: a photo or video (`Library.ImageExtensions` / `VideoExtensions`) is copied into the library like `importMedia`; a `.zip` or folder holding a Petdex `pet.json` or Shimeji `shime<N>.png` images goes through the pet import (`importPet`); anything else is rejected with a reason. Refused with an error while another import is running (this, `importMedia` or `importPet`) | `{wallpapers: number, pets: number, rejected: {name: string, reason: string}[]}` |
 | `renameWallpaper` | `{id, name}` | `State` |
 | `deleteWallpaper` | `{id}` (never builtin) | `State` |
@@ -560,6 +561,24 @@ at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames`
   clamped to 0.25 – 3. At Size 100% on a 100% display a pet stands about 100 px tall. Computed when a pack is imported; a
   pack without it (older, or `standHeight` 0) is measured once when it is first loaded and the manifest is saved. A pack
   whose stand frame can't be measured keeps the old size (its image pixels).
+
+### Browsing Petdex
+
+The Pets tab's "Browse Petdex" button opens `App/BrowseWindow`: a native window (toolbar with Back, Forward, Reload, the page title
+and a primary "Get pet" button, above a WebView2) showing the real petdex.dev. It is built so a wallpaper site can plug in later:
+a `BrowseSource` gives the start URL, `AllowHost`, `ItemFromUrl(url)` (null when the page isn't an item), `ItemFromDownload`,
+`IsAdded` and `GetAsync(item)`. **The window shows a third-party site, so it gets nothing of Hanami's:** no settings bridge (no
+`WebMessageReceived`, web messages and host objects off), no virtual hosts (not `app.hanami`, not `library.hanami`), its own
+browser profile (`%LocalAppData%\Hanami\WebView2-Browse`, apart from `WebView2`), every permission denied. It navigates only to
+`PetdexSource.IsAllowedHost` (petdex.dev and subdomains, its sign-in and Cloudflare's challenge); other links and new windows open in
+the default browser, other frames are blocked, and the site's own downloads are cancelled (a zip from `assets.petdex.dev` that is in
+Petdex's list is taken like the button). A pet page is `https://petdex.dev/pets/<slug>`; there "Get pet" is enabled, and says "Added" once a
+pack's `source.slug` matches. Getting a pet: the pet list (`GET https://petdex.dev/api/manifest`, a redirect to a file on
+`assets.petdex.dev`, at most 12 MB) is fetched once per window; the pet's `zipUrl` must be on `https://assets.petdex.dev/` and at
+most 20 MB (checked against the header and while streaming); the zip goes to a temp file, through `PetdexReader.ImportZip` with
+`source: {site: "petdex", slug, submittedBy}`, and is deleted. The pack is named after Petdex's `displayName` (the slug when empty).
+The window shows the outcome in its status line; the Pets tab refreshes through `stateChanged`. There is no offline mode: without a
+connection the window says so. The Pets tab shows `PetPackInfo.credit` ("by <submittedBy> · Petdex") or "Shimeji".
 
 ### Install registration and uninstall
 

@@ -20,6 +20,7 @@ const P = {
   download: '<path d="M12 4v11.5m-4.5-4.5L12 15.5l4.5-4.5M4.5 15v2.5a2.5 2.5 0 0 0 2.5 2.5h10a2.5 2.5 0 0 0 2.5-2.5V15"/>',
   more: '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/>',
   monitor: '<rect x="3" y="4.5" width="18" height="12" rx="2.5"/><path d="M9 20h6m-3-3.5V20"/>',
   monitors: '<rect x="2.5" y="6" width="12" height="8.5" rx="2"/><rect x="9.5" y="3.5" width="12" height="8.5" rx="2"/><path d="M6.5 19h4m-2-4.5V19"/>',
   folder: '<path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.6l2 2H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5Z"/>',

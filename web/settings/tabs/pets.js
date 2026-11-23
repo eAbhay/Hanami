@@ -5,9 +5,10 @@ import { pageHeader, card, row, featureSwitch } from "../components/index.js";
 const MAX_PETS = 8;
 
 export function createPetsTab(ctx) {
-  const importZip = h("button.btn.primary", { type: "button", onclick: () => doImport("zip") }, svg("upload"), h("span", "Import .zip"));
+  const importZip = h("button.btn", { type: "button", onclick: () => doImport("zip") }, svg("upload"), h("span", "Import .zip"));
+  const browse = h("button.btn.primary", { type: "button", onclick: () => safe(ctx.mutate("openPetdexBrowser")) }, svg("globe"), h("span", "Browse Petdex"));
   const importFolder = h("button.btn", { type: "button", onclick: () => doImport("folder") }, svg("folder"), h("span", "Import folder"));
-  const actions = h("div.slot-switch", importFolder, importZip);
+  const actions = h("div.slot-switch", browse, importFolder, importZip);
 
   // ---- behaviour
   const savePets = (patch) => ctx.mutate("updateSettings", { pets: patch }).catch(() => {});
@@ -29,7 +30,7 @@ export function createPetsTab(ctx) {
   const empty = h("div.empty",
     h("div.empty-art", svg("sparkles")),
     h("div.empty-title", "No pet packs yet"),
-    h("div.empty-text", "Import a pet from petdex.dev (its .zip or folder with pet.json) or a Shimeji image set (shime1.png … shime46.png), as a folder or .zip. Each pet's licence belongs to its author, so check its terms."));
+    h("div.empty-text", "Press Browse Petdex to pick pets from petdex.dev, or import a Petdex or Shimeji pet (shime1.png … shime46.png) as a folder or .zip, or drop it on this window. Each pet's licence belongs to its author, so check its terms."));
 
   const el = h("section",
     pageHeader("Pets", "Little companions that live on your desktop.", actions),
@@ -100,7 +101,7 @@ export function createPetsTab(ctx) {
     empty.hidden = packs.length > 0;
     const full = items.length >= MAX_PETS;
     packList.replaceChildren(...packs.map((p) => h("div.row.rule", preview(p),
-      h("div.row-text", h("div.row-title", p.name), h("div.row-sub", chips(p.capabilities), ` ${p.frameWidth}×${p.frameHeight} · ${formatBytes(p.sizeBytes)}`)),
+      h("div.row-text", h("div.row-title", p.name), h("div.row-sub", chips(p.capabilities), ` ${p.credit ?? "Shimeji"} · ${formatBytes(p.sizeBytes)}`)),
       h("div.row-actions",
         h("button.btn.small", { type: "button", disabled: full, title: full ? `At most ${MAX_PETS} pets` : "Put another one on the desktop",
           onclick: () => safe(ctx.mutate("addPet", { packId: p.id })) }, svg("plus"), h("span", "Add")),
