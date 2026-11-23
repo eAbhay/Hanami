@@ -4,6 +4,12 @@ One section per version, newest first. The section for a version is used as that
 for people using Hanami, not for developers. The heading is just the version number (`## 0.1.0`, `## 0.2.0-beta.1`), and a tag
 without a matching section stops the release. Versions with a `-` (release candidates, betas) are prereleases.
 
+## 0.1.3
+
+- **A switch at the top of each feature tab:** the Wallpaper, Screensaver and Pets tabs each open with an on/off row. The screensaver's switch moved there from Power, and **Show pets** moved up from Behaviour.
+- **Turn the wallpaper off:** want only pets? Switch the wallpaper off on the Wallpaper tab. Hanami then draws nothing on the desktop and Windows' own wallpaper shows. Pets and the screensaver keep working, and switching it on again brings the wallpaper back.
+- **A tip about the taskbar:** a small notice above the settings tabs explains how to keep Hanami's icon on your taskbar, so you can see when an update is waiting. Dismiss it with **Got it**.
+
 ## 0.1.2
 
 - **Settings tabs reorganised:** **Light and dark** moved from General to Power, since it applies to both the Wallpaper and Screensaver tabs. **Require sign-in** moved to the Screensaver tab's Lock screen card, and the Screensaver tab's link to Power is gone. On the Pets tab, Your pets and Pet library now come before Behaviour.
