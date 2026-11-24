@@ -1,9 +1,12 @@
 // Layout pieces every tab shares: page header, card, settings row, sidebar status pill.
 import { h, svg } from "../util.js";
 
-/** Page title + subtitle, with an optional action (button) on the right. */
-export function pageHeader(title, subtitle, action) {
-  return h("header.page-head",
+/**
+ * Page title + subtitle, with an optional action (button) on the right. With `stack` the actions go on a row of their own
+ * under the subtitle, for a page with several buttons that would squash the subtitle.
+ */
+export function pageHeader(title, subtitle, action, { stack = false } = {}) {
+  return h(`header.page-head${stack ? ".stack" : ""}`,
     h("div", h("h1", title), subtitle ? h("p.page-sub", subtitle) : null),
     action ? h("div.page-actions", action) : null);
 }

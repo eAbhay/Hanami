@@ -243,6 +243,10 @@ h1, h2 { margin: 0; font-family: var(--font-display); }
 .page-head h1 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
 .page-sub { margin: 4px 0 0; color: var(--text-2); }
 .page-actions { display: flex; gap: 8px; flex: none; }
+/* A header whose buttons get a row of their own under the subtitle (the Pets page has four). */
+.page-head.stack { flex-direction: column; align-items: flex-start; gap: 12px; }
+.page-head.stack .page-actions { flex: 1 1 auto; width: 100%; }
+.page-head.stack .slot-switch { justify-content: flex-start; }
 
 .sub-head { display: flex; align-items: baseline; gap: 10px; margin: 18px 2px 10px; }
 .sub-head:first-child { margin-top: 2px; }

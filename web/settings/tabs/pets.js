@@ -34,7 +34,7 @@ export function createPetsTab(ctx) {
     h("div.empty-text", "Press Browse Shimeji or Browse Petdex to pick pets from shimeji.org or petdex.dev, or import a Petdex pet, a shimeji.org bundle or a Shimeji image set (shime1.png … shime46.png) as a folder or .zip, or drop it on this window. Each pet's licence belongs to its author, so check its terms."));
 
   const el = h("section",
-    pageHeader("Pets", "Little companions that live on your desktop.", actions),
+    pageHeader("Pets", "Little companions that live on your desktop.", actions, { stack: true }),
     show,
     card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
     card("Pet library", h("span.card-meta", "Imported pet packs"), empty, packList),
