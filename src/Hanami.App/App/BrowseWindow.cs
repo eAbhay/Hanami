@@ -55,13 +55,13 @@ public interface IBrowsePage
 }
 
 /// <summary>
-/// A window around a real website (the browse window): a toolbar with Back, Forward, Reload, the page title and a primary
+/// One site in the browse window (a tab): a toolbar with Back, Forward, Reload, the page title and a primary
 /// button, above a WebView2. <b>It shows a third-party site, so it is locked down:</b> it never gets the settings bridge, the
 /// app's virtual hosts or the library; it has its own browser profile, apart from Hanami's; it may navigate only to the
 /// source's hosts; links elsewhere and new windows open in the default browser; the site's own downloads are cancelled
 /// (a download that belongs to an item is handed to the same "get" as the button); and every permission is denied.
 /// </summary>
-public sealed class BrowseWindow : Window, IBrowsePage
+public sealed class BrowseView : DockPanel, IBrowsePage
 {
     private static CoreWebView2Environment? _env;
 
@@ -76,18 +76,10 @@ public sealed class BrowseWindow : Window, IBrowsePage
     /// <summary>Set while the Get button waits for the page to start its download (see <see cref="BrowseSource.DownloadScript"/>).</summary>
     private TaskCompletionSource<bool>? _downloadWanted;
 
-    public BrowseWindow(BrowseSource source, bool dev)
+    public BrowseView(BrowseSource source, bool dev)
     {
         _source = source;
         _dev = dev;
-        Title = $"{source.Title} — Hanami";
-        Width = 1100;
-        Height = 760;
-        MinWidth = 640;
-        MinHeight = 480;
-        WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = new SolidColorBrush(Color.FromRgb(0x1c, 0x1a, 0x22));
-        Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/Assets/hanami.ico"));
         _web.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0x1c, 0x1a, 0x22);
 
         _get.Content = source.ActionLabel;
@@ -105,19 +97,17 @@ public sealed class BrowseWindow : Window, IBrowsePage
         bar.Children.Add(_get);
         bar.Children.Add(_title);
 
-        var root = new DockPanel();
         var top = new Border { Child = bar, Background = new SolidColorBrush(Color.FromRgb(0x25, 0x22, 0x2d)) };
         var bottom = new Border { Child = _status, Background = new SolidColorBrush(Color.FromRgb(0x25, 0x22, 0x2d)) };
         DockPanel.SetDock(top, Dock.Top);
         DockPanel.SetDock(bottom, Dock.Bottom);
-        root.Children.Add(top);
-        root.Children.Add(bottom);
-        root.Children.Add(_web);
-        Content = root;
-
-        Loaded += async (_, _) => await StartAsync();
-        Closed += (_, _) => _web.Dispose();
+        Children.Add(top);
+        Children.Add(bottom);
+        Children.Add(_web);
     }
+
+    /// <summary>Releases the browser. The window calls this when it closes.</summary>
+    public void Close() => _web.Dispose();
 
     private static Button Tool(string glyph, string tip) => new() { Content = glyph, ToolTip = tip, Width = 34, Margin = new Thickness(0, 0, 4, 0), Padding = new Thickness(0, 4, 0, 4), IsEnabled = false };
 
@@ -125,8 +115,13 @@ public sealed class BrowseWindow : Window, IBrowsePage
         _env ??= await CoreWebView2Environment.CreateAsync(null, Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Hanami", "WebView2-Browse"));
 
-    private async Task StartAsync()
+    private bool _started;
+
+    /// <summary>Starts the browser and loads the site; the first time this tab is shown (a tab that is never opened never touches the network).</summary>
+    public async Task StartAsync()
     {
+        if (_started) return;
+        _started = true;
         try
         {
             await _web.EnsureCoreWebView2Async(await EnvAsync());
@@ -353,5 +348,83 @@ public sealed class BrowseWindow : Window, IBrowsePage
             _busy = false;
             RefreshUi();
         }
+    }
+}
+
+/// <summary>
+/// The browse window: a tab for each site (Petdex, shimeji.org), each a locked-down <see cref="BrowseView"/> started the first time
+/// its tab is shown. One window at a time; the host brings it to the front and selects a tab when asked again.
+/// </summary>
+public sealed class BrowseWindow : Window
+{
+    private readonly List<(BrowseSource Source, BrowseView View, Button Tab)> _tabs = new();
+    private static readonly Brush Bar = new SolidColorBrush(Color.FromRgb(0x25, 0x22, 0x2d));
+    private static readonly Brush Selected = new SolidColorBrush(Color.FromRgb(0x7b, 0x5c, 0xd6));
+    private static readonly Brush Idle = new SolidColorBrush(Color.FromRgb(0x38, 0x34, 0x45));
+
+    public BrowseWindow(IReadOnlyList<BrowseSource> sources, bool dev, int selected = 0)
+    {
+        Title = "Browse pets — Hanami";
+        Width = 1100;
+        Height = 790;
+        MinWidth = 640;
+        MinHeight = 500;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Background = new SolidColorBrush(Color.FromRgb(0x1c, 0x1a, 0x22));
+        Icon = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri("pack://application:,,,/Assets/hanami.ico"));
+
+        var tabBar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 8, 8, 0) };
+        var content = new Grid();
+        foreach (var source in sources)
+        {
+            var view = new BrowseView(source, dev) { Visibility = Visibility.Collapsed };
+            var tab = new Button
+            {
+                Content = source.Title, Padding = new Thickness(18, 6, 18, 6), Margin = new Thickness(0, 0, 6, 0), FontWeight = FontWeights.SemiBold,
+                BorderThickness = new Thickness(0), Foreground = Brushes.White, Background = Idle, Template = FlatTabTemplate(),
+            };
+            var index = _tabs.Count;
+            tab.Click += (_, _) => Select(index);
+            _tabs.Add((source, view, tab));
+            tabBar.Children.Add(tab);
+            content.Children.Add(view);
+        }
+
+        var root = new DockPanel();
+        var top = new Border { Child = tabBar, Background = Bar, BorderThickness = new Thickness(0, 0, 0, 0) };
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+        root.Children.Add(content);
+        Content = root;
+
+        Loaded += (_, _) => Select(selected);
+        Closed += (_, _) => { foreach (var t in _tabs) t.View.Close(); };
+    }
+
+    /// <summary>A plain rounded tab: the default button chrome would paint its own colours over the selected state.</summary>
+    private static ControlTemplate FlatTabTemplate()
+    {
+        var border = new FrameworkElementFactory(typeof(Border));
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(8));
+        border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        border.SetBinding(Border.PaddingProperty, new System.Windows.Data.Binding("Padding") { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+        var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+        presenter.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        presenter.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+        border.AppendChild(presenter);
+        return new ControlTemplate(typeof(Button)) { VisualTree = border };
+    }
+
+    /// <summary>Shows a tab by its position, starting its browser the first time.</summary>
+    public void Select(int index)
+    {
+        if (index < 0 || index >= _tabs.Count) index = 0;
+        for (var i = 0; i < _tabs.Count; i++)
+        {
+            var (_, view, tab) = _tabs[i];
+            view.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
+            tab.Background = i == index ? Selected : Idle;
+        }
+        _ = _tabs[index].View.StartAsync();
     }
 }

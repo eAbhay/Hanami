@@ -5,11 +5,22 @@ import { pageHeader, card, row, featureSwitch } from "../components/index.js";
 const MAX_PETS = 8;
 
 export function createPetsTab(ctx) {
-  const importZip = h("button.btn", { type: "button", onclick: () => doImport("zip") }, svg("upload"), h("span", "Import .zip"));
-  const browse = h("button.btn.primary", { type: "button", onclick: () => safe(ctx.mutate("openPetdexBrowser")) }, svg("globe"), h("span", "Browse Petdex"));
-  const browseShimeji = h("button.btn.primary", { type: "button", onclick: () => safe(ctx.mutate("openShimejiBrowser")) }, svg("globe"), h("span", "Browse Shimeji"));
-  const importFolder = h("button.btn", { type: "button", onclick: () => doImport("folder") }, svg("folder"), h("span", "Import folder"));
-  const actions = h("div.slot-switch", browseShimeji, browse, importFolder, importZip);
+  // The page header has the same shape as the Wallpaper page's: two buttons on the right, Browse and Import.
+  const browse = h("button.btn", { type: "button", onclick: () => safe(ctx.mutate("openBrowser")) }, svg("globe"), h("span", "Browse pets"));
+  const importBtn = h("button.btn.primary", { type: "button", "aria-haspopup": "menu", "aria-expanded": "false", onclick: () => toggleMenu() }, svg("upload"), h("span", "Import"));
+  const importMenu = h("div.menu", { hidden: true, role: "menu" },
+    h("button.menu-item", { type: "button", role: "menuitem", onclick: () => { toggleMenu(false); doImport("zip"); } }, svg("upload"), h("span", "From a .zip file…")),
+    h("button.menu-item", { type: "button", role: "menuitem", onclick: () => { toggleMenu(false); doImport("folder"); } }, svg("folder"), h("span", "From a folder…")));
+  const actions = h("div.page-actions-group", browse, h("div.menu-wrap", importBtn, importMenu));
+
+  function toggleMenu(open = importMenu.hidden) {
+    importMenu.hidden = !open;
+    importBtn.setAttribute("aria-expanded", String(open));
+    if (open) importMenu.querySelector("button")?.focus();
+  }
+  // Click elsewhere or Escape closes it.
+  document.addEventListener("click", (e) => { if (!importMenu.hidden && !e.target.closest?.(".menu-wrap")) toggleMenu(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !importMenu.hidden) { toggleMenu(false); importBtn.focus(); } });
 
   // ---- behaviour
   const savePets = (patch) => ctx.mutate("updateSettings", { pets: patch }).catch(() => {});
@@ -31,10 +42,10 @@ export function createPetsTab(ctx) {
   const empty = h("div.empty",
     h("div.empty-art", svg("sparkles")),
     h("div.empty-title", "No pet packs yet"),
-    h("div.empty-text", "Press Browse Shimeji or Browse Petdex to pick pets from shimeji.org or petdex.dev, or import a Petdex pet, a shimeji.org bundle or a Shimeji image set (shime1.png … shime46.png) as a folder or .zip, or drop it on this window. Each pet's licence belongs to its author, so check its terms."));
+    h("div.empty-text", "Press Browse pets to pick pets from Petdex or shimeji.org, or import a Petdex pet, a shimeji.org bundle or a Shimeji image set (shime1.png … shime46.png) as a folder or .zip, or drop it on this window. Each pet's licence belongs to its author, so check its terms."));
 
   const el = h("section",
-    pageHeader("Pets", "Little companions that live on your desktop.", actions, { stack: true }),
+    pageHeader("Pets", "Little companions that live on your desktop.", actions),
     show,
     card("Your pets", h("span.card-meta", `Up to ${MAX_PETS}`), outEmpty, outList),
     card("Pet library", h("span.card-meta", "Imported pet packs"), empty, packList),
@@ -47,7 +58,7 @@ export function createPetsTab(ctx) {
       socialRow));
 
   async function doImport(source) {
-    actions.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    importBtn.disabled = true;
     try {
       const r = await ctx.call("importPet", { source });
       if (r?.cancelled) return;
@@ -57,7 +68,7 @@ export function createPetsTab(ctx) {
     } catch (err) {
       ctx.toastError(err);
     } finally {
-      actions.querySelectorAll("button").forEach((b) => { b.disabled = false; });
+      importBtn.disabled = false;
     }
   }
 

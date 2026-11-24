@@ -152,7 +152,6 @@ public sealed class HanamiHost
         Log.Info("Quitting");
         _settingsWindow?.Close();
         _browseWindow?.Close();
-        _shimejiWindow?.Close();
         if (_lockSync is not null) await _lockSync.RevertOnExitAsync();   // the lock screen gets its previous picture back
         _pets?.Dispose();
         _theme?.Dispose();
@@ -359,12 +358,8 @@ public sealed class HanamiHost
             case "importMedia":
                 return await ExclusiveImportAsync(ImportMediaAsync);
 
-            case "openPetdexBrowser":
-                OpenPetdexBrowser();
-                return BuildState();
-
-            case "openShimejiBrowser":
-                OpenShimejiBrowser();
+            case "openBrowser":
+                OpenBrowser((string?)p?["site"]);
                 return BuildState();
 
             case "importDropped":
@@ -509,19 +504,34 @@ public sealed class HanamiHost
         OnStatusChanged();
     }
 
-    private BrowseWindow? _browseWindow, _shimejiWindow;
+    private BrowseWindow? _browseWindow;
+    private int _lastBrowseTab;
 
-    /// <summary>Opens the Petdex browse window (one at a time; a second request brings it to the front).</summary>
-    private void OpenPetdexBrowser()
+    /// <summary>
+    /// Opens the browse window (Petdex and shimeji.org tabs; one window, a second request brings it to the front). <paramref name="site"/>
+    /// "petdex" or "shimeji" picks the tab; without it the tab used last is shown.
+    /// </summary>
+    private void OpenBrowser(string? site)
     {
+        var tab = site switch { "petdex" => 0, "shimeji" => 1, _ => _lastBrowseTab };
+        _lastBrowseTab = tab;
         if (_browseWindow is { } open)
         {
             if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
+            open.Select(tab);
             open.Activate();
             return;
         }
+        _browseWindow = new BrowseWindow([PetdexBrowseSource(), ShimejiBrowseSource()], _paths.IsDev, tab);
+        _browseWindow.Closed += (_, _) => _browseWindow = null;
+        _browseWindow.Show();
+        _browseWindow.Activate();
+    }
+
+    private BrowseSource PetdexBrowseSource()
+    {
         var client = new PetdexClient();   // its pet list is fetched once per window
-        var source = new BrowseSource
+        return new BrowseSource
         {
             Title = "Petdex",
             StartUrl = PetdexSource.StartUrl,
@@ -533,39 +543,21 @@ public sealed class HanamiHost
                 PetdexSource.IsAssetUrl(url) ? (await client.ListAsync()).Values.FirstOrDefault(e => e.ZipUrl == url)?.Slug : null,
             GetAsync = (slug, progress) => GetPetdexPetAsync(client, slug, progress),
         };
-        _browseWindow = new BrowseWindow(source, _paths.IsDev);
-        _browseWindow.Closed += (_, _) => _browseWindow = null;
-        _browseWindow.Show();
-        _browseWindow.Activate();
     }
 
-    /// <summary>Opens the shimeji.org browse window (one at a time; a second request brings it to the front).</summary>
-    private void OpenShimejiBrowser()
+    private BrowseSource ShimejiBrowseSource() => new()
     {
-        if (_shimejiWindow is { } open)
-        {
-            if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
-            open.Activate();
-            return;
-        }
-        var source = new BrowseSource
-        {
-            Title = "shimeji.org",
-            StartUrl = ShimejiOrgSource.StartUrl,
-            ActionLabel = "Get pet",
-            AllowUrl = ShimejiOrgSource.IsAllowedUrl,
-            ItemFromUrl = ShimejiOrgSource.IdFromUrl,
-            IsAdded = id => _petLibrary.Manifests().Any(m => m.Source is { Site: ShimejiOrgSource.Site } s && s.Slug == id),
-            DownloadScript = ShimejiOrgSource.ClickDownloadScript,
-            AllowDownload = ShimejiOrgSource.IsAllowedDownload,
-            MaxDownloadBytes = ShimejiOrgSource.MaxDownloadBytes,
-            ImportDownloadAsync = AddShimejiDownloadAsync,
-        };
-        _shimejiWindow = new BrowseWindow(source, _paths.IsDev);
-        _shimejiWindow.Closed += (_, _) => _shimejiWindow = null;
-        _shimejiWindow.Show();
-        _shimejiWindow.Activate();
-    }
+        Title = "shimeji.org",
+        StartUrl = ShimejiOrgSource.StartUrl,
+        ActionLabel = "Get pet",
+        AllowUrl = ShimejiOrgSource.IsAllowedUrl,
+        ItemFromUrl = ShimejiOrgSource.IdFromUrl,
+        IsAdded = id => _petLibrary.Manifests().Any(m => m.Source is { Site: ShimejiOrgSource.Site } s && s.Slug == id),
+        DownloadScript = ShimejiOrgSource.ClickDownloadScript,
+        AllowDownload = ShimejiOrgSource.IsAllowedDownload,
+        MaxDownloadBytes = ShimejiOrgSource.MaxDownloadBytes,
+        ImportDownloadAsync = AddShimejiDownloadAsync,
+    };
 
     /// <summary>A zip the shimeji.org page downloaded: imported like a dropped zip (Shimeji-ee sets, bundles), credited to its artist and the site.</summary>
     private async Task<string> AddShimejiDownloadAsync(string id, string file, IBrowsePage page, IProgress<string> progress)

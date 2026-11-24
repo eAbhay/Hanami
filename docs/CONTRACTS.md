@@ -160,8 +160,7 @@ Events: host posts `{event: "<name>", data}`.
 | `setLook` | `{wallpaperId, desktop?: {effectPreset?: PresetId}, screensaver?: {effectPreset?: PresetId \| null, clock?: Partial<ClockSettings>}}` — merged into that wallpaper's look (created if missing); `screensaver.effectPreset: null` = same as desktop | `State` |
 | `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null, wallpaperId?: string, target?: "desktop" \| "screensaver"}` — with `wallpaperId` it edits that look's tuning of the preset (`target` `screensaver` while the screensaver effect is "same as desktop" edits the desktop tuning, since they are shared); without it the effect defaults. `tuning: null` resets that level | `State` |
 | `importMedia` | – (host opens a file dialog, multi-select, copies files into the library) | `{imported: WallpaperInfo[]}` or `{cancelled: true}` |
-| `openPetdexBrowser` | – (opens the Petdex browse window, see "Browsing Petdex"; a second call brings the open one to the front) | `State` |
-| `openShimejiBrowser` | – (opens the shimeji.org browse window, see "Browsing shimeji.org"; a second call brings the open one to the front) | `State` |
+| `openBrowser` | `{site?: "petdex" \| "shimeji"}` (opens the browse window, see "Browsing Petdex" and "Browsing shimeji.org": one window with a tab for each site; a second call brings the open one to the front and selects the tab; without `site` the tab used last) | `State` |
 | `importDropped` | – plus the dropped files, which are **not** in `params`: the page sends the message with `chrome.webview.postMessageWithAdditionalObjects(msg, files)` and the host reads each `CoreWebView2File.Path` from the message's additional objects, so a page can never name a path itself (an `importDropped` without objects imports nothing). Each item is sorted by `Core/DropClassifier`: a photo or video (`Library.ImageExtensions` / `VideoExtensions`) is copied into the library like `importMedia`; a `.zip` or folder holding a Petdex `pet.json` or Shimeji `shime<N>.png` images goes through the pet import (`importPet`); anything else is rejected with a reason. Refused with an error while another import is running (this, `importMedia` or `importPet`) | `{wallpapers: number, pets: number, rejected: {name: string, reason: string}[]}` |
 | `renameWallpaper` | `{id, name}` | `State` |
 | `deleteWallpaper` | `{id}` (never builtin) | `State` |
@@ -581,8 +580,9 @@ at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames`
 
 ### Browsing Petdex
 
-The Pets tab's "Browse Petdex" button opens `App/BrowseWindow`: a native window (toolbar with Back, Forward, Reload, the page title
-and a primary "Get pet" button, above a WebView2) showing the real petdex.dev. It is built so a wallpaper site can plug in later:
+The Pets tab's "Browse" button opens `App/BrowseWindow`: one native window with a tab for each site (Petdex, shimeji.org; a tab's browser
+starts the first time it is shown). Each tab is a `BrowseView`: a toolbar with Back, Forward, Reload, the page title and a primary
+"Get pet" button, above a WebView2, showing the real petdex.dev (this section) or shimeji.org (the next). It is built so a wallpaper site can plug in later:
 a `BrowseSource` gives the start URL, `AllowHost`, `ItemFromUrl(url)` (null when the page isn't an item), `ItemFromDownload`,
 `IsAdded` and `GetAsync(item)`. **The window shows a third-party site, so it gets nothing of Hanami's:** no settings bridge (no
 `WebMessageReceived`, web messages and host objects off), no virtual hosts (not `app.hanami`, not `library.hanami`), its own
@@ -599,7 +599,7 @@ connection the window says so. The Pets tab shows `PetPackInfo.credit` ("by <sub
 
 ### Browsing shimeji.org
 
-The Pets tab's "Browse Shimeji" button (left of "Browse Petdex") opens the same `BrowseWindow` on https://shimeji.org/, a
+The browse window's second tab shows https://shimeji.org/, a
 community library of Shimeji (desktop sets in Shimeji-ee's format and "mobile" bundles). It has the same lock-down as the Petdex
 window (no bridge, no virtual hosts, its own profile, permissions denied, other frames blocked) and navigates only to
 `ShimejiOrgSource.IsAllowedUrl` (https on shimeji.org and its subdomains, and Cloudflare's human check); other links open in the default
