@@ -368,7 +368,7 @@ public sealed class PetdexTests : IDisposable
     {
         Assert.Null(PetPackReader.FrameNumber("shime47.png"));
         Assert.Equal(47, PetPackReader.FrameNumber("shime47.png", ShimejiFrames.MaxFrameNumber));
-        Assert.Null(PetPackReader.FrameNumber("shime100.png", ShimejiFrames.MaxFrameNumber));
+        Assert.Null(PetPackReader.FrameNumber("shime401.png", ShimejiFrames.MaxFrameNumber));
     }
 
     [Fact]

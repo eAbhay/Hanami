@@ -28,12 +28,15 @@ public sealed class PetPackManifest
     /// <summary>The visible height in image pixels of the stand frame(s), which sizes the pet on screen (<see cref="PetSize"/>); 0 = not measured yet.</summary>
     public int StandHeight { get; set; }
 
-    public const string KindShimeji = "shimeji", KindPetdex = "petdex";
+    public const string KindShimeji = "shimeji", KindPetdex = "petdex", KindBundle = "bundle";
     [JsonIgnore]
     public bool IsPetdex => Kind == KindPetdex;
+    /// <summary>Packs that state their abilities and animations themselves (Petdex and Shimeji bundles), not through Shimeji's frame numbering.</summary>
+    [JsonIgnore]
+    public bool IsExplicit => Kind is KindPetdex or KindBundle;
     /// <summary>The highest frame number this pack may hold.</summary>
     [JsonIgnore]
-    public int MaxFrame => IsPetdex ? ShimejiFrames.MaxFrameNumber : ShimejiFrames.NumFrames;
+    public int MaxFrame => IsExplicit ? ShimejiFrames.MaxFrameNumber : ShimejiFrames.NumFrames;
 
     public PetCapabilities CapabilitiesFor(IReadOnlyCollection<int> frames) => Abilities ?? Animations().CapabilitiesFor(frames);
 
@@ -77,7 +80,7 @@ public static class PetPackReader
     public const int MaxZipEntries = 2000, MaxFilesPerFolder = 200;
     public const int MaxFrameSize = 1024;
 
-    private static readonly Regex FrameName = new(@"^shime(\d{1,2})\.png$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex FrameName = new(@"^shime(\d{1,3})\.png$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>N for a file called shime&lt;N&gt;.png with N in 1–46, else null.</summary>
     public static int? FrameNumber(string fileName, int max = ShimejiFrames.NumFrames)
@@ -114,7 +117,7 @@ public static class PetPackReader
     /// <summary>Whether a folder holds something the pet import takes: a Petdex pet or Shimeji images, in the places it looks.</summary>
     public static bool HasPetFiles(string folder)
     {
-        if (PetdexReader.HasPet(folder)) return true;
+        if (PetdexReader.HasPet(folder) || ShimejiBundle.HasBundle(folder)) return true;
         foreach (var dir in ImageFolders(folder))
             if (Directory.EnumerateFiles(dir).Take(MaxFilesPerFolder).Any(f => FrameNumber(Path.GetFileName(f)) is not null)) return true;
         return false;
@@ -123,6 +126,7 @@ public static class PetPackReader
     public static PetImportResult ImportFolder(PetLibrary library, string folder)
     {
         if (PetdexReader.ImportFolder(library, folder) is { } petdex) return petdex;   // a Petdex pet (pet.json), not a Shimeji set
+        if (ShimejiBundle.ImportFolder(library, folder) is { } bundle) return bundle;   // a shimeji.org bundle (animation.json)
         var result = new PetImportResult(new(), new());
         var found = new List<Candidate>();
         foreach (var dir in ImageFolders(folder))
@@ -180,6 +184,7 @@ public static class PetPackReader
     public static PetImportResult ImportZip(PetLibrary library, string zipPath)
     {
         if (PetdexReader.ImportZip(library, zipPath) is { } petdex) return petdex;
+        if (ShimejiBundle.ImportZip(library, zipPath) is { } bundle) return bundle;
         var result = new PetImportResult(new(), new());
         var fallbackName = Path.GetFileNameWithoutExtension(zipPath);
         var groups = new Dictionary<string, Dictionary<int, byte[]>>(StringComparer.OrdinalIgnoreCase);
@@ -346,7 +351,8 @@ public sealed class PetLibrary
         var size = new DirectoryInfo(DirOf(m.Id)).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
         return new PetPackInfo(m.Id, m.Name, $"{Library.Origin}/pets/{m.Id}/img/shime1.png", m.Frames.Count, size,
             m.FrameWidth, m.FrameHeight, caps, m.Kind,
-            m.Source is { } src && src.Site == "petdex" ? (string.IsNullOrWhiteSpace(src.SubmittedBy) ? "Petdex" : $"by {src.SubmittedBy} · Petdex") : null);
+            m.Source is { } src && src.Site == "petdex" ? (string.IsNullOrWhiteSpace(src.SubmittedBy) ? "Petdex" : $"by {src.SubmittedBy} · Petdex")
+                : m.Kind == PetPackManifest.KindBundle ? "Shimeji bundle" : null);
     }
 
     /// <summary>Stores a validated image set as a new pack.</summary>

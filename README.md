@@ -43,7 +43,7 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
   Hanami switches with Windows' light/dark setting, or you force Light or Dark from Power or the
   tray's Theme menu. Each wallpaper keeps its own look, so only the wallpaper changes.
 - **Desktop pets (Shimeji packs).** Import Shimeji image sets (`shime1.png … shime46.png`, from a
-  folder or `.zip`) on the Pets tab and put up to 8 on the desktop. Pet packs are not included; find
+  folder or `.zip`; also shimeji.org bundles with `manifest.json` and `animation.json`, and Petdex pets) on the Pets tab and put up to 8 on the desktop. Pet packs are not included; find
   one by searching for "<character> shimeji" and check its licence, which belongs to its author.
   Hanami uses the packs' images only, with its own behaviour logic (frame meanings come from the pack's own
   `conf/actions.xml` or a `hanami-pet.json` next to the images, else Shimeji-ee's default numbering): pets walk along the taskbar and the

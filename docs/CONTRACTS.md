@@ -45,10 +45,10 @@ load `library.hanami` media with `crossOrigin="anonymous"` and still export canv
     wallpapers/<id>/lock.jpg           the wallpaper's lock screen picture (saveLockStill), may be missing
     fonts/<id>.<ttf|otf|woff|woff2>    imported clock fonts
     pets/<packId>/manifest.json        a pet pack: {id, name, createdAt, frameWidth, frameHeight,
-                                       frames: number[], mapping?: PetMapping, kind?, source?, abilities?, standHeight?}  (id = "pet-" +
+                                       frames: number[], mapping?: PetMapping, kind? ("shimeji" | "petdex" | "bundle"), source?, abilities?, standHeight?}  (id = "pet-" +
                                        8 hex; frames = which shime numbers exist; mapping = the pack's own frame map, see
                                        below; kind, source and abilities: see "Petdex packs" below; standHeight: see "Desktop pets")
-    pets/<packId>/img/shime<N>.png     N in 1–46 (1–99 for a Petdex pack), all frames of a pack the same size (≤ 1024 px)
+    pets/<packId>/img/shime<N>.png     N in 1–46 (1–400 for a Petdex pack or bundle), all frames of a pack the same size (≤ 1024 px)
   app/web/                             extracted copy of web/ (overwritten on version change)
   update/Hanami-<version>.exe          a downloaded, verified update while it is being installed (also
                                        Hanami-<version>.exe.part during the download);
@@ -197,10 +197,10 @@ type PetPackInfo = {
   frames: number;               // how many shime images the pack has
   sizeBytes: number; frameWidth: number; frameHeight: number;
   capabilities: { climb: boolean; ceiling: boolean; sit: boolean; sleep: boolean };   // from which frames exist (Shimeji); a Petdex pack states them (`abilities`)
-  kind: "shimeji" | "petdex";
-  credit: string | null;        // "by <submittedBy> · Petdex" for a pack downloaded from Petdex, else null
+  kind: "shimeji" | "petdex" | "bundle";
+  credit: string | null;        // "by <submittedBy> · Petdex" for a pack downloaded from Petdex, "Shimeji bundle" for a bundle, else null
 };
-// Import accepts only shime<N>.png (N 1–46) found in the chosen folder, its img/, one level deeper or img/<Name>
+// Shimeji image sets: import accepts only shime<N>.png (N 1–46) found in the chosen folder, its img/, one level deeper or img/<Name>
 // (a zip may hold several characters: each becomes its own pack, named after its folder). Required: shime1–10
 // (stand, walk, fall, everything used while dragged); missing climb (12–14), ceiling (23–25), sit (11) or sleep
 // (21) frames only switch that capability off. Limits: 2 MB per PNG, 40 MB per pack, 1024 px, each PNG must
@@ -231,6 +231,22 @@ type PetPackInfo = {
 // Required rows: idle, run right, run left, jump; a sheet without one is rejected. `source` ({site, slug,
 // submittedBy}) is set when a pet is downloaded from Petdex and travels in .hanamipack files. Petdex art belongs to its
 // submitters: it is never bundled with Hanami.
+//
+// Shimeji bundles (the zips from shimeji.org; added after round 12's first phases). A zip or folder with `manifest.json`
+// ({name, nameSlug, sprites: {basePath, filePattern like "%04d.webp", spriteCount, size}}) and `animation.json`
+// ({animations: [{key, type, subtype, direction, frames: [{sprite, durationTicks, dx?, dy?}]}]}) plus the numbered sprites,
+// at its root or in a folder (a zip may hold several, each in its own folder). Read as data, never run; the file pattern must
+// be an image name (webp or png) in a folder inside the bundle (no "..", no absolute path), and sprite files are looked up
+// by that name only. Limits: zip 40 MB, 4 MB per sprite, at most 399 sprites, every sprite one size. Only the sprites the
+// animations use are kept, shrunk so the longer side is at most 256 px, and stored as `shime<sprite + 1>.png`
+// (`kind: "bundle"`, frame numbers up to 400, frame size = the shrunk sprite size). By `subtype`/`direction`: STAND = stand;
+// WALK LEFT = walk and run (WALK RIGHT, when it draws other sprites, as each pose's `twin`; the other way round, mirrored);
+// CLIMB = wall grab and climbing up, DESCEND = climbing down (RIGHT as twins); HANG = ceiling grab and ceiling climbing;
+// FALL = fall; FLING = jump (fall when missing); BOUNCE = bounce; DRAG = the dragged frames and resist; IDLE = wave and
+// waiting. Required: STAND, WALK, FALL, DRAG. `abilities`: climb when CLIMB exists, ceiling when HANG exists, never sit or
+// sleep. Movement is set to fixed speeds (walk -3, run -5, climbing 2 px per tick) rather than the bundle's `dx`/`dy`, since
+// Hanami scales every pet to the same height. The feet (anchor) are the bottom centre of the stand sprites' visible pixels,
+// the ceiling grip the top of the hanging ones. `PetPackInfo.credit` is "Shimeji bundle".
 type PetMapping = {
   imagePixels: boolean;         // anchors are in image pixels (true), or authored for 128 px frames and scaled (false)
   swing?: number[];             // 5 frames shown while dragged: far left, left, centre, right, far right

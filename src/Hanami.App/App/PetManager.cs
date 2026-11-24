@@ -45,7 +45,7 @@ internal sealed class PetFrames
             catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException) { }
         }
         if (!images.ContainsKey(1)) return null;
-        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations(), IsPetdex = manifest.IsPetdex, StandHeight = manifest.StandHeight };
+        return new PetFrames { Images = images, Set = images.Keys.ToHashSet(), Width = manifest.FrameWidth, Height = manifest.FrameHeight, Caps = manifest.CapabilitiesFor(images.Keys.ToList()), Anims = manifest.Animations(), IsPetdex = manifest.IsExplicit, StandHeight = manifest.StandHeight };
     }
 }
 

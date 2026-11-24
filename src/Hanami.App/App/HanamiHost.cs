@@ -651,14 +651,14 @@ public sealed class HanamiHost
         Func<PetImportResult>? work = null;
         if (source == "folder")
         {
-            var dlg = new OpenFolderDialog { Title = "Choose a folder with a Petdex pet (pet.json) or a Shimeji image set (shime1.png …)" };
+            var dlg = new OpenFolderDialog { Title = "Choose a folder with a Petdex pet, a shimeji.org bundle or a Shimeji image set" };
             if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
             var folder = dlg.FolderName;
             work = () => PetPackReader.ImportFolder(_petLibrary, folder);
         }
         else
         {
-            var dlg = new OpenFileDialog { Title = "Import a pet .zip (Petdex or Shimeji)", Multiselect = true, Filter = "Zip files (*.zip)|*.zip|All files (*.*)|*.*" };
+            var dlg = new OpenFileDialog { Title = "Import a pet .zip (Petdex, shimeji.org or Shimeji)", Multiselect = true, Filter = "Zip files (*.zip)|*.zip|All files (*.*)|*.*" };
             if (dlg.ShowDialog(_settingsWindow) != true) return new JsonObject { ["cancelled"] = true };
             var files = dlg.FileNames;
             work = () =>

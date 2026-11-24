@@ -22,8 +22,8 @@ public static class ShimejiFrames
 {
     public const int TickRate = 25;
     public const int NumFrames = 46;
-    /// <summary>Highest frame number a pack may hold: Petdex sheets have up to 88 cells; a Shimeji import is still limited to <see cref="NumFrames"/>.</summary>
-    public const int MaxFrameNumber = 99;
+    /// <summary>Highest frame number a Petdex or bundle pack may hold (Petdex sheets have up to 88 cells, a bundle's sprites are numbered from its animations); a Shimeji image set is still limited to <see cref="NumFrames"/>.</summary>
+    public const int MaxFrameNumber = 400;
 
     /// <summary>Embedded Fall action: pixels per tick² of gravity, and the air resistance per tick.</summary>
     public const double Gravity = 2, ResistanceX = 0.05, ResistanceY = 0.1;

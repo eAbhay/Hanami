@@ -49,7 +49,8 @@ public static class DropClassifier
     {
         using var zip = ZipFile.OpenRead(path);
         foreach (var entry in zip.Entries.Take(PetPackReader.MaxZipEntries))
-            if (entry.Name.Equals(PetdexReader.ManifestFile, StringComparison.OrdinalIgnoreCase) || PetPackReader.FrameNumber(entry.Name) is not null)
+            if (entry.Name.Equals(PetdexReader.ManifestFile, StringComparison.OrdinalIgnoreCase) || entry.Name.Equals(ShimejiBundle.AnimationFile, StringComparison.OrdinalIgnoreCase)
+                || PetPackReader.FrameNumber(entry.Name) is not null)
                 return true;
         return false;
     }

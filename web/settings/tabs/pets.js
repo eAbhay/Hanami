@@ -30,7 +30,7 @@ export function createPetsTab(ctx) {
   const empty = h("div.empty",
     h("div.empty-art", svg("sparkles")),
     h("div.empty-title", "No pet packs yet"),
-    h("div.empty-text", "Press Browse Petdex to pick pets from petdex.dev, or import a Petdex or Shimeji pet (shime1.png … shime46.png) as a folder or .zip, or drop it on this window. Each pet's licence belongs to its author, so check its terms."));
+    h("div.empty-text", "Press Browse Petdex to pick pets from petdex.dev, or import a Petdex pet, a shimeji.org bundle or a Shimeji image set (shime1.png … shime46.png) as a folder or .zip, or drop it on this window. Each pet's licence belongs to its author, so check its terms."));
 
   const el = h("section",
     pageHeader("Pets", "Little companions that live on your desktop.", actions),
