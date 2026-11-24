@@ -193,9 +193,11 @@ Notes: 558 tests (the bundle tests reworked for the new lookup and the converted
 - [x] P6.1 **README:** pets section rewritten (browsing Petdex, Shimeji import, drag and drop, what Petdex pets can and can't do, credit to submitters). Retake `docs/img/settings.jpg` on the mock bridge (moved from A4.3): built-in scenes, procedural samples and the mock's fake pets only. CONTRACTS checked end to end.
 - [~] P6.2 **The user's checks:** add three or four anime pets with "Get pet", drop a few files of each kind, import a real Shimeji pack (this was A1.2), and on the second laptop move pets across monitors.
 - [x] P6.3 `<Version>` 0.2.0 and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
-- [ ] P6.4 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings, library and pets are kept.
+- [~] P6.4 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings, library and pets are kept.
 
 Notes: P6.1 and P6.3 done on 25 Nov 2026 (README pets section rewritten, `docs/img/settings.jpg` retaken on the mock bridge with built-in scenes only, THIRD-PARTY-NOTICES gets Petdex and shimeji.org, version 0.2.0, CHANGELOG with known gaps and credits). The user agreed to release with the second-laptop checks still open.
+
+**Released 25 Nov 2026:** merged `round-12` into `main`, tag `v0.2.0`, run succeeded, the download matches its `.sha256` and reads `0.2.0+3b8add6` (78.9 MB). Updating a real copy from the tray (P6.4) is the user's step.
 
 **Still to test on the second laptop (the user's record, not done for 0.2.0):**
 - Move pets across monitors, including monitors with different scaling, with Petdex, bundle and Shimeji pets, and check the Size slider and the pets' height on each.
