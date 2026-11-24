@@ -5,15 +5,18 @@ namespace Hanami.Core.Pets;
 /// (v2, 1536×2288). Cell (row, col) is stored as frame <c>row * 8 + col + 1</c>, so frame numbers run up to 88.
 /// Pure: works on pixels and a table of which cells have art, so it is tested without decoding any image.
 /// Rows, top to bottom: idle, run right, run left, wave, jump, failed, waiting, running, review (v2 adds two rows of
-/// turning). What a row shows varies between pets, so only the rows with a fixed meaning carry behaviour: idle, run
-/// right, run left, wave, jump, failed (and waiting when it has frames).
+/// turning). What a row shows varies between pets, so each row is given the job it most often suits, and the pet only
+/// gets the ability (sitting, sleeping) when its row has frames.
 /// </summary>
 public static class PetdexLayout
 {
     public const int Columns = 8, CellWidth = 192, CellHeight = 208, SheetWidth = Columns * CellWidth;
     public const int RowsV1 = 9, RowsV2 = 11;
 
-    public const int Idle = 0, RunRight = 1, RunLeft = 2, Wave = 3, Jump = 4, Failed = 5, Waiting = 6;
+    public const int Idle = 0, RunRight = 1, RunLeft = 2, Wave = 3, Jump = 4, Failed = 5, Waiting = 6, Running = 7, Review = 8, TurnA = 9, TurnB = 10;
+
+    /// <summary>Bumped when the mapping below changes; a pack stored with an older number is rebuilt from its frames when it is read.</summary>
+    public const int MappingVersion = 2;
 
     /// <summary>Pixels at or below this alpha count as transparent, so a faint halo doesn't make a cell "non-empty".</summary>
     public const int AlphaThreshold = 16;
@@ -80,10 +83,12 @@ public static class PetdexLayout
 
     /// <summary>
     /// Turns a sheet into the pack's data: stand = idle; walk and run = run left, each frame with its run-right twin; a wall
-    /// grab = the first run-left frame; wall climbing = run left; fall and jump = the jump row; the five dragged frames =
-    /// five of the jump row; bounce and resist = the failed row; wave and waiting as rows of their own. Sitting, sleeping and
-    /// ceilings are mapped to the stand pose so no Shimeji frame number is ever looked up, and <c>abilities</c> turns them
-    /// off. Anchors are in image pixels. Null with an <paramref name="error"/> when idle, either run row or jump has no art.
+    /// grab = the first run-left frame; wall climbing = run left; fall, jump and the five dragged frames = the jump row; a hard
+    /// landing = the jump row's last frames; wave (a click or stroke) = the wave row; <b>sitting = the waiting row</b>;
+    /// <b>sleeping and lying down (the dizzy landing) = the failed row</b>; struggling while held = the running row (else
+    /// wave, else idle); the running, review and turning rows are extra things to do while standing (fidgets). A pet may sit when
+    /// the waiting row has frames and sleep when the failed row has. Ceilings don't exist. Anchors are in image pixels. Null
+    /// with an <paramref name="error"/> when idle, either run row or jump has no art.
     /// </summary>
     public static Built? Build(Sheet sheet, out string? error)
     {
@@ -94,9 +99,9 @@ public static class PetdexLayout
 
         var idle = Row(Idle); var runRight = Row(RunRight); var runLeft = Row(RunLeft);
         var jump = Row(Jump); var failed = Row(Failed); var wave = Row(Wave); var waiting = Row(Waiting);
+        var running = Row(Running); var review = Row(Review); var turnA = Row(TurnA); var turnB = Row(TurnB);
         foreach (var (name, list) in new[] { ("idle", idle), ("run right", runRight), ("run left", runLeft), ("jump", jump) })
             if (list.Count == 0) { error = $"its sprite sheet has no “{name}” frames"; return null; }
-        if (failed.Count == 0) failed = idle;   // bounce and resist need something to play
 
         PoseDef Pose(int frame, int ticks, int vx = 0, int twin = 0) =>
             new() { Frame = frame, Ticks = ticks, AnchorX = sheet.FeetX, AnchorY = sheet.FeetY, Vx = vx, Twin = twin };
@@ -104,6 +109,9 @@ public static class PetdexLayout
             frames.Select((f, i) => Pose(f, ticks, vx, twins is { Count: > 0 } ? twins[i % twins.Count] : 0)).ToList();
 
         var standing = Play(idle, 12);
+        var sitting = waiting.Count > 0 ? Play(waiting, 12) : standing;
+        var lying = failed.Count > 0 ? Play(failed, 8) : standing;
+        var landing = jump.Count > 2 ? jump[^2..] : jump;
         var map = new Dictionary<string, List<PoseDef>>
         {
             ["stand"] = standing,
@@ -114,19 +122,35 @@ public static class PetdexLayout
             ["climbWallDown"] = Play(runLeft, 4, 0, runRight).Select(p => { p.Vy = 2; return p; }).ToList(),
             ["fall"] = Play(jump, 4),
             ["jump"] = Play(jump, 4),
-            ["bounce"] = Play(failed, 5),
-            ["resist"] = Play(failed, 5),
+            ["bounce"] = Play(landing, 5),
+            ["resist"] = Play(running.Count > 0 ? running : wave.Count > 0 ? wave : idle, 5),
             ["wave"] = Play(wave.Count > 0 ? wave : idle, 5),
-            ["waiting"] = Play(waiting.Count > 0 ? waiting : idle, 12),
-            // Not available to these pets (see Abilities), but kept on frames that exist.
-            ["sit"] = standing, ["sitLookUp"] = standing, ["sprawl"] = standing, ["sleep"] = standing, ["sitDangle"] = standing,
+            ["sit"] = sitting, ["sitLookUp"] = sitting, ["sitDangle"] = sitting,
+            ["sleep"] = lying, ["sprawl"] = lying,
+            // Ceilings don't exist for these pets (see Abilities), but the animations stay on frames that exist.
             ["grabCeiling"] = standing, ["climbCeiling"] = standing,
         };
+        var fidgets = new[] { running, review, turnA, turnB }.Where(r => r.Count > 0).Take(4).ToList();
+        for (var i = 0; i < fidgets.Count; i++) map[$"fidget{i + 1}"] = Play(fidgets[i], 8);
         var swing = Enumerable.Range(0, 5).Select(i => jump[(int)Math.Round(i * (jump.Count - 1) / 4.0)]).ToList();
 
         var frames = new List<int>();
         for (var row = 0; row < sheet.Rows; row++) frames.AddRange(Row(row));
         return new Built(frames, new PetMapping { Animations = map, Swing = swing, ImagePixels = true },
-            new PetCapabilities(Climb: true, Ceiling: false, Sit: false, Sleep: false));
+            new PetCapabilities(Climb: true, Ceiling: false, Sit: waiting.Count > 0, Sleep: failed.Count > 0));
+    }
+
+    /// <summary>
+    /// The pack's data again from the frames it already has (a Petdex pack stored before the mapping changed): the cells with art
+    /// are known from the frame numbers, and the feet from the stand pose it had. Null when it lacks a required row.
+    /// </summary>
+    public static Built? Rebuild(IEnumerable<int> frames, int feetX, int feetY)
+    {
+        var numbers = frames.Where(n => n >= 1).ToList();
+        if (numbers.Count == 0) return null;
+        var rows = Math.Max(RowsV1, (numbers.Max() - 1) / Columns + 1);
+        var filled = new bool[rows, Columns];
+        foreach (var n in numbers) filled[(n - 1) / Columns, (n - 1) % Columns] = true;
+        return Build(new Sheet(filled, feetX, feetY), out _);
     }
 }

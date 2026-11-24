@@ -480,7 +480,7 @@ public sealed class PetBrain
         Attach(floor, world);
         Vx = Vy = 0;
         if (_dizzy && _profile.Caps.Sleep) { _dizzy = false; Enter(PetState.Lie, 75 + _rng.Next(75)); return; }
-        // A Petdex pet can't lie down: it plays its "failed" row while standing, then carries on. It stays an ordinary ground
+        // A Petdex pet without a lying-down row (no "failed" row, so no Sleep ability) plays its struggling animation while standing, then carries on. It stays an ordinary ground
         // state (not Land) so a window shaken again right away still throws it off, like a Shimeji pet lying down.
         if (_dizzy && _profile.Petdex) { _dizzy = false; State = PetState.Stand; _stateTicks = 50; Vx = Vy = 0; SetAnim(_a.Resist); return; }
         _dizzy = false;
@@ -566,9 +566,16 @@ public sealed class PetBrain
             PetState.Sit => _rng.Next(4) == 0 && Present(_a.SitLookUp) ? _a.SitLookUp : _a.Sit,
             PetState.Lie => _a.Sprawl,
             PetState.Sleep => _a.Sleep,
-            PetState.Stand when _profile.Petdex && _rng.Next(4) == 0 && Present(_a.Waiting) && _a.Waiting[0].Frame != _a.Stand[0].Frame => _a.Waiting,
+            PetState.Stand when _profile.Petdex && _a.Fidgets.Count > 0 && _rng.Next(3) == 0 && PickFidget() is { } fidget => fidget,
             _ => _a.Stand,
         });
+    }
+
+    /// <summary>One of the pack's extra standing animations whose frames all exist, or null.</summary>
+    private Pose[]? PickFidget()
+    {
+        var usable = _a.Fidgets.Where(Present).ToList();
+        return usable.Count == 0 ? null : usable[_rng.Next(usable.Count)];
     }
 
     private void ChooseNext(World world)

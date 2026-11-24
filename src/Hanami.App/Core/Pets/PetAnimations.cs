@@ -43,7 +43,7 @@ public sealed class PetAnimations
 {
     public static readonly string[] Names =
         ["stand", "walk", "run", "sit", "sitLookUp", "sprawl", "sleep", "fall", "bounce", "grabWall", "climbWallUp", "climbWallDown",
-         "grabCeiling", "climbCeiling", "resist", "jump", "sitDangle", "wave", "waiting"];
+         "grabCeiling", "climbCeiling", "resist", "jump", "sitDangle", "wave", "fidget1", "fidget2", "fidget3", "fidget4"];
 
     public static readonly PetAnimations Default = new();
 
@@ -55,8 +55,9 @@ public sealed class PetAnimations
         ["climbWallUp"] = ShimejiFrames.ClimbWallUp, ["climbWallDown"] = ShimejiFrames.ClimbWallDown,
         ["grabCeiling"] = ShimejiFrames.GrabCeiling, ["climbCeiling"] = ShimejiFrames.ClimbCeiling, ["resist"] = ShimejiFrames.Resist,
         ["jump"] = ShimejiFrames.Jump, ["sitDangle"] = ShimejiFrames.SitDangleLegs,
-        // Only Petdex packs have these; for the rest they are the stand pose, so asking for them is always safe.
-        ["wave"] = ShimejiFrames.Stand, ["waiting"] = ShimejiFrames.Stand,
+        // Only Petdex packs and bundles have these; for the rest they are the stand pose, so asking for it is always safe.
+        // (The fidgets are extra things to do while standing; the default table has none, see Fidgets.)
+        ["wave"] = ShimejiFrames.Stand, ["fidget1"] = ShimejiFrames.Stand, ["fidget2"] = ShimejiFrames.Stand, ["fidget3"] = ShimejiFrames.Stand, ["fidget4"] = ShimejiFrames.Stand,
     };
 
     /// <summary>The five dragged frames: far left, left, centre, right, far right (relative to the cursor).</summary>
@@ -84,8 +85,8 @@ public sealed class PetAnimations
     public Pose[] SitDangle => _a["sitDangle"];
     /// <summary>Played on a click or stroke by Petdex pets (the stand pose elsewhere).</summary>
     public Pose[] Wave => _a["wave"];
-    /// <summary>A Petdex pack's waiting row, or the stand pose.</summary>
-    public Pose[] Waiting => _a["waiting"];
+    /// <summary>Extra animations a pet plays now and then while standing (a Petdex pet's running, review and turning rows); empty for Shimeji packs.</summary>
+    public IReadOnlyList<Pose[]> Fidgets { get; private set; } = [];
 
     /// <summary>The swing frame while dragged (same thresholds as Shimeji's Pinched action).</summary>
     public int Pinched(double footX, double cursorX) =>
@@ -138,6 +139,7 @@ public sealed class PetAnimations
             if (!defined.Contains("jump")) result._a["jump"] = result._a["fall"];
             if (!defined.Contains("sitDangle")) result._a["sitDangle"] = result._a["sit"];
         }
+        result.Fidgets = Names.Where(n => n.StartsWith("fidget", StringComparison.Ordinal) && defined.Contains(n)).Select(n => result._a[n]).ToList();
         if (mapping.Swing is { Count: 5 } sw && sw.All(n => n is >= 1 and <= ShimejiFrames.MaxFrameNumber)) result.Swing = sw.ToArray();
         return result;
     }

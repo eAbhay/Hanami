@@ -27,6 +27,8 @@ public sealed class PetPackManifest
     public PetCapabilities? Abilities { get; set; }
     /// <summary>The visible height in image pixels of the stand frame(s), which sizes the pet on screen (<see cref="PetSize"/>); 0 = not measured yet.</summary>
     public int StandHeight { get; set; }
+    /// <summary>For a Petdex pack: which version of <see cref="PetdexLayout"/>'s mapping its animations and abilities come from (0 = before versions existed).</summary>
+    public int MappingVersion { get; set; }
 
     public const string KindShimeji = "shimeji", KindPetdex = "petdex", KindBundle = "bundle";
     [JsonIgnore]
@@ -331,9 +333,30 @@ public sealed class PetLibrary
         try
         {
             var path = Path.Combine(DirOf(id), "manifest.json");
-            return File.Exists(path) ? JsonSerializer.Deserialize<PetPackManifest>(File.ReadAllText(path), Json.Options) : null;
+            var manifest = File.Exists(path) ? JsonSerializer.Deserialize<PetPackManifest>(File.ReadAllText(path), Json.Options) : null;
+            return manifest is { IsPetdex: true } && manifest.MappingVersion < PetdexLayout.MappingVersion ? Upgrade(manifest) : manifest;
         }
         catch (Exception ex) when (ex is JsonException or IOException or ArgumentException) { return null; }
+    }
+
+    /// <summary>
+    /// Gives a Petdex pack stored by an older version the current mapping (rebuilt from the frames it has) and saves it, so
+    /// packs added before a mapping change behave like new ones. Left as it is when it can't be rebuilt.
+    /// </summary>
+    private PetPackManifest Upgrade(PetPackManifest m)
+    {
+        try
+        {
+            var stand = m.Mapping?.Animations?.GetValueOrDefault("stand")?.FirstOrDefault();
+            var built = PetdexLayout.Rebuild(m.Frames, stand?.AnchorX ?? m.FrameWidth / 2, stand?.AnchorY ?? m.FrameHeight);
+            if (built is null) return m;
+            m.Mapping = built.Mapping;
+            m.Abilities = built.Abilities;
+            m.MappingVersion = PetdexLayout.MappingVersion;
+            File.WriteAllText(Path.Combine(DirOf(m.Id), "manifest.json"), JsonSerializer.Serialize(m, Json.FileOptions));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return m;
     }
 
     public IEnumerable<PetPackManifest> Manifests()
@@ -373,6 +396,7 @@ public sealed class PetLibrary
                 Kind = kind, Source = source, Abilities = abilities,
             };
             manifest.StandHeight = PetSize.StandHeight(manifest.Animations(), n => frames.GetValueOrDefault(n));
+            if (kind == PetPackManifest.KindPetdex) manifest.MappingVersion = PetdexLayout.MappingVersion;
             File.WriteAllText(Path.Combine(staging, "manifest.json"), JsonSerializer.Serialize(manifest, Json.FileOptions));
             Directory.Move(staging, dir);
             return manifest;

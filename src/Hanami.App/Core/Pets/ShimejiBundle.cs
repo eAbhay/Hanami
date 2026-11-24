@@ -136,7 +136,7 @@ public static class ShimejiBundle
             ["bounce"] = Play(bounce ?? stand!, null, feetY),
             ["resist"] = Play(drag!, null, feetY),
             ["wave"] = Play(idle ?? stand!, null, feetY),
-            ["waiting"] = Play(idle ?? stand!, null, feetY),
+            ["fidget1"] = Play(idle ?? stand!, null, feetY),
         };
         if (climbL is not null)
         {

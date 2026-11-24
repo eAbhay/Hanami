@@ -27,6 +27,8 @@ public sealed class PetdexTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch { }
     }
 
+    private static readonly (int x, int y) cellFeet = (80, 200);
+
     private static readonly (int row, int col)[] Needed =
         [(0, 0), (0, 1), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2), (4, 0), (4, 1), (4, 2), (4, 3), (4, 4)];
 
@@ -133,7 +135,7 @@ public sealed class PetdexTests : IDisposable
         Assert.True(anims.ClimbWallUp.All(p => p.Vy < 0) && anims.ClimbWallDown.All(p => p.Vy > 0));
         Assert.Equal([33, 34, 35, 36, 37], anims.Fall.Select(p => p.Frame));  // jump = row 4
         Assert.Equal([33, 34, 35, 36, 37], anims.Swing);
-        Assert.Equal([1, 2], anims.Resist.Select(p => p.Frame));              // no failed row: idle stands in
+        Assert.Equal([1, 2], anims.Resist.Select(p => p.Frame));              // no running or wave row: idle stands in
         Assert.Equal(new PetCapabilities(true, false, false, false), built.Abilities);
         Assert.Equal(Needed.Select(c => PetdexLayout.FrameNumber(c.row, c.col)).Order(), built.Frames);
 
@@ -143,14 +145,56 @@ public sealed class PetdexTests : IDisposable
     }
 
     [Fact]
-    public void Build_UsesTheWaveAndWaitingAndFailedRowsWhenTheyHaveFrames()
+    public void Build_SitsOnTheWaitingRow_SleepsOnTheFailedRow_AndWavesOnTheWaveRow()
     {
         var cells = Needed.Concat([(3, 0), (3, 1), (5, 0), (5, 1), (6, 0)]);
         var built = PetdexLayout.Build(PetdexLayout.Analyze(Pixels(9, cells), 1536, 1872, out _)!, out _)!;
         var anims = PetAnimations.FromMapping(built.Mapping, 192, 208);
         Assert.Equal([25, 26], anims.Wave.Select(p => p.Frame));
-        Assert.Equal([41, 42], anims.Resist.Select(p => p.Frame));
-        Assert.Equal([49], anims.Waiting.Select(p => p.Frame));
+        Assert.Equal([49], anims.Sit.Select(p => p.Frame));
+        Assert.Equal([49], anims.SitDangle.Select(p => p.Frame));
+        Assert.Equal([41, 42], anims.Sleep.Select(p => p.Frame));
+        Assert.Equal([41, 42], anims.Sprawl.Select(p => p.Frame));           // the dizzy landing lies down on it too
+        Assert.Equal([25, 26], anims.Resist.Select(p => p.Frame));           // no running row: the wave row stands in
+        Assert.Equal([36, 37], anims.Bounce.Select(p => p.Frame));           // a hard landing: the jump row's last frames
+        Assert.Equal(new PetCapabilities(Climb: true, Ceiling: false, Sit: true, Sleep: true), built.Abilities);
+        Assert.Empty(anims.Fidgets);
+    }
+
+    [Fact]
+    public void Build_TurnsTheRunningReviewAndTurningRowsIntoFidgets()
+    {
+        var cells = Needed.Concat([(7, 0), (7, 1), (8, 0), (9, 0), (10, 0), (10, 1)]);
+        var built = PetdexLayout.Build(PetdexLayout.Analyze(Pixels(11, cells), 1536, 2288, out _)!, out _)!;
+        var anims = PetAnimations.FromMapping(built.Mapping, 192, 208);
+        Assert.Equal([[57, 58], [65], [73], [81, 82]], anims.Fidgets.Select(f => f.Select(p => p.Frame).ToArray()));
+        Assert.Equal([57, 58], anims.Resist.Select(p => p.Frame));
+    }
+
+    [Fact]
+    public void APackStoredBeforeTheMappingChanged_IsRebuiltWhenRead_AndSaved()
+    {
+        var cells = Needed.Concat([(5, 0), (5, 1), (6, 0), (7, 0)]);
+        var pack = Assert.Single(PetPackReader.ImportFolder(_pets, MakeFolder("old", SheetPng(9, cells))).Imported);
+        Assert.Equal(PetdexLayout.MappingVersion, pack.MappingVersion);
+        Assert.Equal(new PetCapabilities(true, false, true, true), _pets.Read(pack.Id)!.Abilities);
+
+        // Make it look like a pack from the first version: no sit, no sleep, no version number.
+        var path = Path.Combine(_pets.DirOf(pack.Id), "manifest.json");
+        var old = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        old["mappingVersion"] = 0;
+        old["abilities"] = System.Text.Json.Nodes.JsonNode.Parse("""{"climb":true,"ceiling":false,"sit":false,"sleep":false}""");
+        File.WriteAllText(path, old.ToJsonString());
+
+        var upgraded = _pets.Read(pack.Id)!;
+        Assert.Equal(PetdexLayout.MappingVersion, upgraded.MappingVersion);
+        Assert.Equal(new PetCapabilities(true, false, true, true), upgraded.Abilities);
+        Assert.Equal([41, 42], upgraded.Animations().Sleep.Select(p => p.Frame));
+        Assert.Single(upgraded.Animations().Fidgets);
+        Assert.Equal((cellFeet.x, cellFeet.y), (upgraded.Animations().Stand[0].AnchorX, upgraded.Animations().Stand[0].AnchorY));   // the feet it had
+
+        // It was saved: a second read does not rebuild again.
+        Assert.Equal(PetdexLayout.MappingVersion, System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!["mappingVersion"]!.GetValue<int>());
     }
 
     [Theory]
