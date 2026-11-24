@@ -374,8 +374,25 @@ public sealed class PetLibrary
         var size = new DirectoryInfo(DirOf(m.Id)).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
         return new PetPackInfo(m.Id, m.Name, $"{Library.Origin}/pets/{m.Id}/img/shime1.png", m.Frames.Count, size,
             m.FrameWidth, m.FrameHeight, caps, m.Kind,
-            m.Source is { } src && src.Site == "petdex" ? (string.IsNullOrWhiteSpace(src.SubmittedBy) ? "Petdex" : $"by {src.SubmittedBy} · Petdex")
-                : m.Kind == PetPackManifest.KindBundle ? "Shimeji bundle" : null);
+            CreditFor(m));
+    }
+
+    /// <summary>"by &lt;name&gt; · Petdex" or "· shimeji.org" for a pack downloaded from one of them, "Shimeji bundle" for a bundle, else null.</summary>
+    private static string? CreditFor(PetPackManifest m)
+    {
+        if (m.Source is { } src && SiteLabels.TryGetValue(src.Site, out var label))
+            return string.IsNullOrWhiteSpace(src.SubmittedBy) ? label : $"by {src.SubmittedBy} · {label}";
+        return m.Kind == PetPackManifest.KindBundle ? "Shimeji bundle" : null;
+    }
+
+    private static readonly Dictionary<string, string> SiteLabels = new() { ["petdex"] = "Petdex", ["shimeji.org"] = "shimeji.org" };
+
+    /// <summary>Records where a pack was downloaded from (so it is credited and the browse window can say "Added").</summary>
+    public PetPackManifest SetSource(PetPackManifest m, PetSource source)
+    {
+        m.Source = source;
+        File.WriteAllText(Path.Combine(DirOf(m.Id), "manifest.json"), JsonSerializer.Serialize(m, Json.FileOptions));
+        return m;
     }
 
     /// <summary>Stores a validated image set as a new pack.</summary>

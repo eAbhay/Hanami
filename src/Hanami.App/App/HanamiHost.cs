@@ -152,6 +152,7 @@ public sealed class HanamiHost
         Log.Info("Quitting");
         _settingsWindow?.Close();
         _browseWindow?.Close();
+        _shimejiWindow?.Close();
         if (_lockSync is not null) await _lockSync.RevertOnExitAsync();   // the lock screen gets its previous picture back
         _pets?.Dispose();
         _theme?.Dispose();
@@ -362,6 +363,10 @@ public sealed class HanamiHost
                 OpenPetdexBrowser();
                 return BuildState();
 
+            case "openShimejiBrowser":
+                OpenShimejiBrowser();
+                return BuildState();
+
             case "importDropped":
                 return await ExclusiveImportAsync(() => ImportDroppedAsync(droppedFiles));
 
@@ -504,7 +509,7 @@ public sealed class HanamiHost
         OnStatusChanged();
     }
 
-    private BrowseWindow? _browseWindow;
+    private BrowseWindow? _browseWindow, _shimejiWindow;
 
     /// <summary>Opens the Petdex browse window (one at a time; a second request brings it to the front).</summary>
     private void OpenPetdexBrowser()
@@ -532,6 +537,49 @@ public sealed class HanamiHost
         _browseWindow.Closed += (_, _) => _browseWindow = null;
         _browseWindow.Show();
         _browseWindow.Activate();
+    }
+
+    /// <summary>Opens the shimeji.org browse window (one at a time; a second request brings it to the front).</summary>
+    private void OpenShimejiBrowser()
+    {
+        if (_shimejiWindow is { } open)
+        {
+            if (open.WindowState == WindowState.Minimized) open.WindowState = WindowState.Normal;
+            open.Activate();
+            return;
+        }
+        var source = new BrowseSource
+        {
+            Title = "shimeji.org",
+            StartUrl = ShimejiOrgSource.StartUrl,
+            ActionLabel = "Get pet",
+            AllowUrl = ShimejiOrgSource.IsAllowedUrl,
+            ItemFromUrl = ShimejiOrgSource.IdFromUrl,
+            IsAdded = id => _petLibrary.Manifests().Any(m => m.Source is { Site: ShimejiOrgSource.Site } s && s.Slug == id),
+            DownloadScript = ShimejiOrgSource.ClickDownloadScript,
+            AllowDownload = ShimejiOrgSource.IsAllowedDownload,
+            MaxDownloadBytes = ShimejiOrgSource.MaxDownloadBytes,
+            ImportDownloadAsync = AddShimejiDownloadAsync,
+        };
+        _shimejiWindow = new BrowseWindow(source, _paths.IsDev);
+        _shimejiWindow.Closed += (_, _) => _shimejiWindow = null;
+        _shimejiWindow.Show();
+        _shimejiWindow.Activate();
+    }
+
+    /// <summary>A zip the shimeji.org page downloaded: imported like a dropped zip (Shimeji-ee sets, bundles), credited to its artist and the site.</summary>
+    private async Task<string> AddShimejiDownloadAsync(string id, string file, IBrowsePage page, IProgress<string> progress)
+    {
+        progress.Report("Adding the pet…");
+        var artist = (await page.ScriptAsync(ShimejiOrgSource.ArtistScript)).Trim();
+        var result = await Task.Run(() => PetPackReader.ImportZip(_petLibrary, file));
+        foreach (var reason in result.Rejected) Log.Warn($"shimeji.org {id}: {reason}");
+        if (result.Imported.Count == 0)
+            throw new InvalidOperationException(result.Rejected.FirstOrDefault() ?? "This download has no pet Hanami can use.");
+        var source = new PetSource { Site = ShimejiOrgSource.Site, Slug = id, SubmittedBy = artist.Length > 0 ? artist : null };
+        foreach (var m in result.Imported) _petLibrary.SetSource(m, source);
+        BroadcastState();
+        return $"Added {string.Join(", ", result.Imported.Select(m => m.Name))}. Find it on the Pets tab.";
     }
 
     /// <summary>The browse window's "Get pet": looks the pet up in Petdex's list, downloads its zip (assets host only, 20 MB at most) and adds it with its credit.</summary>

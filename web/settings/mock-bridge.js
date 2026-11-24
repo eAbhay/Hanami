@@ -336,6 +336,17 @@ export function createMockHost(post) {
       return { imported: [clone(pack)], rejected: [] };
     },
 
+    // The real host opens a window showing shimeji.org; the mock pretends one pet was downloaded (no real art).
+    openShimejiBrowser: async () => {
+      await sleep(300);
+      const n = state.petPacks.length + 1;
+      const preview = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="34" r="22" fill="#c9a6f4"/><circle cx="24" cy="30" r="3"/><circle cx="40" cy="30" r="3"/></svg>`)}`;
+      state.petPacks.push({ id: `pet-mock${n}`, name: `Shimeji pet ${n}`, preview, frames: 46, sizeBytes: 2_100_000, frameWidth: 128, frameHeight: 128,
+        capabilities: { climb: true, ceiling: true, sit: true, sleep: true }, kind: "shimeji", credit: "by someone · shimeji.org" });
+      emitState();
+      return snapshot();
+    },
+
     // The real host opens a window showing petdex.dev; the mock just pretends one pet was fetched (no real Petdex art).
     openPetdexBrowser: async () => {
       await sleep(300);

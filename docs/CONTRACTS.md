@@ -161,6 +161,7 @@ Events: host posts `{event: "<name>", data}`.
 | `setEffectTuning` | `{preset: PresetId, tuning: Partial<EffectTuning> \| null, wallpaperId?: string, target?: "desktop" \| "screensaver"}` — with `wallpaperId` it edits that look's tuning of the preset (`target` `screensaver` while the screensaver effect is "same as desktop" edits the desktop tuning, since they are shared); without it the effect defaults. `tuning: null` resets that level | `State` |
 | `importMedia` | – (host opens a file dialog, multi-select, copies files into the library) | `{imported: WallpaperInfo[]}` or `{cancelled: true}` |
 | `openPetdexBrowser` | – (opens the Petdex browse window, see "Browsing Petdex"; a second call brings the open one to the front) | `State` |
+| `openShimejiBrowser` | – (opens the shimeji.org browse window, see "Browsing shimeji.org"; a second call brings the open one to the front) | `State` |
 | `importDropped` | – plus the dropped files, which are **not** in `params`: the page sends the message with `chrome.webview.postMessageWithAdditionalObjects(msg, files)` and the host reads each `CoreWebView2File.Path` from the message's additional objects, so a page can never name a path itself (an `importDropped` without objects imports nothing). Each item is sorted by `Core/DropClassifier`: a photo or video (`Library.ImageExtensions` / `VideoExtensions`) is copied into the library like `importMedia`; a `.zip` or folder holding a Petdex `pet.json` or Shimeji `shime<N>.png` images goes through the pet import (`importPet`); anything else is rejected with a reason. Refused with an error while another import is running (this, `importMedia` or `importPet`) | `{wallpapers: number, pets: number, rejected: {name: string, reason: string}[]}` |
 | `renameWallpaper` | `{id, name}` | `State` |
 | `deleteWallpaper` | `{id}` (never builtin) | `State` |
@@ -223,11 +224,11 @@ type PetPackInfo = {
 // entry paths are never used). A folder holding several pets (like ~/.codex/pets) imports each. Limits: zip 20 MB, sheet
 // 10 MB, exactly 1536 px wide and 1872 (v1, 9 rows) or 2288 (v2, 11 rows) px tall: 8 columns of 192×208 cells. Each cell
 // with art (≥ 20 pixels above alpha 16) is stored as shime<row*8+col+1>.png, so numbers go up to 88; empty cells are
-// not stored. The pack is `kind: "petdex"` with frames 192×208, `abilities` {climb true; ceiling, sit, sleep false}
+// not stored. The pack is `kind: "petdex"` with frames 192×208, `abilities` {climb true; ceiling false; sit and sleep as above}
 // (used instead of the frame checks) and a generated PetMapping with image-pixel anchors (the feet of the idle frames):
 // stand = idle row 0; walk/run = run-left row 2, each pose with `twin` = the run-right row 1 frame (drawn unflipped when
 // facing right); grabWall = first run-left frame; wall climbing = run left; fall/jump = jump row 4; swing = five of the
-// jump row; bounce/resist = failed row 5 (idle when empty); `wave` = row 3, `waiting` = row 6 (idle when empty).
+// jump row, a hard landing = the jump row's last two frames; `wave` = row 3 (click and stroke); **`sit`/`sitLookUp`/`sitDangle` = the waiting row 6 and `sleep`/`sprawl` (also the dizzy landing) = the failed row 5, with the abilities `sit` and `sleep` true exactly when those rows have frames**; `resist` = the running row 7 (else wave, else idle); the running, review (8) and turning (9, 10) rows are `fidget1`-`fidget4`, extra standing animations a pet plays now and then. `PetPackManifest.mappingVersion` (currently 2) says which version of this table a pack was built with; an older Petdex pack is rebuilt from its frames when it is read, and saved.
 // Required rows: idle, run right, run left, jump; a sheet without one is rejected. `source` ({site, slug,
 // submittedBy}) is set when a pet is downloaded from Petdex and travels in .hanamipack files. Petdex art belongs to its
 // submitters: it is never bundled with Hanami.
@@ -595,6 +596,23 @@ most 20 MB (checked against the header and while streaming); the zip goes to a t
 `source: {site: "petdex", slug, submittedBy}`, and is deleted. The pack is named after Petdex's `displayName` (the slug when empty).
 The window shows the outcome in its status line; the Pets tab refreshes through `stateChanged`. There is no offline mode: without a
 connection the window says so. The Pets tab shows `PetPackInfo.credit` ("by <submittedBy> · Petdex") or "Shimeji".
+
+### Browsing shimeji.org
+
+The Pets tab's "Browse Shimeji" button (left of "Browse Petdex") opens the same `BrowseWindow` on https://shimeji.org/, a
+community library of Shimeji (desktop sets in Shimeji-ee's format and "mobile" bundles). It has the same lock-down as the Petdex
+window (no bridge, no virtual hosts, its own profile, permissions denied, other frames blocked) and navigates only to
+`ShimejiOrgSource.IsAllowedUrl` (https on shimeji.org and its subdomains, and Cloudflare's human check); other links open in the default
+browser. An upload's page is `https://shimeji.org/u/<id>`; there "Get pet" is enabled, and says "Added" once a pack's
+`source.slug` matches. **The site has no download API** (the Download button opens a "Ready to download?" dialog, and the file
+comes from the page's own script), so Get pet works through the page: `BrowseSource.DownloadScript` presses the page's Download
+button and then the dialog's, and the file the page then downloads (or the one the user's own click on the site's button starts)
+is **captured**: saved to a temporary file with no download bubble, https only, at most 40 MB, cancelled if larger. The zip goes
+through the same import as a dropped zip (Shimeji-ee sets with `img/<Name>/shime<N>.png`, and bundles), the artist is read from the
+page ("ARTIST:"), each imported pack gets `source: {site: "shimeji.org", slug: <id>, submittedBy: <artist>}` and shows
+"by <artist> · shimeji.org" on the Pets tab, and the temp file is deleted. If the page doesn't start a download within two
+minutes (for example while it waits for a human check) the window says so. Downloads that aren't on an item page, or that the
+source doesn't take, are cancelled as in the Petdex window.
 
 ### Install registration and uninstall
 

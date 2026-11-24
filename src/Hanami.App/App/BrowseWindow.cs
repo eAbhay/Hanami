@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -27,8 +28,30 @@ public sealed class BrowseSource
     public Func<string, Task<string?>>? ItemFromDownload { get; init; }
     /// <summary>Whether the library already has this item (the button then says "Added").</summary>
     public Func<string, bool>? IsAdded { get; init; }
-    /// <summary>Downloads and adds an item. Reports short progress text; returns the message to show when done; throws a readable error.</summary>
-    public required Func<string, IProgress<string>, Task<string>> GetAsync { get; init; }
+    /// <summary>
+    /// For a site that offers an item through an API: downloads and adds it. Reports short progress text; returns the message
+    /// to show when done; throws a readable error. A source has this <i>or</i> <see cref="DownloadScript"/>.
+    /// </summary>
+    public Func<string, IProgress<string>, Task<string>>? GetAsync { get; init; }
+
+    /// <summary>
+    /// For a site whose own Download button is the only way to a file (it may ask for a human check first): a script that
+    /// presses that button. The file the page then downloads is saved to a temporary file instead of the user's folder, and
+    /// handed to <see cref="ImportDownloadAsync"/>. The same happens when the user presses the site's own button.
+    /// </summary>
+    public string? DownloadScript { get; init; }
+    /// <summary>Whether a download the page starts may be saved (by its address).</summary>
+    public Func<Uri, bool>? AllowDownload { get; init; }
+    public long MaxDownloadBytes { get; init; } = 40L * 1024 * 1024;
+    /// <summary>Adds the downloaded file (item, temporary file, the page, progress); returns the message to show. The file is deleted afterwards.</summary>
+    public Func<string, string, IBrowsePage, IProgress<string>, Task<string>>? ImportDownloadAsync { get; init; }
+}
+
+/// <summary>What a source may ask of the page it is browsing.</summary>
+public interface IBrowsePage
+{
+    /// <summary>Runs a script in the page and returns its result as text (empty when it fails).</summary>
+    Task<string> ScriptAsync(string script);
 }
 
 /// <summary>
@@ -38,7 +61,7 @@ public sealed class BrowseSource
 /// source's hosts; links elsewhere and new windows open in the default browser; the site's own downloads are cancelled
 /// (a download that belongs to an item is handed to the same "get" as the button); and every permission is denied.
 /// </summary>
-public sealed class BrowseWindow : Window
+public sealed class BrowseWindow : Window, IBrowsePage
 {
     private static CoreWebView2Environment? _env;
 
@@ -50,6 +73,8 @@ public sealed class BrowseWindow : Window
     private readonly Button _get = new() { Padding = new Thickness(16, 5, 16, 5), MinWidth = 96, FontWeight = FontWeights.SemiBold, IsEnabled = false };
     private readonly TextBlock _status = new() { Foreground = new SolidColorBrush(Color.FromRgb(0xcf, 0xc8, 0xe0)), Margin = new Thickness(10, 5, 10, 5), TextTrimming = TextTrimming.CharacterEllipsis };
     private bool _busy;
+    /// <summary>Set while the Get button waits for the page to start its download (see <see cref="BrowseSource.DownloadScript"/>).</summary>
+    private TaskCompletionSource<bool>? _downloadWanted;
 
     public BrowseWindow(BrowseSource source, bool dev)
     {
@@ -134,6 +159,7 @@ public sealed class BrowseWindow : Window
         core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
         core.DownloadStarting += (_, e) =>
         {
+            if (_source.ImportDownloadAsync is not null && CaptureDownload(e)) return;
             e.Cancel = true;
             e.Handled = true;
             _ = HandleSiteDownloadAsync(e.DownloadOperation.Uri);
@@ -180,11 +206,107 @@ public sealed class BrowseWindow : Window
         var added = item is not null && _source.IsAdded?.Invoke(item) == true;
         _get.Content = _busy ? "Getting…" : added ? "Added" : _source.ActionLabel;
         _get.IsEnabled = item is not null && !_busy && !added;
+        if (_busy && _capturing) _get.Content = "Getting…";
     }
 
     private async Task GetCurrentAsync()
     {
-        if (CurrentItem() is { } item) await GetAsync(item);
+        if (CurrentItem() is not { } item) return;
+        if (_source.GetAsync is not null) await GetAsync(item);
+        else if (_source.DownloadScript is not null) await RequestPageDownloadAsync();
+    }
+
+    public async Task<string> ScriptAsync(string script)
+    {
+        if (_web.CoreWebView2 is null) return "";
+        try
+        {
+            var json = await _web.CoreWebView2.ExecuteScriptAsync(script);
+            return System.Text.Json.JsonSerializer.Deserialize<string>(json) ?? "";
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException or COMException) { return ""; }
+    }
+
+    /// <summary>The Get button of a site that only has its own Download button: presses it, then waits for the page to start the download.</summary>
+    private async Task RequestPageDownloadAsync()
+    {
+        if (_busy || _source.DownloadScript is null) return;
+        _busy = true;
+        RefreshUi();
+        _status.Text = "Asking the site for the file… If it asks you to verify you're human, do that in the window.";
+        var wanted = _downloadWanted = new TaskCompletionSource<bool>();
+        try
+        {
+            if (await ScriptAsync(_source.DownloadScript) == "no-button")
+            {
+                _status.Text = "This page has no Download button.";
+                return;
+            }
+            // CaptureDownload completes the wait when the page starts a download; the rest of the work follows from there.
+            var started = await Task.WhenAny(wanted.Task, Task.Delay(TimeSpan.FromSeconds(120)));
+            if (started != wanted.Task) _status.Text = "The site didn't start a download. Try its own Download button.";
+        }
+        finally
+        {
+            _downloadWanted = null;
+            if (_status.Text.StartsWith("Asking", StringComparison.Ordinal)) _status.Text = "";
+            _busy = _capturing;
+            RefreshUi();
+        }
+    }
+
+    private bool _capturing;
+
+    /// <summary>
+    /// A download the page starts on an item page (by the Get button or the site's own button): saved to a temporary file, with
+    /// no download UI, and added through <see cref="BrowseSource.ImportDownloadAsync"/>. Returns false to leave it to the
+    /// default handling (cancelled).
+    /// </summary>
+    private bool CaptureDownload(CoreWebView2DownloadStartingEventArgs e)
+    {
+        var op = e.DownloadOperation;
+        if (CurrentItem() is not { } item || _capturing || !Uri.TryCreate(op.Uri, UriKind.Absolute, out var uri) || _source.AllowDownload?.Invoke(uri) != true) return false;
+        var file = Path.Combine(Path.GetTempPath(), $"hanami-download-{Guid.NewGuid():N}.zip");
+        e.ResultFilePath = file;
+        e.Handled = true;   // no download bubble: the file goes to the temporary path above
+        _capturing = true;
+        _busy = true;
+        _downloadWanted?.TrySetResult(true);
+        RefreshUi();
+        _status.Text = "Downloading…";
+
+        void Cleanup() { try { File.Delete(file); } catch { } _capturing = false; _busy = false; RefreshUi(); }
+        op.BytesReceivedChanged += (_, _) =>
+        {
+            long total = op.TotalBytesToReceive is { } t ? (long)t : 0, received = (long)op.BytesReceived;
+            if (received > _source.MaxDownloadBytes || total > _source.MaxDownloadBytes)
+            {
+                op.Cancel();
+                return;
+            }
+            _status.Text = total > 0 ? $"Downloading… {(int)(received * 100 / total)}%" : $"Downloading… {received / 1024} KB";
+        };
+        op.StateChanged += async (_, _) =>
+        {
+            if (op.State == CoreWebView2DownloadState.InProgress) return;
+            if (op.State != CoreWebView2DownloadState.Completed)
+            {
+                _status.Text = (long)op.BytesReceived > _source.MaxDownloadBytes ? $"The download is larger than {_source.MaxDownloadBytes / 1024 / 1024} MB, so it was stopped." : "The download didn't finish. Check your connection and try again.";
+                Cleanup();
+                return;
+            }
+            try
+            {
+                _status.Text = await _source.ImportDownloadAsync!(item, file, this, new Progress<string>(t => _status.Text = t));
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"{_source.Title}: {ex.Message}");
+                _status.Text = ex.Message;
+            }
+            finally { Cleanup(); }
+        };
+        return true;
     }
 
     /// <summary>A download the site started itself: cancelled, and, when it is one of the source's items, taken like the button would.</summary>
@@ -206,7 +328,7 @@ public sealed class BrowseWindow : Window
         _status.Text = "Getting…";
         try
         {
-            _status.Text = await _source.GetAsync(item, new Progress<string>(t => _status.Text = t));
+            _status.Text = await _source.GetAsync!(item, new Progress<string>(t => _status.Text = t));
         }
         catch (Exception ex)
         {
