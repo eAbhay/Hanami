@@ -281,7 +281,8 @@ public static class PetPackReader
         var animations = PetAnimations.FromMapping(mapping, width, height);
         var missing = animations.RequiredFrames.Where(n => !frames.ContainsKey(n)).ToList();
         if (missing.Count > 0)
-            return new($"missing required frame{(missing.Count == 1 ? "" : "s")} {string.Join(", ", missing.Select(n => $"shime{n}"))}", 0, 0);
+            return new($"missing required frame{(missing.Count == 1 ? "" : "s")} {string.Join(", ", missing.Select(n => $"shime{n}"))}"
+                + (missing.Count >= 5 && mapping is null ? " (this pack probably gives its images names like air.png instead of numbering them as shime2.png, which Hanami can't read yet)" : ""), 0, 0);
         return new(null, width, height, animations);
     }
 

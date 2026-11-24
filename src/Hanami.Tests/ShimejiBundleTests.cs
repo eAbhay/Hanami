@@ -142,26 +142,71 @@ public sealed class ShimejiBundleTests : IDisposable
 
     [Theory]
     [InlineData("stand")]
-    [InlineData("fall")]
-    [InlineData("drag")]
-    public void Build_RejectsABundleMissingARequiredAnimation(string missing)
+    [InlineData("walk")]
+    public void Build_RejectsABundleMissingAStandOrWalkAnimation(string missing)
     {
-        var json = missing switch
-        {
-            "drag" => Animation(drag: false),
-            "stand" => Animation().Replace("\"subtype\":\"STAND\"", "\"subtype\":\"NOPE\""),
-            _ => Animation().Replace("\"subtype\":\"FALL\"", "\"subtype\":\"NOPE\""),
-        };
+        var json = missing == "stand"
+            ? Animation().Replace("\"key\":\"stand\"", "\"key\":\"nope\"").Replace("\"subtype\":\"STAND\"", "\"subtype\":\"NOPE\"")
+            : Animation().Replace("\"subtype\":\"WALK\"", "\"subtype\":\"NOPE\"").Replace("\"key\":\"walk_left\"", "\"key\":\"nope1\"").Replace("\"key\":\"walk_right\"", "\"key\":\"nope2\"");
         Assert.Null(ShimejiBundle.Build(json, 13, 32, 56, 0, out var error));
         Assert.Contains($"“{missing}”", error);
     }
 
     [Fact]
+    public void Build_ToleratesAMissingFallOrDragAnimation_PlayingTheStandOneThere()
+    {
+        var noDrag = ShimejiBundle.Build(Animation(drag: false), 13, 32, 56, 0, out var error)!;
+        Assert.Null(error);
+        var a = PetAnimations.FromMapping(noDrag.Mapping, 64, 64);
+        Assert.Equal([1, 1, 1, 1, 1], a.Swing);                           // dragged: the stand sprite
+        Assert.Equal([1], a.Resist.Select(p => p.Frame));
+
+        var noFall = ShimejiBundle.Build(Animation().Replace("\"subtype\":\"FALL\"", "\"subtype\":\"NOPE\"").Replace("\"key\":\"fall\"", "\"key\":\"nope\""), 13, 32, 56, 0, out _)!;
+        Assert.Equal([1], PetAnimations.FromMapping(noFall.Mapping, 64, 64).Fall.Select(p => p.Frame));
+    }
+
+    [Fact]
+    public void Build_ReadsTheConvertedShimejiEeSchema_WithRealSittingAndLyingDown()
+    {
+        // Its animations are keyed climb_wall_left, climb_wall_descend_left, sit, sprawl, jumping, fling ... and some have other subtypes.
+        static string A(string key, string type, string subtype, string direction, params int[] sprites) =>
+            $$$"""{"key":"{{{key}}}","type":"{{{type}}}","subtype":"{{{subtype}}}","direction":"{{{direction}}}","frames":[{{{string.Join(",", sprites.Select(s => $$$"""{"sprite":{{{s}}},"durationTicks":6}"""))}}}]}""";
+        var json = """{"schema_id":"pc_import_v1","animations":[""" + string.Join(",",
+            A("stand", "GROUND", "STAND", "ANY", 0), A("walk_left", "GROUND", "WALK", "LEFT", 1, 2), A("walk_right", "GROUND", "WALK", "RIGHT", 1, 2),
+            A("run_left", "GROUND", "RUN", "LEFT", 3), A("run_right", "GROUND", "RUN", "RIGHT", 4),
+            A("sit", "GROUND", "SIT", "ANY", 5), A("sit_and_look_up", "GROUND", "SITANDLOOKUP", "ANY", 6), A("sit_and_dangle_legs", "GROUND", "SITANDDANGLELEGS", "ANY", 7),
+            A("sprawl", "GROUND", "SPRAWL", "ANY", 8),
+            A("grab_wall_left", "WALL", "GRABWALL", "LEFT", 9), A("climb_wall_left", "WALL", "CLIMBWALL", "LEFT", 9, 10), A("climb_wall_right", "WALL", "CLIMBWALL", "RIGHT", 9, 10),
+            A("climb_wall_descend_left", "WALL", "DESCEND", "LEFT", 11), A("climb_wall_descend_right", "WALL", "DESCEND", "RIGHT", 11),
+            A("grab_ceiling_left", "CEILING", "GRABCEILING", "LEFT", 12), A("climb_ceiling_left", "CEILING", "CLIMBCEILING", "LEFT", 12, 13), A("climb_ceiling_right", "CEILING", "CLIMBCEILING", "RIGHT", 12, 13),
+            A("jumping", "AIR", "JUMPING", "ANY", 14), A("fall", "AIR", "FALLING", "ANY", 15), A("bounce", "GROUND", "BOUNCING", "ANY", 16),
+            A("drag", "USER", "RESISTING", "ANY", 17), A("fling", "USER", "FALLING", "ANY", 18)) + "]}";
+        var built = ShimejiBundle.Build(json, 20, 32, 56, 4, out var error)!;
+        Assert.Null(error);
+        var a = PetAnimations.FromMapping(built.Mapping, 64, 64);
+        Assert.Equal([6], a.Sit.Select(p => p.Frame));
+        Assert.Equal([7], a.SitLookUp.Select(p => p.Frame));
+        Assert.Equal([8], a.SitDangle.Select(p => p.Frame));
+        Assert.Equal([9], a.Sprawl.Select(p => p.Frame));
+        Assert.Equal([9], a.Sleep.Select(p => p.Frame));
+        Assert.Equal([4], a.Run.Select(p => p.Frame));                    // its own run animation, with the right one as the twin
+        Assert.Equal([5], a.Run.Select(p => p.Twin));
+        Assert.Equal([10], a.GrabWall.Select(p => p.Frame));              // its own wall grab
+        Assert.Equal([10, 11], a.ClimbWallUp.Select(p => p.Frame));
+        Assert.Equal([12], a.ClimbWallDown.Select(p => p.Frame));
+        Assert.Equal([13, 14], a.ClimbCeiling.Select(p => p.Frame));
+        Assert.Equal([16], a.Fall.Select(p => p.Frame));                  // "fall" (FALLING) by its key, not the fling
+        Assert.Equal([15], a.Jump.Select(p => p.Frame));
+        Assert.Equal([18, 18, 18, 18, 18], a.Swing);
+        Assert.Equal(new PetCapabilities(Climb: true, Ceiling: true, Sit: true, Sleep: true), built.Abilities);
+    }
+
+    [Fact]
     public void Build_IgnoresFramesPointingOutsideTheSprites_AndBadJson()
     {
-        var json = Animation().Replace("\"sprite\":6", "\"sprite\":99");   // the only drag frame is out of range
+        var json = Animation().Replace("\"sprite\":0", "\"sprite\":99");   // the only stand frame is out of range
         Assert.Null(ShimejiBundle.Build(json, 13, 32, 56, 0, out var error));
-        Assert.Contains("“drag”", error);
+        Assert.Contains("“stand”", error);
         Assert.Null(ShimejiBundle.Build("nope", 13, 32, 56, 0, out error));
         Assert.Contains("isn't valid", error);
     }

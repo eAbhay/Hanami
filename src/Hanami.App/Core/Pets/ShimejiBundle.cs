@@ -11,7 +11,8 @@ namespace Hanami.Core.Pets;
 /// A "Shimeji bundle" (the zips from shimeji.org): <c>manifest.json</c> (name, and where the sprites are: a folder, a file
 /// pattern like <c>%04d.webp</c>, a count and a size), <c>animation.json</c> (named animations made of sprite numbers, with
 /// ticks and a little movement) and the numbered sprites. Hanami reads the animations it plays (stand, walk, wall and
-/// ceiling climbing, fall, drag, bounce, idle) as data; nothing in the bundle is run. Only the sprites those animations
+/// ceiling climbing, fall, drag, bounce, idle, and sitting and lying down where there are any) as data; nothing in the bundle
+/// is run. Only a stand and a walk are required; what is missing plays the stand animation. Only the sprites those animations
 /// use are kept, shrunk to at most <see cref="MaxCell"/> px, stored as frame <c>sprite + 1</c>.
 /// </summary>
 public static class ShimejiBundle
@@ -25,7 +26,7 @@ public static class ShimejiBundle
 
     private sealed class Anim
     {
-        public string Subtype = "", Direction = "ANY";
+        public string Key = "", Subtype = "", Direction = "ANY";
         public List<(int sprite, int ticks)> Frames = new();
     }
 
@@ -49,6 +50,7 @@ public static class ShimejiBundle
                 if (a.ValueKind != JsonValueKind.Object || !a.TryGetProperty("frames", out var frames) || frames.ValueKind != JsonValueKind.Array) continue;
                 var anim = new Anim
                 {
+                    Key = (a.TryGetProperty("key", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() : "")!.ToLowerInvariant(),
                     Subtype = (a.TryGetProperty("subtype", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() : "")!.ToUpperInvariant(),
                     Direction = (a.TryGetProperty("direction", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : "ANY")!.ToUpperInvariant(),
                 };
@@ -92,22 +94,45 @@ public static class ShimejiBundle
         var anims = ParseAnimations(animationJson, spriteCount, out error);
         if (anims is null) return null;
 
-        Anim? Find(string subtype, string direction = "ANY") =>
-            anims.FirstOrDefault(a => a.Subtype == subtype && a.Direction == direction)
-            ?? (direction == "ANY" ? anims.FirstOrDefault(a => a.Subtype == subtype) : null);
+        // Bundles come in more than one schema ("default" names the animations CLIMB, FALL, DRAG; the converted Shimeji-ee sets
+        // use CLIMBWALL, FALLING, RESISTING and also have sitting and lying down), so an animation is found by its key first and
+        // then by any of the subtypes it is known by. Direction: the key's _left/_right suffix, or the animation's direction.
+        Anim? Find(string[] keys, string[] subtypes, string direction = "ANY")
+        {
+            bool Dir(Anim x) => direction == "ANY" || x.Direction == direction;
+            foreach (var key in keys)
+            {
+                var want = direction == "ANY" ? key : $"{key}_{direction.ToLowerInvariant()}";
+                if (anims.FirstOrDefault(x => x.Key == want) is { } byKey) return byKey;
+            }
+            foreach (var sub in subtypes)
+                if (anims.FirstOrDefault(x => x.Subtype == sub && Dir(x)) is { } bySub) return bySub;
+            return null;
+        }
 
-        var stand = Find("STAND"); var fall = Find("FALL"); var drag = Find("DRAG");
-        var walkL = Find("WALK", "LEFT"); var walkR = Find("WALK", "RIGHT");
-        foreach (var (name, anim) in new[] { ("stand", stand), ("walk", walkL ?? walkR), ("fall", fall), ("drag", drag) })
+        var stand = Find(["stand"], ["STAND"]);
+        var walkL = Find(["walk"], ["WALK"], "LEFT"); var walkR = Find(["walk"], ["WALK"], "RIGHT");
+        foreach (var (name, anim) in new[] { ("stand", stand), ("walk", walkL ?? walkR) })
             if (anim is null) { error = $"its animation.json has no “{name}” animation"; return null; }
         // One of the two walks may be missing: the other is then drawn mirrored for its direction.
         var mirrorWalk = walkL is null;
         walkL ??= walkR;
 
-        var bounce = Find("BOUNCE"); var idle = Find("IDLE"); var fling = Find("FLING");
-        var climbL = Find("CLIMB", "LEFT") ?? Find("CLIMB", "RIGHT"); var climbR = Find("CLIMB", "RIGHT");
-        var descendL = Find("DESCEND", "LEFT") ?? Find("DESCEND", "RIGHT"); var descendR = Find("DESCEND", "RIGHT");
-        var hangL = Find("HANG", "LEFT") ?? Find("HANG", "RIGHT"); var hangR = Find("HANG", "RIGHT");
+        // Everything else is optional: a pet without it plays its stand animation there.
+        var fall = Find(["fall"], ["FALL", "FALLING"]); var drag = Find(["drag"], ["DRAG", "RESISTING", "PINCHED"]);
+        var fling = Find(["fling"], ["FLING"]); var jumping = Find(["jumping", "jump"], ["JUMP", "JUMPING"]);
+        var bounce = Find(["bounce"], ["BOUNCE", "BOUNCING"]); var idle = Find(["idle"], ["IDLE"]);
+        var runL = Find(["run"], ["RUN"], "LEFT"); var runR = Find(["run"], ["RUN"], "RIGHT");
+        var climbL = Find(["climb", "climb_wall"], ["CLIMB", "CLIMBWALL"], "LEFT") ?? Find(["climb", "climb_wall"], ["CLIMB", "CLIMBWALL"], "RIGHT");
+        var climbR = Find(["climb", "climb_wall"], ["CLIMB", "CLIMBWALL"], "RIGHT");
+        var descendL = Find(["descend", "climb_wall_descend"], ["DESCEND"], "LEFT") ?? Find(["descend", "climb_wall_descend"], ["DESCEND"], "RIGHT");
+        var descendR = Find(["descend", "climb_wall_descend"], ["DESCEND"], "RIGHT");
+        var grabWallL = Find(["grab_wall"], ["GRABWALL"], "LEFT"); var grabWallR = Find(["grab_wall"], ["GRABWALL"], "RIGHT");
+        var hangL = Find(["climb_ceiling", "hang"], ["HANG", "CLIMBCEILING"], "LEFT") ?? Find(["climb_ceiling", "hang"], ["HANG", "CLIMBCEILING"], "RIGHT");
+        var hangR = Find(["climb_ceiling", "hang"], ["HANG", "CLIMBCEILING"], "RIGHT");
+        var grabCeilL = Find(["grab_ceiling"], ["GRABCEILING"], "LEFT"); var grabCeilR = Find(["grab_ceiling"], ["GRABCEILING"], "RIGHT");
+        var sit = Find(["sit"], ["SIT"]); var sitLook = Find(["sit_and_look_up"], ["SITANDLOOKUP"]);
+        var sitDangle = Find(["sit_and_dangle_legs"], ["SITANDDANGLELEGS"]); var sprawl = Find(["sprawl"], ["SPRAWL"]);
 
         PoseDef Pose(int sprite, int ticks, int anchorY, int vx = 0, int vy = 0, int twin = 0, bool mirror = false) =>
             new() { Frame = sprite + 1, Ticks = ticks, AnchorX = feetX, AnchorY = anchorY, Vx = vx, Vy = vy, Twin = twin, Mirror = mirror };
@@ -130,35 +155,41 @@ public static class ShimejiBundle
         {
             ["stand"] = Play(stand!, null, feetY),
             ["walk"] = Play(walkL!, mirrorWalk ? null : walkR, feetY, vx: -3, mirror: mirrorWalk),
-            ["run"] = Play(walkL!, mirrorWalk ? null : walkR, feetY, vx: -5, tickScale: 0.6, mirror: mirrorWalk),
-            ["fall"] = Play(fall!, null, feetY),
-            ["jump"] = Play(fling ?? fall!, null, feetY),
+            ["run"] = runL is not null
+                ? Play(runL, runR, feetY, vx: -5)
+                : Play(walkL!, mirrorWalk ? null : walkR, feetY, vx: -5, tickScale: 0.6, mirror: mirrorWalk),
+            ["fall"] = Play(fall ?? fling ?? jumping ?? stand!, null, feetY),
+            ["jump"] = Play(jumping ?? fling ?? fall ?? stand!, null, feetY),
             ["bounce"] = Play(bounce ?? stand!, null, feetY),
-            ["resist"] = Play(drag!, null, feetY),
+            ["resist"] = Play(drag ?? stand!, null, feetY),
             ["wave"] = Play(idle ?? stand!, null, feetY),
             ["fidget1"] = Play(idle ?? stand!, null, feetY),
         };
         if (climbL is not null)
         {
-            map["grabWall"] = One(climbL, 250, feetY, climbR);
+            map["grabWall"] = grabWallL is not null ? One(grabWallL, 250, feetY, grabWallR) : One(climbL, 250, feetY, climbR);
             map["climbWallUp"] = Play(climbL, climbR, feetY, vy: -2);
             map["climbWallDown"] = Play(descendL ?? climbL, descendL is not null ? descendR : climbR, feetY, vy: 2);
         }
         if (hangL is not null)
         {
-            map["grabCeiling"] = One(hangL, 250, ceilingY, hangR);
+            map["grabCeiling"] = grabCeilL is not null ? One(grabCeilL, 250, ceilingY, grabCeilR) : One(hangL, 250, ceilingY, hangR);
             map["climbCeiling"] = Play(hangL, hangR, ceilingY, vx: -2);
         }
-        // Sitting, lying and sleeping don't exist in a bundle (see Abilities); they are mapped to frames that do.
-        foreach (var key in new[] { "sit", "sitLookUp", "sprawl", "sleep", "sitDangle" }) map[key] = map["stand"];
+        // Sitting and lying down only where the bundle has them (the converted Shimeji-ee sets do); sleeping lies on the sprawl.
+        map["sit"] = sit is not null ? Play(sit, null, feetY) : map["stand"];
+        map["sitLookUp"] = sitLook is not null ? Play(sitLook, null, feetY) : map["sit"];
+        map["sitDangle"] = sitDangle is not null ? Play(sitDangle, null, feetY) : map["sit"];
+        map["sprawl"] = sprawl is not null ? Play(sprawl, null, feetY) : map["stand"];
+        map["sleep"] = map["sprawl"];
         foreach (var key in new[] { "grabWall", "climbWallUp", "climbWallDown", "grabCeiling", "climbCeiling" })
             if (!map.ContainsKey(key)) map[key] = map["stand"];
 
-        var dragFrame = drag!.Frames[0].sprite;
+        var dragFrame = (drag ?? stand!).Frames[0].sprite;
         var frames = map.Values.SelectMany(p => p).SelectMany(p => p.Twin > 0 ? new[] { p.Frame, p.Twin } : new[] { p.Frame }).Distinct().Order().ToList();
         return new PetdexLayout.Built(frames,
             new PetMapping { Animations = map, Swing = Enumerable.Repeat(dragFrame + 1, 5).ToList(), ImagePixels = true },
-            new PetCapabilities(Climb: climbL is not null, Ceiling: hangL is not null, Sit: false, Sleep: false));
+            new PetCapabilities(Climb: climbL is not null, Ceiling: hangL is not null, Sit: sit is not null, Sleep: sprawl is not null));
     }
 
     // ---- finding bundles ---------------------------------------------------------------------------
@@ -271,6 +302,7 @@ public static class ShimejiBundle
             var root = doc.RootElement;
             if (root.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(n.GetString())) name = n.GetString()!;
             else if (root.TryGetProperty("nameSlug", out var slug) && slug.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(slug.GetString())) name = slug.GetString()!;
+            label = name;   // messages name the pet, not the temporary file it came in
             if (!root.TryGetProperty("sprites", out var sprites) || sprites.ValueKind != JsonValueKind.Object) { result.Rejected.Add($"“{label}”: its manifest has no sprites"); return; }
             basePath = sprites.TryGetProperty("basePath", out var bp) && bp.ValueKind == JsonValueKind.String ? bp.GetString()! : "sprites/";
             pattern = sprites.TryGetProperty("filePattern", out var fp) && fp.ValueKind == JsonValueKind.String ? fp.GetString()! : "%04d.webp";

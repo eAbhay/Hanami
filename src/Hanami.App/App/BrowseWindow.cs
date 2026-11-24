@@ -151,6 +151,7 @@ public sealed class BrowseWindow : Window, IBrowsePage
         core.NavigationStarting += (_, e) =>
         {
             if (IsAllowed(e.Uri, frame: false)) return;
+            Log.Info($"{_source.Title}: not opened here, sent to the default browser: {HostOf(e.Uri)}");
             e.Cancel = true;
             OpenInDefaultBrowser(e.Uri);
         };
@@ -159,6 +160,7 @@ public sealed class BrowseWindow : Window, IBrowsePage
         core.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
         core.DownloadStarting += (_, e) =>
         {
+            Log.Info($"{_source.Title}: the page started a download from {HostOf(e.DownloadOperation.Uri)}");
             if (_source.ImportDownloadAsync is not null && CaptureDownload(e)) return;
             e.Cancel = true;
             e.Handled = true;
@@ -169,7 +171,10 @@ public sealed class BrowseWindow : Window, IBrowsePage
         core.SourceChanged += (_, _) => RefreshUi();
         core.NavigationCompleted += (_, e) =>
         {
-            if (!e.IsSuccess && e.WebErrorStatus is CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.HostNameNotResolved or CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.ConnectionAborted or CoreWebView2WebErrorStatus.Timeout)
+            if (!e.IsSuccess) Log.Info($"{_source.Title}: navigation ended with {e.WebErrorStatus} ({HostOf(core.Source)})");
+            // A navigation that turns into a download ends "aborted"; that is not a lost connection.
+            if (e.IsSuccess && CurrentItem() is null) _lastItem = null;
+            if (!e.IsSuccess && e.WebErrorStatus is CoreWebView2WebErrorStatus.CannotConnect or CoreWebView2WebErrorStatus.HostNameNotResolved or CoreWebView2WebErrorStatus.Disconnected or CoreWebView2WebErrorStatus.Timeout)
                 _status.Text = $"Can't reach {_source.Title}. Check your connection, then press Reload.";
             RefreshUi();
         };
@@ -192,6 +197,8 @@ public sealed class BrowseWindow : Window, IBrowsePage
         catch (Exception ex) { Log.Warn($"Could not open {u.Host} in the default browser: {ex.Message}"); }
     }
 
+    private static string HostOf(string uri) => Uri.TryCreate(uri, UriKind.Absolute, out var u) ? $"{u.Scheme}://{u.Host}{u.AbsolutePath}" : "(unreadable address)";
+
     private string? CurrentItem() => _web.CoreWebView2 is { } core ? _source.ItemFromUrl(core.Source) : null;
 
     private void RefreshUi()
@@ -203,6 +210,7 @@ public sealed class BrowseWindow : Window, IBrowsePage
         _reload.IsEnabled = true;
         _title.Text = string.IsNullOrWhiteSpace(core.DocumentTitle) ? _source.Title : core.DocumentTitle;
         var item = CurrentItem();
+        if (item is not null) _lastItem = item;
         var added = item is not null && _source.IsAdded?.Invoke(item) == true;
         _get.Content = _busy ? "Getting…" : added ? "Added" : _source.ActionLabel;
         _get.IsEnabled = item is not null && !_busy && !added;
@@ -256,6 +264,11 @@ public sealed class BrowseWindow : Window, IBrowsePage
     }
 
     private bool _capturing;
+    /// <summary>
+    /// The last item page shown. When the page's Download button starts a download the window's address already points at the
+    /// download (or the navigation is being turned into one), so the item is the page the user was on.
+    /// </summary>
+    private string? _lastItem;
 
     /// <summary>
     /// A download the page starts on an item page (by the Get button or the site's own button): saved to a temporary file, with
@@ -265,7 +278,7 @@ public sealed class BrowseWindow : Window, IBrowsePage
     private bool CaptureDownload(CoreWebView2DownloadStartingEventArgs e)
     {
         var op = e.DownloadOperation;
-        if (CurrentItem() is not { } item || _capturing || !Uri.TryCreate(op.Uri, UriKind.Absolute, out var uri) || _source.AllowDownload?.Invoke(uri) != true) return false;
+        if ((CurrentItem() ?? _lastItem) is not { } item || _capturing || !Uri.TryCreate(op.Uri, UriKind.Absolute, out var uri) || _source.AllowDownload?.Invoke(uri) != true) return false;
         var file = Path.Combine(Path.GetTempPath(), $"hanami-download-{Guid.NewGuid():N}.zip");
         e.ResultFilePath = file;
         e.Handled = true;   // no download bubble: the file goes to the temporary path above
