@@ -1,5 +1,6 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text.Json.Nodes;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Hanami.Core;
@@ -62,7 +63,7 @@ public sealed class PetPackTests : IDisposable
 
     [Theory]
     [InlineData("flat")]               // the chosen folder holds the images
-    [InlineData("flat/img")]           // Name/img/…
+    [InlineData("flat/img")]           // Name/img/â€¦
     [InlineData("shimeji-ee/img/Yuki")] // shimeji-ee's own layout, the root chosen is shimeji-ee
     public void FolderLayouts_AreFound(string layout)
     {
@@ -135,13 +136,43 @@ public sealed class PetPackTests : IDisposable
     }
 
     [Fact]
-    public void MixedFrameSizes_AreRejected()
+    public void MixedFrameSizes_AreSetOnOneCanvas_BottomCentre()
     {
+        // Real packs often draw a frame a few pixels bigger than the rest; the pack keeps one size, the biggest.
         var folder = MakeSet(Path.Combine(_dir, "src", "Mixed"), AllRequired);
         File.WriteAllBytes(Path.Combine(folder, "shime2.png"), Png(48));
         var result = PetPackReader.ImportFolder(_pets, folder);
-        Assert.Empty(result.Imported);
-        Assert.Contains("same size", Assert.Single(result.Rejected));
+        Assert.Empty(result.Rejected);
+        var pack = Assert.Single(result.Imported);
+        Assert.Equal((48, 48), (pack.FrameWidth, pack.FrameHeight));
+
+        // shime1 was 32Ã—32: now 48Ã—48 with the picture at the bottom, centred (8 px in from each side, 16 px up from the bottom).
+        var bytes = File.ReadAllBytes(_pets.FramePath(pack.Id, 1));
+        Assert.True(PetPackReader.TryDecodeSize(bytes, out var w, out var h));
+        Assert.Equal((48, 48), (w, h));
+        var decoder = new PngBitmapDecoder(new MemoryStream(bytes), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var px = new byte[4];
+        decoder.Frames[0].CopyPixels(new Int32Rect(0, 0, 1, 1), px, 4, 0);
+        Assert.Equal(0, px[3]);          // the new top-left corner is empty
+        decoder.Frames[0].CopyPixels(new Int32Rect(8, 16, 1, 1), px, 4, 0);
+        Assert.Equal(255, px[3]);        // the old top-left corner
+    }
+
+    [Fact]
+    public void PacksOwnAnchors_MoveWithTheirPadding()
+    {
+        var frames = new Dictionary<int, byte[]> { [1] = Png(32), [2] = Png(40) };
+        var mapping = new PetMapping
+        {
+            ImagePixels = true,
+            Animations = new() { ["stand"] = [new PoseDef { Frame = 1, AnchorX = 16, AnchorY = 32 }, new PoseDef { Frame = 2, AnchorX = 20, AnchorY = 40 }] },
+        };
+        var (_, moved, width, height) = PetFrameSizes.Equalize(frames, mapping)!.Value;
+        Assert.Equal((40, 40), (width, height));
+        var stand = moved!.Animations!["stand"];
+        Assert.Equal((20, 40), (stand[0].AnchorX, stand[0].AnchorY));   // 16 + 4 across, 32 + 8 down: still at the feet
+        Assert.Equal((20, 40), (stand[1].AnchorX, stand[1].AnchorY));   // the big frame is untouched
+        Assert.Null(PetFrameSizes.Equalize(new Dictionary<int, byte[]> { [1] = Png(32), [2] = Png(32) }, mapping));   // nothing to do
     }
 
     [Fact]
@@ -277,7 +308,7 @@ public sealed class PetPackTests : IDisposable
     {
         var anims = PetAnimations.FromMapping(PetAnimations.MappingFromActionsXml(CustomActions), 32, 32);
         var caps = anims.CapabilitiesFor(CustomFrames.ToList());
-        Assert.False(caps.Climb);        // default wall frames 12–14 aren't in this pack
+        Assert.False(caps.Climb);        // default wall frames 12â€“14 aren't in this pack
         Assert.False(caps.Sit);          // default sit frame 11 isn't either
         Assert.True(caps.Sleep);         // sprawl is mapped to 30
         Assert.Equal(new PetCapabilities(true, true, true, true), PetAnimations.Default.CapabilitiesFor(Enumerable.Range(1, 46).ToList()));
@@ -292,9 +323,9 @@ public sealed class PetPackTests : IDisposable
 
         var pack = Assert.Single(PetPackReader.ImportFolder(_pets, folder).Imported);
         Assert.Equal([21, 22], pack.Animations().Walk.Select(p => p.Frame));
-        Assert.Equal(new PetCapabilities(false, true, false, true), _pets.Info(pack).Capabilities);   // ceiling: default frames 23–25 happen to exist
+        Assert.Equal(new PetCapabilities(false, true, false, true), _pets.Info(pack).Capabilities);   // ceiling: default frames 23â€“25 happen to exist
 
-        // The same frames without the pack's script would be rejected: the default numbering needs shime1–10.
+        // The same frames without the pack's script would be rejected: the default numbering needs shime1â€“10.
         var bare = MakeSet(Path.Combine(_dir, "src", "Bare"), CustomFrames);
         var result = PetPackReader.ImportFolder(_pets, bare);
         Assert.Empty(result.Imported);

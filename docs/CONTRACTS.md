@@ -551,7 +551,7 @@ at 25 Hz (`ShimejiFrames.TickRate`), and uses the frame table in `ShimejiFrames`
   2 s, then (40 %) both sit for 5 – 15 s, (30 %) one follows the other for up to 15 s keeping a gap of 70 px, or (30 %) they
   walk off in opposite directions. Pets on Stay here or Follow me are not free.
 - **Visibility**: always on top of apps; hidden while a fullscreen app covers their monitor, while the screensaver
-  shows and while Windows is locked; "Hide pets" (tray or pet menu) hides them for the session only. They follow the
+  shows and while Windows is locked; "Hide pets" / "Show pets" (tray or pet menu) only flips the `pets.enabled` setting, the same switch as Show pets on the Pets tab. They follow the
   power rules without the maximized/fullscreen rules: `paused` freezes them on their current frame (and they can't be
   picked up), `reduced` redraws at most every other tick. Pets never multiply; at most 8.
 - A pet is drawn at `pets.scale` × its monitor's DPI scale × a correction for its pack's art (resized explicitly when it

@@ -112,7 +112,7 @@ public sealed class TrayIcon : IDisposable
         finally { Win32.DestroyIcon(handle); }
     }
 
-    /// <summary>"Hide pets / Show pets" (this session only) exists while any pet is set up.</summary>
+    /// <summary>"Hide pets / Show pets" flips the Show pets setting; it exists while any pet is set up.</summary>
     public void UpdatePets(bool any, bool hidden)
     {
         _petsItem.Visible = any;

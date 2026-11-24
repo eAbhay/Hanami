@@ -12,7 +12,7 @@ export function createPetsTab(ctx) {
 
   // ---- behaviour
   const savePets = (patch) => ctx.mutate("updateSettings", { pets: patch }).catch(() => {});
-  const show = featureSwitch(ctx, { settingsKey: "pets", icon: "sparkles", title: "Show pets", sub: "Off hides every pet without removing it. The tray menu can also hide them for this session." });
+  const show = featureSwitch(ctx, { settingsKey: "pets", icon: "sparkles", title: "Show pets", sub: "Off hides every pet without removing it. The tray menu and a pet's right-click menu flip this same switch." });
   const climb = toggle(true, (v) => savePets({ climbWindows: v }), "Climb windows");
   const social = toggle(true, (v) => savePets({ socialize: v }), "Play together");
   const socialRow = h("div", h("div.divider"),

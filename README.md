@@ -54,7 +54,7 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
   legs at a window's edge, hop between windows, get shaken off a window you shake, say hello to each other, and
   like being stroked (rest the cursor on one). Right-click: Stay here / Follow me. They never move or resize your windows, hide while a fullscreen app or the screensaver is up, and freeze
   when the power rules pause Hanami. Size, activity (calm / normal / lively), "climb windows" and "play together" are on the
-  Pets tab, "Hide pets" is in the tray menu. They are carried by exported packs.
+  Pets tab, which also has the Show pets switch; "Hide pets" / "Show pets" in the tray menu and a pet's right-click menu flip that same switch. They are carried by exported packs.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that

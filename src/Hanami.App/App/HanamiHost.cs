@@ -68,7 +68,7 @@ public sealed class HanamiHost
 
         _theme = new ThemeWatch();
         _theme.Changed += () => _ui.BeginInvoke(OnThemeChanged);
-        _tray = new TrayIcon(OpenSettings, () => OpenSettingsTab("general"), InstallUpdateFromTray, () => _ = SetPausedAsync(!_store.Current.Paused), TogglePets, SetThemeMode, Quit);
+        _tray = new TrayIcon(OpenSettings, () => OpenSettingsTab("general"), InstallUpdateFromTray, () => _ = SetPausedAsync(!_store.Current.Paused), () => SetPetsEnabled(!_store.Current.Pets.Enabled), SetThemeMode, Quit);
         _wallpapers = new WallpaperManager(_env, _paths, () => _store.Current, IsDark, _library);
         _wallpapers.StatusChanged += OnStatusChanged;
         await _wallpapers.StartAsync();
@@ -81,7 +81,7 @@ public sealed class HanamiHost
         _ = _lockSync.WarmCurtainAsync();
         _lockSync.RequestRefresh();
         _screensaver.Start();
-        _pets = new PetManager(_petLibrary, () => _store.Current, () => ModeResolver.Resolve(_store.Current, _wallpapers.Power, default, _wallpapers.SessionLocked).Mode, () => OpenSettingsTab("pets"));
+        _pets = new PetManager(_petLibrary, () => _store.Current, () => ModeResolver.Resolve(_store.Current, _wallpapers.Power, default, _wallpapers.SessionLocked).Mode, () => OpenSettingsTab("pets"), () => SetPetsEnabled(false));
         _pets.Changed += OnStatusChanged;
         _pets.Sync();
         _updates = new UpdateService(_paths, _store, _updateFeed);
@@ -108,10 +108,11 @@ public sealed class HanamiHost
         OnStatusChanged();
     }
 
-    private void TogglePets()
+    /// <summary>The tray's and the pet menu's Hide pets / Show pets: nothing but the Show pets setting (the switch on the Pets tab).</summary>
+    private void SetPetsEnabled(bool enabled)
     {
-        _pets.Hidden = !_pets.Hidden;
-        OnStatusChanged();
+        _store.Patch(new JsonObject { ["pets"] = new JsonObject { ["enabled"] = enabled } });
+        _ = AfterSettingsChangedAsync();
     }
 
     private void SetThemeMode(string mode)
@@ -224,7 +225,7 @@ public sealed class HanamiHost
     {
         var (_, reason) = SummaryMode();
         _tray.Update(_store.Current.Paused, reason);
-        _tray.UpdatePets(_pets?.HasPets ?? false, _pets?.Hidden ?? false);
+        _tray.UpdatePets(_pets?.HasPets ?? false, !_store.Current.Pets.Enabled);
         _tray.UpdateTheme(_store.Current.Theme.Split, _store.Current.Theme.Mode);
         BroadcastState();
     }

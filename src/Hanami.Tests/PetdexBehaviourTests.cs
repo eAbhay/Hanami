@@ -172,11 +172,47 @@ public sealed class PetdexBehaviourTests
         for (var i = 0; i < 400; i++)
         {
             pet.Step(world);
-            if (pet.State == PetState.Land && pet.Frame is 41 or 42) sawFailed = true;
+            if (pet.State == PetState.Stand && pet.Frame is 41 or 42) sawFailed = true;
             Assert.DoesNotContain(pet.State, ShimejiOnly);
         }
         Assert.True(sawFailed);
         Assert.Contains(pet.State, new[] { PetState.Stand, PetState.Walk, PetState.Run });
+    }
+
+    [Fact]
+    public void ShakingTheWindowAgainRightAfterALanding_ThrowsThePetAgain_WithoutWaitingForTheFailedRow()
+    {
+        var rect = new PxRect(400, 500, 1000, 900);
+        World At(int dx) => World.Build([Screen], [new WorldWindow(1, rect.Offset(dx, 0))]);
+        var pet = Pet(1);
+        pet.Spawn(700, 100);
+        Run(pet, At(0), 150);
+        Assert.Equal(1, pet.Surface!.Owner);
+
+        // First shake: back and forth at 30 px per tick, until it is thrown.
+        var thrown = false;
+        for (var i = 1; i <= 8 && !thrown; i++)
+        {
+            pet.Step(At(i % 2 == 0 ? 0 : 30));
+            thrown = pet.State == PetState.Thrown;
+        }
+        Assert.True(thrown);
+
+        // It lands again (on the window or below it) and plays the failed row.
+        var world = At(0);
+        for (var i = 0; i < 400 && pet.State is PetState.Thrown or PetState.Fall or PetState.Land; i++) pet.Step(world);
+        Assert.Equal(PetState.Stand, pet.State);
+        Assert.Contains(pet.Frame, new[] { 41, 42 });
+        if (pet.Surface is not { Owner: 1 }) return;   // it fell to the floor: nothing left to shake
+
+        // Second shake straight away: thrown again within a few ticks, not after the failed row has finished.
+        thrown = false;
+        for (var i = 1; i <= 8 && !thrown; i++)
+        {
+            pet.Step(At(i % 2 == 0 ? 0 : 30));
+            thrown = pet.State == PetState.Thrown;
+        }
+        Assert.True(thrown);
     }
 
     [Fact]

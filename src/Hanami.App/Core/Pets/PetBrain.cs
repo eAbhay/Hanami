@@ -480,8 +480,9 @@ public sealed class PetBrain
         Attach(floor, world);
         Vx = Vy = 0;
         if (_dizzy && _profile.Caps.Sleep) { _dizzy = false; Enter(PetState.Lie, 75 + _rng.Next(75)); return; }
-        // A Petdex pet can't lie down: it plays its "failed" row, then stands.
-        if (_dizzy && _profile.Petdex) { _dizzy = false; State = PetState.Land; _stateTicks = 50; Vx = Vy = 0; SetAnim(_a.Resist); return; }
+        // A Petdex pet can't lie down: it plays its "failed" row while standing, then carries on. It stays an ordinary ground
+        // state (not Land) so a window shaken again right away still throws it off, like a Shimeji pet lying down.
+        if (_dizzy && _profile.Petdex) { _dizzy = false; State = PetState.Stand; _stateTicks = 50; Vx = Vy = 0; SetAnim(_a.Resist); return; }
         _dizzy = false;
         if (hard && Present(_a.Bounce)) { State = PetState.Land; _stateTicks = 8; SetAnim(_a.Bounce); }
         else Enter(PetState.Stand, 25 + _rng.Next(75));

@@ -81,6 +81,8 @@ public sealed class PetManager : IDisposable
     private readonly Func<AppSettings> _settings;
     private readonly Func<Mode> _mode;
     private readonly Action _openPetSettings;
+    /// <summary>The pet menu's "Hide pets": the host turns the Show pets setting off (the one switch, also on the Pets tab and in the tray).</summary>
+    private readonly Action _hidePets;
     private readonly Dictionary<string, Pet> _pets = new();
     private readonly Dictionary<string, PetFrames?> _frames = new();
     private readonly DispatcherTimer _timer;
@@ -95,24 +97,18 @@ public sealed class PetManager : IDisposable
     private WindowChangeWatch? _watch;
     private HashSet<IntPtr> _fullscreen = new();
     private bool _windowTerrain;
-    private bool _screensaverShowing, _locked, _hidden;
+    private bool _screensaverShowing, _locked;
 
-    public PetManager(PetLibrary library, Func<AppSettings> settings, Func<Mode> mode, Action openPetSettings)
+    public PetManager(PetLibrary library, Func<AppSettings> settings, Func<Mode> mode, Action openPetSettings, Action hidePets)
     {
         _library = library;
         _settings = settings;
         _mode = mode;
         _openPetSettings = openPetSettings;
+        _hidePets = hidePets;
         _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(30) };
         _timer.Tick += (_, _) => Tick();
         RefreshMonitors();
-    }
-
-    /// <summary>Hidden for this session only (tray menu, pet menu); not saved.</summary>
-    public bool Hidden
-    {
-        get => _hidden;
-        set { _hidden = value; Apply(); }
     }
 
     public bool ScreensaverShowing { set { _screensaverShowing = value; Apply(); } }
@@ -120,7 +116,7 @@ public sealed class PetManager : IDisposable
     public bool HasPets => _pets.Count > 0;
     public event Action? Changed;
 
-    private bool ShouldShow => _settings().Pets.Enabled && !_hidden && !_screensaverShowing && !_locked && _pets.Count > 0;
+    private bool ShouldShow => _settings().Pets.Enabled && !_screensaverShowing && !_locked && _pets.Count > 0;
 
     // ---- keeping up with the settings ------------------------------------------------------------
 
@@ -210,7 +206,7 @@ public sealed class PetManager : IDisposable
     {
         var show = ShouldShow;
         if (show != _timer.IsEnabled)
-            Log.Info(show ? $"Pets: showing {_pets.Count}" : $"Pets: hidden (enabled {_settings().Pets.Enabled}, session-hidden {_hidden}, screensaver {_screensaverShowing}, locked {_locked}, pets {_pets.Count})");
+            Log.Info(show ? $"Pets: showing {_pets.Count}" : $"Pets: hidden (enabled {_settings().Pets.Enabled}, screensaver {_screensaverShowing}, locked {_locked}, pets {_pets.Count})");
         if (show && !_timer.IsEnabled)
         {
             _lastMs = _clock.ElapsedMilliseconds;
@@ -432,7 +428,7 @@ public sealed class PetManager : IDisposable
             pet.Brain.SetFollowCursor(pet.Follow);
         };
         var hide = new MenuItem { Header = "Hide pets" };
-        hide.Click += (_, _) => Hidden = true;
+        hide.Click += (_, _) => _hidePets();
         var settings = new MenuItem { Header = "Pet settings" };
         settings.Click += (_, _) => _openPetSettings();
         menu.Items.Add(sit);

@@ -239,8 +239,10 @@ public static class PetPackReader
 
     private static void Adopt(PetLibrary library, List<Candidate> found, PetImportResult result)
     {
-        foreach (var c in found)
+        foreach (var candidate in found)
         {
+            var c = candidate;
+            if (PetFrameSizes.Equalize(c.Frames, c.Mapping) is { } equal) c = c with { Frames = equal.Frames, Mapping = equal.Mapping };
             var check = Validate(c.Frames, c.Mapping);
             if (check.Error is { } error) { result.Rejected.Add($"“{c.Name}”: {error}"); continue; }
             result.Imported.Add(library.Add(c.Name, c.Frames, check.Width, check.Height, c.Mapping));
