@@ -190,12 +190,23 @@ Notes: 558 tests (the bundle tests reworked for the new lookup and the converted
 
 ### Phase P6 — Docs, real checks, release `0.2.0`
 
-- [ ] P6.1 **README:** pets section rewritten (browsing Petdex, Shimeji import, drag and drop, what Petdex pets can and can't do, credit to submitters). Retake `docs/img/settings.jpg` on the mock bridge (moved from A4.3): built-in scenes, procedural samples and the mock's fake pets only. CONTRACTS checked end to end.
-- [ ] P6.2 **The user's checks:** add three or four anime pets with "Get pet", drop a few files of each kind, import a real Shimeji pack (this was A1.2), and on the second laptop move pets across monitors.
-- [ ] P6.3 `<Version>` 0.2.0 and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
+- [x] P6.1 **README:** pets section rewritten (browsing Petdex, Shimeji import, drag and drop, what Petdex pets can and can't do, credit to submitters). Retake `docs/img/settings.jpg` on the mock bridge (moved from A4.3): built-in scenes, procedural samples and the mock's fake pets only. CONTRACTS checked end to end.
+- [~] P6.2 **The user's checks:** add three or four anime pets with "Get pet", drop a few files of each kind, import a real Shimeji pack (this was A1.2), and on the second laptop move pets across monitors.
+- [x] P6.3 `<Version>` 0.2.0 and `CHANGELOG.md`. Commit. With the user's yes: merge to `main`, push.
 - [ ] P6.4 **With the user's yes for this tag:** tag `v0.2.0`, push it, watch the run, check the download. Every 0.1.x copy on Stable is offered it, so update one of the user's copies from the tray and confirm settings, library and pets are kept.
 
-Notes:
+Notes: P6.1 and P6.3 done on 25 Nov 2026 (README pets section rewritten, `docs/img/settings.jpg` retaken on the mock bridge with built-in scenes only, THIRD-PARTY-NOTICES gets Petdex and shimeji.org, version 0.2.0, CHANGELOG with known gaps and credits). The user agreed to release with the second-laptop checks still open.
+
+**Still to test on the second laptop (the user's record, not done for 0.2.0):**
+- Move pets across monitors, including monitors with different scaling, with Petdex, bundle and Shimeji pets, and check the Size slider and the pets' height on each.
+- Wallpaper off on two monitors (Windows' wallpaper on both, no leftover WebView2), a monitor replug not bringing it back, pets still freezing on battery with the wallpaper off.
+- The screensaver's "Same as desktop" with the wallpaper off; the real desktop picture with the wallpaper off.
+- A 100% display (the dev laptop is 125%): pet heights and the Size slider.
+- Pets with real Petdex art: sleeping, sitting and the fidgets (only synthetic sheets and one real walk check so far), and climbing, ceiling hanging, drag and throw with bundle pets.
+- Browse pets with no network (the window should say it can't reach the site), and the sites' sign-in pages (never tried).
+- A real Shimeji pack through drag and drop; updating a copy from the tray from 0.1.x to 0.2.0 and checking settings, library and pets survive (P6.4).
+
+
 
 ## Round 10 — settings tabs reorganised
 

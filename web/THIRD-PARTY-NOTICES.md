@@ -5,6 +5,13 @@ built into `Hanami.exe` and shown in Settings → General → Open-source notice
 
 Wallpapers and pet packs you import are not part of Hanami and keep their authors' licences.
 
+## Petdex and shimeji.org (pets you choose to download)
+
+Hanami can open [petdex.dev](https://petdex.dev) and [shimeji.org](https://shimeji.org) in its Browse pets window and, when you press Get pet or
+the site's own Download button, add a pet from them to your library. Nothing from either site is bundled in `Hanami.exe`. Petdex's own
+code is MIT licensed ([github.com/crafter-station/petdex](https://github.com/crafter-station/petdex)); the pets on both sites belong to the people who made and
+uploaded them, and a pet's page or pack says what you may do with it. Hanami keeps the artist's name with the pack and shows it on the Pets tab.
+
 ## Tilt Warp (clock font)
 
 Bundled as `web/wallpaper/fonts/TiltWarp.ttf`, the default screensaver clock font.

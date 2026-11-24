@@ -4,6 +4,30 @@ One section per version, newest first. The section for a version is used as that
 for people using Hanami, not for developers. The heading is just the version number (`## 0.1.0`, `## 0.2.0-beta.1`), and a tag
 without a matching section stops the release. Versions with a `-` (release candidates, betas) are prereleases.
 
+## 0.2.0
+
+**Pets get a lot bigger: browse and add them from Petdex and shimeji.org without leaving Hanami.**
+
+- **Browse pets:** a new button on the Pets tab opens one window with two tabs, **Petdex** and **shimeji.org**, showing the real websites. On a pet's page, **Get pet** adds it to your library; the sites' own Download buttons (on a pet's page or on a list card) add it too instead of saving a file. The shimeji.org tab hides the sets made for phones. Each pet keeps its artist's name, shown on the Pets tab as "by <artist> · Petdex" or "· shimeji.org". Browsing happens in a locked-down window that can't see your settings or library.
+- **Petdex pets:** import a Petdex zip or folder (or get it with Browse). They run both ways with real right-facing frames, climb window sides, jump, fall and wave when you click them. Their "waiting" row is used for sitting, the "failed" row for sleeping and lying down, and the running, review and turning rows give them things to do while standing.
+- **shimeji.org bundles** (the zips with `manifest.json` and `animation.json`, made for computers or phones) import too, with real left and right walking, wall and ceiling climbing, sitting and lying down where the bundle has them.
+- **Shimeji packs import more often:** a pack whose frames differ a few pixels in size is now accepted.
+- **Drag and drop:** drop photos, videos, pet zips or folders anywhere on the settings window and Hanami sorts them: wallpapers go to the library, pets to the Pets tab. Only one import runs at a time.
+- **Pets are one size:** every pet now stands about the same height whatever the size of its art, and the Size slider scales them all. Packs with big art are smaller than before.
+- **Hide pets works properly:** "Hide pets" in the tray menu or a pet's right-click menu now simply flips the Show pets switch, so you can always bring them back from the Pets tab or the tray.
+- **Shaking a window:** a Petdex pet shaken off a window can be shaken off again straight away.
+- **Tidier Pets tab:** the header has a Browse pets button and one Import button (from a zip or from a folder), like the Wallpaper tab.
+
+**Known gaps:**
+
+- A few Shimeji-ee packs that name their images (`air.png`, `bounce01.png`) instead of numbering them (`shime2.png`) can't be read yet; Hanami says so when you try. Roughly 2 of 14 shimeji.org uploads we tried.
+- Pets added from a shimeji.org list card have no artist name (the list doesn't show it); the ones added from a pet's page do.
+- Importing a large bundle can take several seconds with no progress shown.
+- If a site asks you to prove you're human before a download, do that in the window; Get pet waits for it.
+- The sign-in pages of Petdex and shimeji.org aren't needed and haven't been tried.
+
+**Credits:** the pets come from the Petdex and shimeji.org communities and from the original Shimeji-ee, and belong to their artists. Hanami never bundles them. See the README and Settings → General → Open-source notices.
+
 ## 0.1.3
 
 - **A switch at the top of each feature tab:** the Wallpaper, Screensaver and Pets tabs each open with an on/off row. The screensaver's switch moved there from Power, and **Show pets** moved up from Behaviour.

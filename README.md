@@ -42,19 +42,26 @@ install, copies itself there and lives in the tray. See [Install](#install) for 
   (every monitor's desktop, and the screensaver background) can hold a light and a dark wallpaper.
   Hanami switches with Windows' light/dark setting, or you force Light or Dark from Power or the
   tray's Theme menu. Each wallpaper keeps its own look, so only the wallpaper changes.
-- **Desktop pets (Shimeji packs).** Import Shimeji image sets (`shime1.png … shime46.png`, from a
-  folder or `.zip`; also shimeji.org bundles with `manifest.json` and `animation.json`, and Petdex pets) on the Pets tab, or pick them on Petdex or shimeji.org with Browse pets, and put up to 8 on the desktop. Pet packs are not included; find
-  one by searching for "<character> shimeji" and check its licence, which belongs to its author.
-  Hanami uses the packs' images only, with its own behaviour logic (frame meanings come from the pack's own
-  `conf/actions.xml` or a `hanami-pet.json` next to the images, else Shimeji-ee's default numbering): pets walk along the taskbar and the
-  tops of your windows, climb window sides and screen edges, hang from the top of the screen, sit, nap,
-  fall when a window moves away (with a startled hop), come over to your cursor now and then, and can be
-  picked up and thrown or set down: let go gently on a window's title bar, the taskbar, a screen edge or the top
-  of the screen and they sit or hang there for a while. They hop up to windows that block their way, dangle their
-  legs at a window's edge, hop between windows, get shaken off a window you shake, say hello to each other, and
-  like being stroked (rest the cursor on one). Right-click: Stay here / Follow me. They never move or resize your windows, hide while a fullscreen app or the screensaver is up, and freeze
-  when the power rules pause Hanami. Size, activity (calm / normal / lively), "climb windows" and "play together" are on the
-  Pets tab, which also has the Show pets switch; "Hide pets" / "Show pets" in the tray menu and a pet's right-click menu flip that same switch. They are carried by exported packs.
+- **Desktop pets.** Little companions that walk along the taskbar and the tops of your windows, up to 8 at a time. On the Pets tab:
+  - **Browse pets** opens Petdex and shimeji.org inside Hanami (two tabs), and **Get pet** on a pet's page adds it to your library, credited to
+    its artist. You can also press the site's own Download button, on a pet's page or on a list card. The shimeji.org tab hides the sets made for phones.
+  - **Import** takes a `.zip` or a folder, and you can also **drop** photos, videos, pet zips and folders anywhere on the settings window: Hanami sorts them itself.
+  - Formats: **Petdex** pets (a `pet.json` and a sprite sheet), **shimeji.org** bundles (`manifest.json`, `animation.json` and numbered sprites, for computers or phones),
+    and classic **Shimeji-ee** image sets (`shime1.png … shime46.png`, even when a pack's frames differ a little in size). Frame meanings come from the pack's own
+    `conf/actions.xml` or a `hanami-pet.json` next to the images, else Shimeji-ee's default numbering. A few Shimeji-ee packs that name their images
+    (`air.png`, `bounce01.png`) instead of numbering them can't be read yet.
+  - **Pet art is not included.** Every pet belongs to its artist and keeps their licence, so check it before sharing a pack. Hanami shows the credit
+    ("by <artist> · Petdex" or "· shimeji.org") on the Pets tab and carries it in exported packs.
+  - Every pet is drawn about the same height, whatever the size of its art; the Size slider scales them all (50% to 200%).
+- **What pets do.** They climb window sides and screen edges, fall when a window moves away (with a startled hop), come over to your cursor now and then, and can be
+  picked up and thrown or set down: let go gently on a window's title bar, the taskbar, a screen edge or the top of the screen and they sit or hang there for a while.
+  They hop up to windows that block their way, get shaken off a window you shake, say hello to each other, and like being stroked (rest the cursor on one) or clicked.
+  Right-click: Sit / Sleep / Stay here / Follow me / Hide pets. They never move or resize your windows, hide while a fullscreen app or the screensaver is up, and freeze
+  when the power rules pause Hanami. Size, activity (calm / normal / lively), "climb windows" and "play together" are on the Pets tab, which also has the Show pets
+  switch; "Hide pets" / "Show pets" in the tray menu and a pet's right-click menu flip that same switch.
+  - **Petdex pets** run, climb (on their running frames, upright), jump and fall; they wave when clicked, sit on their "waiting" row, sleep and lie down on their
+    "failed" row, and now and then do something from their running, review and turning rows. They never hang from a ceiling, and a pet whose sheet lacks the sitting
+    or sleeping row simply doesn't sit or sleep. Shimeji-ee sets and bundles do whatever their frames allow, ceilings included.
 - **Battery-aware.** Each condition (plugged in, on battery, low battery, Energy Saver, a
   maximized window, a fullscreen app) can be set to run *Full*, *Reduced* (video frozen,
   effects at 30 fps) or *Paused*. By default it pauses on battery, and you can override that
@@ -208,5 +215,8 @@ Hanami is released under the [MIT licence](LICENSE).
 - The bundled clock font [Tilt Warp](https://github.com/googlefonts/Tilt-Fonts) is under the SIL Open Font License (`web/wallpaper/fonts/OFL.txt`).
 - Licences and credits for everything else Hanami includes (.NET, WebView2, Shimeji-ee's frame timings) are in
   [THIRD-PARTY-NOTICES.md](web/THIRD-PARTY-NOTICES.md), which is also built into the exe and shown in Settings → General.
-- Pet packs and wallpapers you import are not part of Hanami: they keep their authors' licences, so check the terms of each pack before sharing it.
+- Pet packs and wallpapers you import or download are not part of Hanami: they keep their authors' licences, so check the terms of each pack before sharing it.
+  Hanami only downloads a pet when you press Get pet or a site's own Download button.
+- **Credits:** pets come from the community on [Petdex](https://petdex.dev) (its code is MIT, [github.com/crafter-station/petdex](https://github.com/crafter-station/petdex)) and
+  [shimeji.org](https://shimeji.org), and from the original [Shimeji-ee](https://github.com/chaoskagami/shimeji-ee). Thank you to everyone who draws, packs and shares them.
 - Hanami reads Shimeji image sets but contains no code from Shimeji-ee; its frame table is a record of that project's default frame numbering.
