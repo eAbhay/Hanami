@@ -197,7 +197,7 @@ Notes: 558 tests (the bundle tests reworked for the new lookup and the converted
 
 Notes: P6.1 and P6.3 done on 25 Nov 2026 (README pets section rewritten, `docs/img/settings.jpg` retaken on the mock bridge with built-in scenes only, THIRD-PARTY-NOTICES gets Petdex and shimeji.org, version 0.2.0, CHANGELOG with known gaps and credits). The user agreed to release with the second-laptop checks still open.
 
-**Released 25 Nov 2026:** merged `round-12` into `main`, tag `v0.2.0`, run succeeded, the download matches its `.sha256` and reads `0.2.0+3b8add6` (78.9 MB). Updating a real copy from the tray (P6.4) is the user's step.
+**Released 25 Nov 2026:** merged `round-12` into `main`, tag `v0.2.0`, run succeeded, the download matches its `.sha256` and reads `0.2.0+3b8add6` (78.9 MB). Updating a real copy from the tray (P6.4) is the user's step. **Trap for that test:** the user's installed copy is `9.9.9-rc-1` (the round 8 rehearsal version), which is newer than any real release, so it correctly reports "latest". Test with the `v0.1.3` release exe (or any exe older than 0.2.0) instead.
 
 **Still to test on the second laptop (the user's record, not done for 0.2.0):**
 - Move pets across monitors, including monitors with different scaling, with Petdex, bundle and Shimeji pets, and check the Size slider and the pets' height on each.
