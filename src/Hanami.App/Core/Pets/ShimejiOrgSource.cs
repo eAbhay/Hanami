@@ -43,13 +43,33 @@ public static class ShimejiOrgSource
 
     /// <summary>
     /// The script that presses the page's own Download button (it returns "clicked", or "no-button"). The site then asks
-    /// "Ready to download?" in a dialog with a second Download button, which is pressed too (once, within about 3 seconds),
-    /// so one click on Get pet is enough. The dialog's button is the last Download button on the page.
+    /// "Ready to download?" in a dialog with one more Download button; the script waits for it (up to 15 seconds) and presses it
+    /// once, so one click on Get pet is enough. The dialog's button is the one that appears after the click, the last on the page.
     /// </summary>
     public const string ClickDownloadScript =
         "(() => { const isDownload = x => /^\\s*download\\s*$/i.test(x.textContent); const all = () => [...document.querySelectorAll('button')].filter(isDownload); " +
-        "const first = all()[0]; if (!first) return 'no-button'; first.click(); let confirmed = false; " +
-        "for (const ms of [500, 1200, 2500]) setTimeout(() => { const buttons = all(); if (!confirmed && buttons.length > 1) { confirmed = true; buttons[buttons.length - 1].click(); } }, ms); return 'clicked'; })()";
+        "const before = all(); if (before.length === 0) return 'no-button'; before[0].click(); let tries = 0; " +
+        "const timer = setInterval(() => { const now = all(); if (now.length > before.length) { clearInterval(timer); now[now.length - 1].click(); } else if (++tries > 50) clearInterval(timer); }, 300); " +
+        "return 'clicked'; })()";
+
+    /// <summary>
+    /// Runs in every page of the site: hides the listing's "Mobile shimeji" cards (the site marks each card with an icon titled
+    /// "Desktop shimeji" or "Mobile shimeji"), so only the sets made for computers are shown. It keeps hiding cards the page adds
+    /// later (more results, another sort).
+    /// </summary>
+    public const string ListingFilterScript =
+        "(() => { const hide = () => document.querySelectorAll('.card').forEach(c => { if (c.querySelector('.bundle-icon[title=\"Mobile shimeji\"]')) c.style.display = 'none'; }); " +
+        "new MutationObserver(hide).observe(document, { childList: true, subtree: true }); document.addEventListener('DOMContentLoaded', hide); hide(); })();";
+
+    private static readonly Regex DownloadPath = new(@"^/d/([a-z0-9]{4,24})\.zip$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    /// <summary>The upload a download address belongs to (<c>https://shimeji.org/d/&lt;id&gt;.zip</c>), so a Download button on a listing card works as well as the one on an upload's page.</summary>
+    public static string? IdFromDownloadUrl(Uri? uri)
+    {
+        if (uri is not { Scheme: "https" } || !(uri.Host.Equals("shimeji.org", StringComparison.OrdinalIgnoreCase) || uri.Host.Equals("www.shimeji.org", StringComparison.OrdinalIgnoreCase))) return null;
+        var m = DownloadPath.Match(uri.AbsolutePath);
+        return m.Success ? m.Groups[1].Value.ToLowerInvariant() : null;
+    }
 
     /// <summary>The script that reads the artist's name from an upload's page ("ARTIST:" followed by the name), or "".</summary>
     public const string ArtistScript =

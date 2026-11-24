@@ -42,6 +42,10 @@ public sealed class BrowseSource
     public string? DownloadScript { get; init; }
     /// <summary>Whether a download the page starts may be saved (by its address).</summary>
     public Func<Uri, bool>? AllowDownload { get; init; }
+    /// <summary>The item a download address belongs to, when it says so (so a Download button on a listing works too, not only the one on an item page); otherwise the item page the user is on.</summary>
+    public Func<Uri, string?>? ItemFromDownloadUrl { get; init; }
+    /// <summary>A script that runs in every page of the site before it loads (for example to hide what the window doesn't take).</summary>
+    public string? PageScript { get; init; }
     public long MaxDownloadBytes { get; init; } = 40L * 1024 * 1024;
     /// <summary>Adds the downloaded file (item, temporary file, the page, progress); returns the message to show. The file is deleted afterwards.</summary>
     public Func<string, string, IBrowsePage, IProgress<string>, Task<string>>? ImportDownloadAsync { get; init; }
@@ -134,6 +138,7 @@ public sealed class BrowseView : DockPanel, IBrowsePage
         }
 
         var core = _web.CoreWebView2;
+        if (_source.PageScript is { } pageScript) await core.AddScriptToExecuteOnDocumentCreatedAsync(pageScript);
         // No ConfigureCore, no WebMessageReceived, no virtual hosts: this page gets nothing of Hanami's.
         var s = core.Settings;
         s.IsWebMessageEnabled = false;
@@ -273,7 +278,14 @@ public sealed class BrowseView : DockPanel, IBrowsePage
     private bool CaptureDownload(CoreWebView2DownloadStartingEventArgs e)
     {
         var op = e.DownloadOperation;
-        if ((CurrentItem() ?? _lastItem) is not { } item || _capturing || !Uri.TryCreate(op.Uri, UriKind.Absolute, out var uri) || _source.AllowDownload?.Invoke(uri) != true) return false;
+        if (_capturing || !Uri.TryCreate(op.Uri, UriKind.Absolute, out var uri) || _source.AllowDownload?.Invoke(uri) != true) return false;
+        // The download's own address says which item it is, else the item page the user is on.
+        if ((_source.ItemFromDownloadUrl?.Invoke(uri) ?? CurrentItem() ?? _lastItem) is not { } item)
+        {
+            Log.Info($"{_source.Title}: a download that belongs to no item was not taken");
+            _status.Text = "That download isn't one of this site's pets, so it was not taken.";
+            return false;
+        }
         var file = Path.Combine(Path.GetTempPath(), $"hanami-download-{Guid.NewGuid():N}.zip");
         e.ResultFilePath = file;
         e.Handled = true;   // no download bubble: the file goes to the temporary path above

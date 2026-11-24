@@ -55,6 +55,28 @@ public sealed class ShimejiOrgSourceTests : IDisposable
     [InlineData("file:///C:/x.zip", false)]
     public void IsAllowedDownload_IsHttpsOnly(string url, bool allowed) => Assert.Equal(allowed, ShimejiOrgSource.IsAllowedDownload(new Uri(url)));
 
+    [Theory]
+    [InlineData("https://shimeji.org/d/a70vf3js.zip", "a70vf3js")]
+    [InlineData("https://www.shimeji.org/d/8TGWBBOK.zip", "8tgwbbok")]
+    public void IdFromDownloadUrl_ReadsTheUploadFromADownloadAddress(string url, string id) => Assert.Equal(id, ShimejiOrgSource.IdFromDownloadUrl(new Uri(url)));
+
+    [Theory]
+    [InlineData("https://shimeji.org/d/abc.zip")]                  // too short
+    [InlineData("https://shimeji.org/u/a70vf3js")]
+    [InlineData("https://shimeji.org/d/a70vf3js.exe")]
+    [InlineData("https://shimeji.org/d/../a70vf3js.zip")]
+    [InlineData("http://shimeji.org/d/a70vf3js.zip")]
+    [InlineData("https://evil.example/d/a70vf3js.zip")]
+    public void IdFromDownloadUrl_IgnoresEverythingElse(string url) => Assert.Null(ShimejiOrgSource.IdFromDownloadUrl(new Uri(url)));
+
+    [Fact]
+    public void TheListingFilter_HidesOnlyMobileCards()
+    {
+        Assert.Contains("Mobile shimeji", ShimejiOrgSource.ListingFilterScript);
+        Assert.DoesNotContain("Desktop shimeji", ShimejiOrgSource.ListingFilterScript);
+        Assert.Contains("MutationObserver", ShimejiOrgSource.ListingFilterScript);   // and cards the page adds later
+    }
+
     [Fact]
     public void ThePageScripts_AreRegexesThatRunInAPage()
     {

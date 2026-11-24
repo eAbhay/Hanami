@@ -610,7 +610,10 @@ button and then the dialog's, and the file the page then downloads (or the one t
 is **captured**: saved to a temporary file with no download bubble, https only, at most 40 MB, cancelled if larger. The zip goes
 through the same import as a dropped zip (Shimeji-ee sets with `img/<Name>/shime<N>.png`, and bundles), the artist is read from the
 page ("ARTIST:"), each imported pack gets `source: {site: "shimeji.org", slug: <id>, submittedBy: <artist>}` and shows
-"by <artist> · shimeji.org" on the Pets tab, and the temp file is deleted. If the page doesn't start a download within two
+"by <artist> · shimeji.org" on the Pets tab, and the temp file is deleted. A download's own address (`https://shimeji.org/d/<id>.zip`) names the upload, so the Download button on a listing card works too, not only the
+one on an upload's page (the artist is then unknown, so the credit is just "shimeji.org"). **The tab shows computer sets only:** `ShimejiOrgSource.ListingFilterScript`
+runs in every page of the site (`BrowseSource.PageScript`) and hides the listing cards whose icon is titled "Mobile shimeji"; the site has no such filter of its own.
+If the page doesn't start a download within 15 seconds of the dialog's button (the script waits that long for it), or the download itself doesn't start within two
 minutes (for example while it waits for a human check) the window says so. Downloads that aren't on an item page, or that the
 source doesn't take, are cancelled as in the Petdex window.
 

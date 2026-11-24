@@ -555,6 +555,8 @@ public sealed class HanamiHost
         IsAdded = id => _petLibrary.Manifests().Any(m => m.Source is { Site: ShimejiOrgSource.Site } s && s.Slug == id),
         DownloadScript = ShimejiOrgSource.ClickDownloadScript,
         AllowDownload = ShimejiOrgSource.IsAllowedDownload,
+        ItemFromDownloadUrl = ShimejiOrgSource.IdFromDownloadUrl,
+        PageScript = ShimejiOrgSource.ListingFilterScript,
         MaxDownloadBytes = ShimejiOrgSource.MaxDownloadBytes,
         ImportDownloadAsync = AddShimejiDownloadAsync,
     };
